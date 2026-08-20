@@ -1,0 +1,7 @@
+# Indentation fautive : le fichier n'est pas du YAML valide. Prettier ne sait pas
+# le lire non plus, d'où son entrée dans .prettierignore.
+slug: japon-2024
+title: Japon
+places:
+  - slug: tokyo
+   name: Tokyo

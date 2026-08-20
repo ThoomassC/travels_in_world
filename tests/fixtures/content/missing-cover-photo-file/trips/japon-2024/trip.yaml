@@ -1,0 +1,34 @@
+# La photo de couverture ne correspond à aucun fichier : critère 6, volet couverture.
+slug: japon-2024
+title: Japon, printemps 2024
+startDate: 2024-04-12
+endDate: 2024-04-16
+places:
+  - slug: tokyo
+    name: Tokyo
+    countryCode: JP
+    coordinates:
+      lat: 35.6762
+      lon: 139.6503
+  - slug: kyoto
+    name: Kyoto
+    countryCode: JP
+    coordinates:
+      lat: 35.0116
+      lon: 135.7681
+steps:
+  - kind: stay
+    placeSlug: tokyo
+    startDate: 2024-04-12
+    endDate: 2024-04-16
+  - kind: move
+    fromSlug: tokyo
+    toSlug: kyoto
+    mode: train
+    date: 2024-04-16
+photos:
+  - src: /photos/japon-2024/tokyo.jpg
+    alt: Une ruelle de Shinjuku sous la pluie
+    width: 1600
+    height: 1067
+coverPhotoSrc: /photos/japon-2024/couverture.jpg

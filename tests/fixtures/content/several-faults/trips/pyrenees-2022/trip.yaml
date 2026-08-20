@@ -1,0 +1,19 @@
+# Une clé mal orthographiée, dans un troisième fichier : sans ce contrôle,
+# « lattitude » serait ignorée en silence et le point resterait faux.
+slug: pyrenees-2022
+title: Pyrénées, été 2022
+startDate: 2022-07-04
+endDate: 2022-07-11
+places:
+  - slug: gavarnie
+    name: Gavarnie
+    countryCode: FR
+    coordinates:
+      lat: 42.7333
+      lon: -0.0167
+      lattitude: 42.7333
+steps:
+  - kind: stay
+    placeSlug: gavarnie
+    startDate: 2022-07-04
+    endDate: 2022-07-11

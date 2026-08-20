@@ -1,0 +1,28 @@
+# Kyoto géocodée en (0, 0) : la signature d'un géocodage raté.
+slug: japon-2024
+title: Japon, printemps 2024
+startDate: 2024-04-12
+endDate: 2024-04-16
+places:
+  - slug: tokyo
+    name: Tokyo
+    countryCode: JP
+    coordinates:
+      lat: 35.6762
+      lon: 139.6503
+  - slug: kyoto
+    name: Kyoto
+    countryCode: JP
+    coordinates:
+      lat: 0
+      lon: 0
+steps:
+  - kind: stay
+    placeSlug: tokyo
+    startDate: 2024-04-12
+    endDate: 2024-04-16
+  - kind: move
+    fromSlug: tokyo
+    toSlug: kyoto
+    mode: train
+    date: 2024-04-16
