@@ -18,9 +18,10 @@
     "test:lint": "vitest run --config vitest.lint.config.ts",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
-    "validate:content": "node scripts/not-implemented.mjs validate:content TIW-9",
+    "pretest": "npm run validate:content",
+    "validate:content": "node --import ./scripts/runtime/register-typescript.mts scripts/validate-content.ts",
     "geocode": "node scripts/not-implemented.mjs geocode TIW-10",
-    "new-trip": "node scripts/not-implemented.mjs new-trip TIW-9",
+    "new-trip": "node scripts/not-implemented.mjs new-trip TIW-10",
     "index-photos": "node scripts/not-implemented.mjs index-photos TIW-10"
   },
   "dependencies": {

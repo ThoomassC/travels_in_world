@@ -34,8 +34,12 @@ segment de locale est perdu. Une règle ESLint le refuse partout sauf dans
 **3. Server Components par défaut.**
 Le jalon 1 n'autorise que deux composants `'use client'` : l'interaction de la carte et la
 visionneuse photo. Tout autre `'use client'` se justifie en revue. `src/domain/**` reste du
-TypeScript pur — ni React, ni Next, ni `fs`, ni `d3`. `src/content/**` et `src/map/**`
-portent `import "server-only"` : le build casse si un composant client les atteint.
+TypeScript pur — ni React, ni Next, ni `fs`, ni `d3`. `src/map/**` porte
+`import "server-only"` : le build casse si un composant client l'atteint. `src/content/**`
+**ne le porte pas**, délibérément : c'est du code Node exécutable, que
+`npm run validate:content` et Vitest chargent hors contexte React, où `server-only` jette.
+Le garde appartient à la façade de chargement que consommera l'application (TIW-11), et
+c'est elle qui le portera.
 
 ## Dépendances écartées, délibérément
 

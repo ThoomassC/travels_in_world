@@ -1,0 +1,17 @@
+# Une faute, dans un second fichier : le voyage se termine avant de commencer.
+slug: perou-2023
+title: Pérou, hiver 2023
+startDate: 2023-05-10
+endDate: 2023-03-01
+places:
+  - slug: lima
+    name: Lima
+    countryCode: PE
+    coordinates:
+      lat: -12.0464
+      lon: -77.0428
+steps:
+  - kind: stay
+    placeSlug: lima
+    startDate: 2023-05-10
+    endDate: 2023-05-20

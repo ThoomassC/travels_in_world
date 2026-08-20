@@ -7,3 +7,7 @@ test-results
 node_modules
 package-lock.json
 next-env.d.ts
+
+# Fixture qui porte une faute de syntaxe YAML volontaire : Prettier ne sait pas la
+# lire, et la reformater lui ferait perdre exactement ce qu'elle teste.
+tests/fixtures/content/invalid-yaml
