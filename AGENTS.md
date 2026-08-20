@@ -51,3 +51,23 @@ le JS initial, à **120 Ko brotli pour un plafond de 150 Ko** — il reste 30 Ko
 du compilateur, ce qui casse `typescript-eslint` **et** le typecheck intégré de `next build`.
 À lever quand `typescript-eslint` publiera une majeure acceptant `>=7`.
 **Node 24.x** (`.nvmrc`, `engines`) pour l'alignement avec Vercel.
+
+## Les deux gardes exécutables
+
+Deux invariants de ce projet ne se défendent ni par le typage ni par une revue de code :
+ils se cassent en silence, avec un build vert. Chacun a donc un test qui lit un artefact
+réel, et chacun a été prouvé par un échec volontaire. **Ne les désactive pas.**
+
+| Commande             | Ce qu'elle garde                                     | Ce qui se passe sans elle                     |
+| -------------------- | ---------------------------------------------------- | --------------------------------------------- |
+| `npm run test:build` | `/fr` et `/_not-found` sont bien prérendus           | le prérendu disparaît, `next build` sort en 0 |
+| `npm run test:lint`  | la frontière de pureté de `src/domain` mord vraiment | la règle existe et ne refuse plus rien        |
+
+Les deux exigent une étape préalable (`test:build` a besoin d'un build) et vivent donc hors
+de `npm run test`. Elles sont branchées au pipeline d'intégration continue.
+
+Historique qui justifie la seconde : la règle de pureté a régressé **deux fois** en un seul
+ticket — un glob qui ne couvrait pas les fichiers `.tsx`, puis un motif qui laissait passer
+l'orthographe `./../` là où `../` était refusée. Dans les deux cas la règle existait et ne
+gardait plus rien. Écrire le test a en outre révélé que trois de ses quatre motifs étaient
+inutiles : `".."` couvre à lui seul les six orthographes relatives.
