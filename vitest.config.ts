@@ -27,7 +27,13 @@ export default defineConfig({
      * Playwright owns `tests/e2e`; `tests/build` asserts on `.next/` and needs a
      * build first, so it lives in `vitest.build.config.ts` behind
      * `npm run test:build`. Neither belongs to this, build-free, suite.
+     *
+     * `tests/lint` is excluded for a different reason, written down in
+     * `vitest.lint.config.ts`: it needs `environment: "node"`, where the
+     * `tests/setup.ts` teardown above throws on `window` — and under jsdom it
+     * cannot resolve the repository root at all. It runs behind
+     * `npm run test:lint`.
      */
-    exclude: ["node_modules/**", ".next/**", "tests/e2e/**", "tests/build/**"],
+    exclude: ["node_modules/**", ".next/**", "tests/e2e/**", "tests/build/**", "tests/lint/**"],
   },
 });
