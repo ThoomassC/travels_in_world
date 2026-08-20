@@ -31,13 +31,16 @@ npm run dev     # http://localhost:3000 → redirige vers /fr
 | `npm run test:watch`       | Vitest en veille                                                          |
 | `npm run test:build`       | Garde de prérendu + budget de bundle — **exige un `npm run build` avant** |
 | `npm run test:e2e`         | Playwright — build + start sur un port dédié, puis `tests/e2e`            |
-| `npm run validate:content` | **Non implémenté** — échoue volontairement, voir TIW-9                    |
+| `npm run validate:content` | Valide `content/trips/` — tourne aussi en `pretest`                       |
 | `npm run geocode`          | **Non implémenté** — échoue volontairement, voir TIW-10                   |
-| `npm run new-trip`         | **Non implémenté** — échoue volontairement, voir TIW-9                    |
+| `npm run new-trip`         | **Non implémenté** — échoue volontairement, voir TIW-10                   |
 | `npm run index-photos`     | **Non implémenté** — échoue volontairement, voir TIW-10                   |
 
-Les quatre derniers ont un nom réservé mais sortent en code 1 avec un message explicite :
-un script qui existe et ne fait rien silencieusement est un piège.
+Les trois derniers ont un nom réservé mais sortent en code 1 avec un message explicite :
+un script qui existe et ne fait rien silencieusement est un piège. `validate:content` les
+**cite** dans ses messages (« lance `npm run geocode japon-2024` ») : c'est délibéré, la
+réparation qu'ils automatisent arrive avec TIW-10 et le message dit dès maintenant où elle
+se trouvera.
 
 ## Conventions
 
@@ -101,6 +104,30 @@ langue mais introduit une route dynamique `ƒ` et rend `<html id="__next_error__
 L'alarme est le test unitaire « declares exactly one active locale » : il passe au rouge dès
 qu'une seconde locale est déclarée, et son commentaire liste ce qu'il faut traiter d'abord.
 
+**Validation du contenu.** Les voyages sont des `content/trips/<slug>/trip.yaml` écrits à
+la main ; `content/README.md` en donne la structure. `npm run validate:content` les valide
+avec le **même `TripSchema`** que les pages (une règle métier a un seul endroit où vivre) et
+y ajoute les trois contrôles que le schéma ne peut pas faire : l'unicité d'un slug dans
+**toute** la collection, l'existence réelle des photos sur le disque, et la traduction des
+erreurs en messages actionnables. Le message est le livrable : chaque ligne porte le chemin
+du fichier relatif à la racine, la ligne et la colonne, le champ en écriture lisible
+(`steps[2].fromSlug`) et **la commande exacte** à lancer quand il en existe une. Aucune
+couleur ANSI quand la sortie n'est pas un terminal. La commande est branchée en `pretest`,
+donc un contenu fautif ne peut pas traverser la suite : elle sort en code 1, jamais en
+silence.
+
+Deux dossiers de contenu sont paramétrables (`--content`, `--public`, ou `TIW_CONTENT_DIR`
+et `TIW_PUBLIC_DIR`), ce qui est ce qui permet de tester la validation contre les fixtures
+de `tests/fixtures/content/` sans toucher aux vrais voyages.
+
+**Scripts en TypeScript.** `scripts/**` est du TypeScript exécuté par Node 24, qui strippe
+les types nativement. Son résolveur, en revanche, ne lit pas `tsconfig.json` : ni `@/domain/schema`
+ni le `./geo` sans extension de `src/domain/schema.ts` ne se résolvent seuls, et le domaine
+n'est pas réécrivable pour arranger un script. D'où
+`scripts/runtime/typescript-resolve.mts`, un hook `resolve` de 40 lignes chargé par
+`node --import`, qui n'ajoute que ces deux formes et repasse tout le reste à Node. Les
+scripts de contenu de TIW-10 le réutiliseront.
+
 **Styles.** CSS nu avec custom properties, aucun Tailwind, aucun CSS-in-JS. Un seul fichier
 global, `src/styles/tokens.css`, qui porte les jetons ; le style par composant se fait en CSS
 Modules à côté du composant. La palette est volontairement identique à celle du portfolio :
@@ -123,6 +150,11 @@ Pour s'en passer, `agentRules: false` dans `next.config.ts`.
   `globals: true` est volontairement absent de `vitest.config.ts` : sans `vitest/globals`
   dans les `types` du `tsconfig`, un test écrit avec les globals passe au vert sous Vitest et
   casse `npm run typecheck` **et** `next build` (`TS2582`). On importe depuis `"vitest"`.
+- `tests/content/` couvre la validation de contenu à trois niveaux : le formatage du
+  rapport en fonction pure, le diagnostic contre les fixtures de `tests/fixtures/content/`
+  (un dossier par défaut porté), et la commande elle-même lancée en sous-processus — code de
+  sortie **et** texte du message. Le contenu volontairement fautif vit dans les fixtures,
+  jamais dans `content/`.
 - `tests/build/` (script `test:build`, config `vitest.build.config.ts`) assère sur les
   artefacts de `.next/` : prérendu et budget de bundle. Hors de `npm run test`, qui doit
   rester rapide et sans build.
