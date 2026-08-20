@@ -1,0 +1,62 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "incremental": true,
+    /* Linting — same posture as the portfolio, plus index-access safety. */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noUncheckedSideEffectImports": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  // Sources are listed folder by folder rather than through a blanket glob, and
+  // ".next" is NOT excluded. That pairing is what makes the two generated-type
+  // entries at the end of this list actually do something: "exclude" filters
+  // "include", so alongside the previous '"exclude": [".next"]' those two lines
+  // matched nothing, and the config only claimed to typecheck the route
+  // validators Next generates.
+  //
+  // Deleting them instead is not an option: "next build" and "next dev" rewrite
+  // this file and append them again (writeConfigurationDefaults, in the "next"
+  // package), so the fix would drift back within one command and resurface as an
+  // uncommitted change. Naming the source folders explicitly while keeping
+  // ".next" out of "exclude" is the only stable resolution.
+  //
+  // Those entries only exist after a build; before one they match nothing and
+  // "tsc --noEmit" is unaffected.
+  "include": [
+    "next-env.d.ts",
+    "*.ts",
+    "*.mts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "scripts/**/*.ts",
+    "scripts/**/*.mts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", "out"]
+}
