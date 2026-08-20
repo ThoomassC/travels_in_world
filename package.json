@@ -1,0 +1,49 @@
+{
+  "name": "travels-in-world",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:build": "vitest run --config vitest.build.config.ts",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit",
+    "validate:content": "node scripts/not-implemented.mjs validate:content TIW-9",
+    "geocode": "node scripts/not-implemented.mjs geocode TIW-10",
+    "new-trip": "node scripts/not-implemented.mjs new-trip TIW-9",
+    "index-photos": "node scripts/not-implemented.mjs index-photos TIW-10"
+  },
+  "dependencies": {
+    "next": "^16.3.1",
+    "next-intl": "^4.13.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.1",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "jsdom": "^30.0.1",
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.11"
+  }
+}
