@@ -1,0 +1,243 @@
+/* =============================================================================
+   Travels in World — design tokens.
+
+   The ONLY global stylesheet. Per-component styling goes in CSS Modules next to
+   the component; this file carries tokens and a minimal base so that the
+   1675-line single sheet of the portfolio never happens again.
+
+   The palette is deliberately identical to the portfolio's so the two sites read
+   as siblings. Any colour change here should be mirrored there.
+
+   Dark theme is served two ways:
+   - `prefers-color-scheme: dark`, so the site respects the OS with zero JS;
+   - `:root[data-theme="dark"]`, so a future explicit toggle wins over the OS.
+   The media query is guarded by `:not([data-theme="light"])` so that an explicit
+   "light" choice is not overridden by the OS preference.
+   ============================================================================ */
+
+:root {
+  /* --- Spacing — 4 px grid, 8 steps. No spacing value outside this list. --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  --section-space: clamp(var(--space-7), 8vw, 7rem);
+  --content-max-width: 72rem;
+
+  /* --- Type scale — 6 fixed steps + 2 fluid display sizes. --- */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-md: 1.1875rem;
+  --text-lg: 1.4375rem;
+  --text-xl: 1.75rem;
+  --text-display-sm: clamp(1.5rem, 2.6vw, 2.125rem);
+  --text-display-md: clamp(1.875rem, 3.9vw, 3.25rem);
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --radius-sm: 0.625rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-pill: 999px;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* --- Light theme (default). Soft, never pure white. --- */
+  --site-background: #c4d8de;
+  --surface: #dfecf0;
+  --surface-muted: rgba(255, 255, 255, 0.42);
+
+  /* Text — 5 roles, not 12 slots. */
+  --text-strong: #0c2731;
+  --text-body: #1d3a45;
+  --text-muted: #31505c;
+  --text-accent: #065a6b;
+  --text-on-accent: #ffffff;
+
+  /* Accent — a single teal, declined by use. */
+  --accent: #0b7d90;
+  --accent-hover: #096b7c;
+  --accent-active: #075967;
+  --accent-quiet: rgba(11, 125, 144, 0.12);
+  --accent-quiet-border: rgba(11, 125, 144, 0.45);
+
+  --border-subtle: rgba(12, 39, 49, 0.16); /* decorative only */
+  --control-border: #5c7783; /* >= 3:1, WCAG 1.4.11 */
+
+  /* Focus — double ring, visible on any background. */
+  --focus-outer: #064e5e;
+  --focus-inner: #ffffff;
+
+  /* --- Logo tokens (consumed by the logo ticket, TIW-8). Declared here so the
+     logo never hardcodes a colour.
+
+     Each one shadows a neighbour and MUST be redeclared in both dark blocks
+     below: `--logo-ink` follows `--text-strong`, `--logo-accent` follows
+     `--text-accent`, `--logo-bg` follows `--site-background`. Left out of the
+     dark blocks, near-black ink on the `#081721` background makes the mark
+     invisible and `--logo-bg` paints a light plate over a dark page. --- */
+  --logo-ink: #0c2731;
+  --logo-accent: #065a6b;
+  --logo-bg: #c4d8de;
+
+  color-scheme: light;
+}
+
+/* --- Dark theme values, shared by the OS preference and the explicit toggle. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --site-background: #081721;
+    --surface: #10242f;
+    --surface-muted: rgba(226, 244, 248, 0.06);
+
+    --text-strong: #eef7fa;
+    --text-body: #e4eff4;
+    --text-muted: #d3e2e9;
+    --text-accent: #7ee5ed;
+    --text-on-accent: #ffffff;
+
+    --accent: #0b7d90;
+    --accent-hover: #0e8a9e;
+    --accent-active: #096472;
+    --accent-quiet: rgba(126, 229, 237, 0.16);
+    --accent-quiet-border: rgba(126, 229, 237, 0.55);
+
+    --border-subtle: rgba(190, 224, 233, 0.18);
+    --control-border: #7e98a5;
+
+    --focus-outer: #8aebf2;
+    --focus-inner: #04121a;
+
+    /* Logo tokens — same roles as in `:root`, dark values. */
+    --logo-ink: #eef7fa;
+    --logo-accent: #7ee5ed;
+    --logo-bg: #081721;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --site-background: #081721;
+  --surface: #10242f;
+  --surface-muted: rgba(226, 244, 248, 0.06);
+
+  --text-strong: #eef7fa;
+  --text-body: #e4eff4;
+  --text-muted: #d3e2e9;
+  --text-accent: #7ee5ed;
+  --text-on-accent: #ffffff;
+
+  --accent: #0b7d90;
+  --accent-hover: #0e8a9e;
+  --accent-active: #096472;
+  --accent-quiet: rgba(126, 229, 237, 0.16);
+  --accent-quiet-border: rgba(126, 229, 237, 0.55);
+
+  --border-subtle: rgba(190, 224, 233, 0.18);
+  --control-border: #7e98a5;
+
+  --focus-outer: #8aebf2;
+  --focus-inner: #04121a;
+
+  /* Logo tokens — same roles as in `:root`, dark values. */
+  --logo-ink: #eef7fa;
+  --logo-accent: #7ee5ed;
+  --logo-bg: #081721;
+
+  color-scheme: dark;
+}
+
+/* =============================================================================
+   Minimal base. Anything beyond document-level defaults belongs in a CSS Module.
+   ============================================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--site-background);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--site-background);
+  color: var(--text-body);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+  line-height: 1.6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  color: var(--text-strong);
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+a {
+  color: var(--text-accent);
+  text-underline-offset: 0.2em;
+}
+
+img,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Double ring: guaranteed visible whatever sits behind the focused element. */
+:focus-visible {
+  outline: 2px solid var(--focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--focus-inner);
+}
+
+main {
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+  padding: var(--section-space) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

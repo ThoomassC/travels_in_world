@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "title": "Travels in World",
+    "description": "Carnet de voyages : une carte du monde et une frise chronologique par voyage."
+  },
+  "home": {
+    "title": "Travels in World",
+    "tagline": "Carnet de voyages",
+    "placeholderHeading": "Socle en place",
+    "placeholderBody": "La carte du monde et les pages de voyage arrivent dans les prochains lots. Cette page est volontairement un placeholder."
+  },
+  "notFound": {
+    "title": "Page introuvable",
+    "description": "Cette adresse ne correspond à aucune page du carnet.",
+    "backHome": "Retour à l’accueil"
+  }
+}
