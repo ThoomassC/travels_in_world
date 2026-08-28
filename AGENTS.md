@@ -34,9 +34,18 @@ segment de locale est perdu. Une règle ESLint le refuse partout sauf dans
 **3. Server Components par défaut.**
 Le jalon 1 n'autorise que deux composants `'use client'` : l'interaction de la carte et la
 visionneuse photo. Tout autre `'use client'` se justifie en revue. `src/domain/**` reste du
-TypeScript pur — ni React, ni Next, ni `fs`, ni `d3`. `src/map/**` porte
-`import "server-only"` : le build casse si un composant client l'atteint. `src/content/**`
-**ne le porte pas**, délibérément : c'est du code Node exécutable, que
+TypeScript pur — ni React, ni Next, ni `fs`, ni `d3`. `src/map/**` s'atteint par sa façade
+`@/map`, **seul** module du dossier à porter `import "server-only"` : le build casse si un
+composant client l'atteint. Les cinq modules internes en sont nus, délibérément, pour rester
+chargeables par Vitest et par les scripts Node. C'est la règle ESLint
+`travels-in-world/map-entry-point` qui interdit à tout `src/**` hors `src/map/**` de les
+importer en profondeur — ainsi que `world-atlas`, `d3-*` et `topojson-*` — et
+`tests/lint/map-entry-point.test.ts` qui prouve qu'elle refuse vraiment. Un `import type`
+depuis la façade est effacé à la compilation et ne déclenche pas le guard : c'est la façon de
+partager un type de frontière sans importer de code. Voir
+`docs/adr/0002-facade-serveur-gardee.md`.
+
+`src/content/**` **ne le porte pas**, délibérément : c'est du code Node exécutable, que
 `npm run validate:content` et Vitest chargent hors contexte React, où `server-only` jette.
 Le garde appartient à la façade de chargement que consommera l'application (TIW-11), et
 c'est elle qui le portera.
@@ -48,6 +57,13 @@ du SVG calculé au build par d3-geo, **0 Ko de bibliothèque côté client**. Au
 d'état, aucun client HTTP ni React Query, aucune bibliothèque de formulaires, aucun
 CSS-in-JS. Avant d'ajouter une dépendance, vérifie le budget : `npm run test:build` mesure
 le JS initial, à **120 Ko brotli pour un plafond de 150 Ko** — il reste 30 Ko.
+
+Depuis TIW-12 il y a un **second** budget, que ce paragraphe est le seul endroit à réunir
+avec le premier : les tracés du planisphère sont plafonnés à **34 Ko brotli**, mesurés à
+30,1 Ko avec le millésime `world-atlas` 110m. Ce n'est pas du JS — c'est de la donnée de
+chemin dans le HTML — donc les deux plafonds ne se financent pas l'un l'autre. Le garde est
+`tests/map/world.test.ts` : passer au millésime 50m ferait 182,5 Ko et le rougirait, ce qui
+est voulu.
 
 ## Versions figées, et pourquoi
 

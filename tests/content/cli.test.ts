@@ -194,6 +194,17 @@ describe("an option that would silently point somewhere else", () => {
     }
   });
 
+  it("names the two directories in the order they were typed", () => {
+    // `--content a b` used to report "(b et a)", which reads as an accusation
+    // against the wrong one of the two.
+    const result = validate("--content a b");
+
+    expect(result.status).toBe(2);
+    expect(result.output).toContain("--content a");
+    expect(result.output).toContain("b");
+    expect(result.output).not.toContain("(b et a)");
+  });
+
   it("refuses a repeated option instead of keeping the last one", () => {
     for (const spelling of ["--content a --content b", "--content=a --content b"]) {
       const result = validate(spelling);
@@ -217,4 +228,103 @@ describe("through npm, the way CI and pretest run it", () => {
     expect(result.status).toBe(1);
     expect(result.output).toContain("endDate");
   }, 60_000);
+});
+
+/* ------------------------------------------------- the `--` npm needs -------- */
+
+/**
+ * Every runnable command line this repository publishes, checked for the `--`
+ * that makes npm forward an option instead of keeping it.
+ *
+ * `npm run geocode japon-2024 --pick 1` does not pass `--pick` to the script:
+ * npm consumes it as one of its own config flags (`npm warn Unknown cli config`)
+ * and forwards only `1`, which the script then reads as a second trip. The
+ * `=` spelling is worse — `npm run new-trip essai --content=/tmp/bac` forwards
+ * `essai` alone, so the trip is created in the repository's real `content/trips`
+ * without a word. `validate:content` documented the right form from the start;
+ * `geocode` and `new-trip` were written without it, in nine places.
+ *
+ * Nothing in a script can detect the `=` spelling, so the documentation *is* the
+ * defence, and this is what keeps it honest.
+ *
+ * **What counts as a command line here**: a backticked span, and a line of a
+ * fenced code block. That is the copy-paste surface. Prose is free to quote a
+ * broken form as a counter-example — with guillemets, the way every message in
+ * this repository quotes a value — without turning this test red.
+ */
+const RUNNABLE_SCRIPTS = ["validate:content", "geocode", "new-trip", "index-photos"] as const;
+
+/** Continuations first: a flag on the next line belongs to the same invocation. */
+function joinContinuations(text: string): string {
+  return text.replace(/\\\n\s*/g, " ");
+}
+
+function commandLines(text: string): readonly string[] {
+  const joined = joinContinuations(text);
+  const found: string[] = [];
+
+  // Backticked spans, anywhere: `npm run geocode japon-2024`.
+  for (const match of joined.matchAll(/`(npm run [^`]*)`/g)) {
+    found.push(match[1] ?? "");
+  }
+  // Fenced code blocks, where there are no backticks to delimit anything. The
+  // invocation stops at a `#` comment or a table pipe.
+  for (const block of joined.matchAll(/```[^\n]*\n([\s\S]*?)```/g)) {
+    for (const line of (block[1] ?? "").split("\n")) {
+      for (const match of line.matchAll(/npm run [^#|\n]*/g)) {
+        found.push(match[0]);
+      }
+    }
+  }
+
+  return found;
+}
+
+/** The invocation, when it forwards an option without the `--` that npm eats. */
+function missingSeparator(invocation: string): string | undefined {
+  const tokens = invocation.trim().split(/\s+/);
+  const script = tokens.findIndex((token) =>
+    RUNNABLE_SCRIPTS.includes(token as (typeof RUNNABLE_SCRIPTS)[number])
+  );
+  if (script === -1) {
+    return undefined;
+  }
+
+  const rest = tokens.slice(script + 1);
+  const flag = rest.findIndex((token) => token.startsWith("--") && token !== "--");
+  if (flag === -1) {
+    return undefined;
+  }
+  const separator = rest.indexOf("--");
+
+  return separator !== -1 && separator < flag ? undefined : invocation.trim();
+}
+
+describe("every command line the project publishes carries the `--` npm needs", () => {
+  const documents = [
+    ["README.md", readFileSync(path.join(REPO_ROOT, "README.md"), "utf8")],
+    ["content/README.md", readFileSync(path.join(REPO_ROOT, "content/README.md"), "utf8")],
+  ] as const;
+
+  for (const [name, text] of documents) {
+    it(`${name} shows no invocation npm would strip`, () => {
+      expect(commandLines(text).map(missingSeparator).filter(Boolean)).toEqual([]);
+    });
+  }
+
+  for (const name of ["validate:content", "geocode", "new-trip"] as const) {
+    it(`the help of ${name} shows no invocation npm would strip`, () => {
+      const help = run(`${script(name)} --help`);
+
+      expect(help.status).toBe(0);
+      // The help has no backticks, so only its indented example lines qualify.
+      const shown = help.output
+        .split("\n")
+        .filter((line) => /^(\s+|Usage : )npm run /.test(line))
+        .map((line) => line.trim());
+
+      expect(shown.length).toBeGreaterThan(0);
+      expect(shown.map(missingSeparator).filter(Boolean)).toEqual([]);
+    });
+  }
 });
