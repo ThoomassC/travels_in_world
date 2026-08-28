@@ -32,15 +32,62 @@ npm run dev     # http://localhost:3000 → redirige vers /fr
 | `npm run test:build`       | Garde de prérendu + budget de bundle — **exige un `npm run build` avant** |
 | `npm run test:e2e`         | Playwright — build + start sur un port dédié, puis `tests/e2e`            |
 | `npm run validate:content` | Valide `content/trips/` — tourne aussi en `pretest`                       |
-| `npm run geocode`          | **Non implémenté** — échoue volontairement, voir TIW-10                   |
-| `npm run new-trip`         | **Non implémenté** — échoue volontairement, voir TIW-10                   |
-| `npm run index-photos`     | **Non implémenté** — échoue volontairement, voir TIW-10                   |
+| `npm run new-trip <slug>`  | Crée `content/trips/<slug>/trip.yaml`, squelette commenté                 |
+| `npm run geocode <slug>`   | Résout et écrit les coordonnées des villes du voyage                      |
+| `npm run index-photos`     | **Non implémenté** — échoue volontairement, voir TIW-17                   |
 
-Les trois derniers ont un nom réservé mais sortent en code 1 avec un message explicite :
-un script qui existe et ne fait rien silencieusement est un piège. `validate:content` les
-**cite** dans ses messages (« lance `npm run geocode japon-2024` ») : c'est délibéré, la
-réparation qu'ils automatisent arrive avec TIW-10 et le message dit dès maintenant où elle
-se trouvera.
+`index-photos` est le seul des trois à garder son placeholder : il a un nom réservé et sort
+en code 1 avec un message explicite, parce qu'un script qui existe et ne fait rien
+silencieusement est un piège. `validate:content` le **cite** dans ses messages (« lance
+`npm run index-photos japon-2024` ») : c'est délibéré, le message dit dès maintenant où la
+réparation se trouvera. Il est attribué à TIW-17, le ticket du pipeline de photos, et n'est pas livré ici.
+
+### La boucle d'écriture d'un voyage
+
+```bash
+npm run new-trip japon-2024      # squelette commenté, sans coordonnées
+#   … tu remplis les noms de villes et les codes pays …
+npm run validate:content         # refuse, et dit « lance npm run geocode japon-2024 »
+npm run geocode japon-2024       # liste les homonymes, demande un numéro, écrit
+npm run validate:content         # vert
+```
+
+**Un `--` dès qu'il y a une option.** npm garde pour lui tout ce qui ressemble à une de ses
+propres options : sans le `--`, « --pick 1 » arrive au script comme un second voyage nommé
+« 1 » (refusé en code 2, avec un message qui dit d'ajouter le `--`), et la forme
+« --pick=1 » ou « --content=/tmp/bac » **disparaît sans un mot** — dans ce dernier cas le
+voyage est créé dans le vrai `content/trips`. Les formes correctes sont donc
+`npm run geocode -- japon-2024 --pick 1` et `npm run geocode -- --help`. Sans option, le `--`
+est inutile, comme dans le bloc ci-dessus. Tableau complet dans `content/README.md`.
+
+C'est la boucle que TIW-10 existe pour créer, et `tests/content/geocode-cli.test.ts` la
+verrouille de bout en bout. Trois choses valent d'être connues avant de s'en servir.
+
+**Un homonyme n'est jamais tranché d'office.** « Kyoto » désigne une ville du Japon **et**
+un village de Tanzanie ; prendre `results[0]` place le voyage à 8 000 km. Les candidats sont
+listés avec leur pays, leur région et leur population, et la commande demande un numéro. Le
+pays renvoyé est ensuite comparé au `countryCode` du fichier : en cas de divergence, **rien
+n'est écrit** — c'est le garde-fou qui rattrape un mauvais choix humain. (0, 0) est refusé
+par `CoordinatesSchema`, le même schéma que les pages.
+
+**Le chemin non interactif** est `--pick <n>`, répétable : le nième `--pick` répond à la
+nième ambiguïté — `npm run geocode -- japon-2024 --pick 1 --pick 2`. Sans `--pick` et sans
+terminal, les numéros sont lus sur l'entrée standard, un par ligne, **jusqu'à la fin du
+flux** : la lecture attend le producteur au lieu de supposer que les octets sont déjà là.
+Le mode par défaut reste la question posée au terminal. Un choix déjà écrit ne se rejoue pas
+— il faut supprimer le bloc `coordinates:` du lieu concerné, puis relancer.
+
+**La réécriture est chirurgicale.** Commentaires, ordre des clés, style de guillemets,
+indentation et lignes vides sont conservés : l'édition est appliquée au texte source aux
+offsets que le `Document` de `yaml` fournit, et **pas** par un `setIn()` suivi d'un
+`toString()`. Mesuré : `toString()` renormalise une indentation de quatre espaces en deux et
+ramène les commentaires de fin de ligne à un espace, ce qui transforme l'ajout de deux
+nombres en diff sur tout le fichier. Un fichier déjà complet n'est pas réécrit du tout —
+même contenu, même horodatage.
+
+Aucune clé d'API : `geocoding-api.open-meteo.com` n'en demande pas, donc il n'y a aucun
+secret à configurer ni à faire fuiter. `TIW_GEOCODING_URL` permet de pointer ailleurs, ce
+dont la suite de tests se sert pour ne jamais sortir de la machine.
 
 ## Conventions
 
@@ -118,7 +165,13 @@ silence.
 
 Deux dossiers de contenu sont paramétrables (`--content`, `--public`, ou `TIW_CONTENT_DIR`
 et `TIW_PUBLIC_DIR`), ce qui est ce qui permet de tester la validation contre les fixtures
-de `tests/fixtures/content/` sans toucher aux vrais voyages.
+de `tests/fixtures/content/` sans toucher aux vrais voyages. `new-trip` et `geocode`
+acceptent les mêmes `--content` / `TIW_CONTENT_DIR`, et les trois commandes partagent leur
+analyse d'arguments (`scripts/arguments.ts`) : les quatre refus qui comptent — `--content=`
+vide, option donnée deux fois, valeur qui ressemble à une option, argument vide passé par
+npm — sont écrits une fois et valent pour les trois. S'y ajoute le diagnostic du `--` oublié :
+un positionnel surnuméraire qui a la forme de la valeur d'une option jamais reçue est la
+signature de l'option qu'npm a mangée, et le refus le dit en donnant la ligne à retaper.
 
 **Scripts en TypeScript.** `scripts/**` est du TypeScript exécuté par Node 24, qui strippe
 les types nativement. Son résolveur, en revanche, ne lit pas `tsconfig.json` : ni `@/domain/schema`
@@ -155,6 +208,21 @@ Pour s'en passer, `agentRules: false` dans `next.config.ts`.
   (un dossier par défaut porté), et la commande elle-même lancée en sous-processus — code de
   sortie **et** texte du message. Le contenu volontairement fautif vit dans les fixtures,
   jamais dans `content/`.
+- **Les commandes sont aussi testées à travers `npm run`, pas seulement à travers Node.**
+  Un cas coûte ~2 s au lieu de ~0,3 s, donc il y en a peu : ceux qui ne peuvent se voir que
+  par ce chemin. C'est npm qui mange les options quand le `--` manque, et une suite qui
+  n'appelle que `node scripts/geocode.ts` ne peut pas le savoir — elle a laissé passer neuf
+  lignes de documentation inexécutables. `tests/content/cli.test.ts` complète la garde en
+  relisant les deux README et les trois `--help` : toute ligne de commande copiable qui porte
+  une option doit porter le `--`.
+- **Aucun test ne sort de la machine.** Le géocodage est testé à deux niveaux, tous les deux
+  hors réseau : le client HTTP reçoit son `fetch` en paramètre (statut 429, 500, corps non
+  JSON, hôte injoignable, délai dépassé, réponse valide mais vide), et
+  `tests/content/geocode-cli.test.ts` lance un serveur `node:http` sur 127.0.0.1 qui sert la
+  charge utile capturée d'un vrai appel — ce qui exerce toute la chaîne (`fetch`, code de
+  statut, `JSON.parse`, schéma Zod) sans jamais solliciter un service public gratuit. Ce
+  fichier utilise `spawn` et non `spawnSync` : le second bloque le fil d'exécution, et le
+  serveur local ne pourrait jamais accepter la connexion du sous-processus.
 - `tests/build/` (script `test:build`, config `vitest.build.config.ts`) assère sur les
   artefacts de `.next/` : prérendu et budget de bundle. Hors de `npm run test`, qui doit
   rester rapide et sans build.
