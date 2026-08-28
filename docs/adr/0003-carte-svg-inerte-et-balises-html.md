@@ -154,16 +154,24 @@ bloquante.** À traiter dans le ticket qui introduira la CSP.
 
 Le composant ne construit aucune URL : il rend `mark.href` tel quel. La page
 calcule ce href avec `tripPath()` (`src/i18n/paths.ts`, où le segment `voyages`
-est défini une fois) et `getPathname` de `@/i18n/navigation`, avec la locale
+est défini une fois) et `localePathname` de `@/i18n/pathname`, avec la locale
 passée explicitement.
 
-Ce n'est pas une entorse à l'invariant 2 du projet — la locale est bien gérée par
-`@/i18n/navigation` — et le composant `Link` perdrait sur trois points. Il
+> **Corrigé par TIW-28.** Cette section disait `getPathname` de
+> `@/i18n/navigation`, et la décision plus bas concluait « on garde
+> `getPathname` ». Les deux sont remplacées par
+> `docs/adr/0005-getpathname-sans-le-link-client.md` : l'import coûtait 3,8 Ko
+> brotli et deux chunks de `Link` **client** sur la route qui l'écrivait. Ce qui
+> suit reste vrai — c'est le module qui fournit le préfixe qui a changé, pas le
+> raisonnement sur l'ancre nue.
+
+Ce n'est pas une entorse à l'invariant 2 du projet — la locale reste gérée par
+`src/i18n/**` — et le composant `Link` perdrait sur trois points. Il
 enveloppe `next/link`, qui est un composant **client** : soixante balises ne font
 pas zéro octet. Il **préfetche** les liens entrant dans le viewport, donc
 soixante requêtes de payload RSC au chargement de l'accueil. Et le précédent
-existe déjà, justifié, dans `src/app/not-found.tsx`, qui utilise `getPathname` et
-une ancre nue pour la même raison.
+existe déjà, justifié, dans `src/app/not-found.tsx`, qui rend une ancre nue pour
+la même raison.
 
 La conséquence à connaître : la route `/voyages/[slug]` appartient à TIW-16 et
 n'existe pas encore. Elle est sans effet aujourd'hui — zéro voyage publié, donc
@@ -291,14 +299,29 @@ lequel des cinq exports tire tout le module. Vérifié : un `createNavigation`
 dédié n'exportant que `getPathname` ne change rien — le `Link` est créé à
 l'intérieur de l'appel.
 
-**Décision : on garde `getPathname`.** Les deux budgets passent, et l'alternative
-serait de fabriquer l'URL à la main — vérifié, `` `/${locale}${tripPath(slug)}` ``
-rend un `href` identique à l'octet sous la configuration actuelle. Mais c'est
-précisément ce que l'invariant 2 interdit, avec un historique de 404 silencieux
-derrière lui, et le prochain qui copiera le motif ne copiera pas le test-alarme
-qui en garde l'hypothèse. Trois kilo-octets ne valent pas ce précédent. C'est un
-défaut d'empaquetage de next-intl, pas de ce ticket — `src/app/not-found.tsx` le
-paie déjà sur sa propre route — et il mérite le sien.
+**Décision d'alors : on garde `getPathname`.** Les deux budgets passent, et
+l'alternative serait de fabriquer l'URL à la main — vérifié,
+`` `/${locale}${tripPath(slug)}` `` rend un `href` identique à l'octet sous la
+configuration actuelle. Mais c'est précisément ce que l'invariant 2 interdit, avec
+un historique de 404 silencieux derrière lui, et le prochain qui copiera le motif
+ne copiera pas le test-alarme qui en garde l'hypothèse. Trois kilo-octets ne
+valent pas ce précédent. C'est un défaut d'empaquetage de next-intl, pas de ce
+ticket — `src/app/not-found.tsx` le paie déjà sur sa propre route — et il mérite
+le sien.
+
+> **REMPLACÉE PAR TIW-28**, qui est le ticket que ce paragraphe demandait. La
+> troisième voie que cette rédaction n'avait pas envisagée : garder l'assemblage
+> d'URL dans `src/i18n/**`, comme l'invariant 2 l'exige, mais **sans** passer par
+> `createNavigation`. C'est `localePathname` dans `src/i18n/pathname.ts`, tenu
+> équivalent au `getPathname` réel par un test différentiel.
+>
+> Deux chiffres de ce tableau ont aussi été corrigés en le remesurant. Le coût
+> n'était pas de 3,4 Ko mais de **3,8 Ko et deux chunks** sur `/fr`, et de
+> **12,4 Ko** sur `/_not-found` — `BaseLink` importe aussi `useLocale` de
+> `use-intl`, ce qui tirait le runtime intl client sur la route 404. Et le
+> « défaut d'empaquetage de next-intl » a été instruit sur le paquet publié :
+> **4.14.1 ne le corrige pas**. Voir
+> `docs/adr/0005-getpathname-sans-le-link-client.md`.
 
 ## Conséquences
 
