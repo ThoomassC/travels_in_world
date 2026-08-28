@@ -163,6 +163,17 @@ quel est le dernier bloc qui le matche, et porte-t-il **toutes** les règles à
 options qui doivent s'y appliquer ? Trois cases de ce tableau ont surpris leurs
 propres auteurs dans ce ticket.
 
+Et un second corollaire, plus contre-intuitif : **un invariant qui survit par
+omission a plus besoin d'un test qu'un invariant énoncé.** `src/i18n/navigation.ts`
+est couvert par le sélecteur de la carte non parce qu'un bloc le dit, mais parce
+que le bloc qui le matche en dernier ne mentionne pas `no-restricted-syntax` — ses
+options survivent donc par défaut. Rien dans la configuration ne signale cette
+dépendance, et un lecteur qui ajoute une seule ligne à ce bloc la détruit sans
+rien lire de contradictoire. Le scénario a été simulé : poser un
+`no-restricted-syntax` quelconque dans le bloc de navigation, sans y étaler celui
+de la carte, rend **13 échecs sur 160**. C'est la seule chose qui transforme cette
+omission en fait vérifiable.
+
 ### Une désactivation totale de la règle annule la frontière, présente et future
 
 `src/i18n/navigation.ts` portait `"no-restricted-imports": "off"`, pour une raison
