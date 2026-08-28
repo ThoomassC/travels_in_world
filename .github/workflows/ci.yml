@@ -1,0 +1,206 @@
+# The pull-request gate — once branch protection points at the `Vérifications`
+# job below, which is a GitHub setting and NOT something this file can assert.
+# Until it does, this workflow reports and blocks nothing. `docs/deploiement.md`
+# carries the exact `gh api` calls.
+#
+# What it defends that a human reviewer cannot see in a diff:
+#
+# - `test:build` reads `.next/prerender-manifest.json` and refuses a build where
+#   `/fr` or `/_not-found` stopped being prerendered. That breakage exits 0 and
+#   prints `✓ Generating static pages`, so it is invisible everywhere else.
+# - the same suite weighs the initial JavaScript of `/fr` in brotli against a
+#   150 KB ceiling. A client-side map library added "just to try" fails here.
+# - `test:lint` proves the `src/domain` purity rule still refuses something. It
+#   has silently stopped refusing twice already, in a single ticket.
+# - `validate:content` refuses a trip whose YAML the pages could not load.
+#
+# See `docs/deploiement.md` for what this pipeline does NOT gate (preview
+# deployments) and why, and for the branch-protection settings that turn a red
+# run into a blocked merge.
+#
+# The workflow is named `CI` and the aggregate job `Vérifications`, deliberately
+# different: the job name is what GitHub reports as the status-check context, and
+# what branch protection is configured with. Two identical names there make the
+# required-check picker ambiguous.
+name: CI
+
+on:
+  pull_request:
+  # Integration branches are verified after the merge too: two pull requests can
+  # each be green on their own head and red once merged into each other.
+  push:
+    branches: [main, develop]
+
+# Read the code, and nothing else. This pipeline publishes nothing, comments on
+# nothing and writes to no branch.
+permissions:
+  contents: read
+
+concurrency:
+  # A new push on a pull request makes the previous run's answer worthless — the
+  # code it judged no longer exists. Runs on `main` and `develop` are never
+  # cancelled: those are the record of what the integration branch is worth.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Next prints a telemetry notice on a runner where no human can answer it, and
+  # sends a request per build from an IP that means nothing. Both are noise.
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  # Everything that needs no build. ~20 s of work locally, so it is the job that
+  # tells you first that a pull request is broken.
+  checks:
+    name: Lint, types, contenu, tests unitaires
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Read from `.nvmrc`, never written here: a hardcoded version is a
+          # second source of truth that drifts from `engines` and from the
+          # runtime configured on Vercel, silently, until something breaks.
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      # `pretest` runs this too, a second later. It is worth the 0.3 s to run it
+      # as its own step: a broken trip then shows up as a red `validate:content`
+      # naming the file, the line and the command to run, instead of scrolling
+      # past in the prelude of `npm run test`.
+      - run: npm run validate:content
+
+      - run: npm run test
+
+      - run: npm run test:lint
+
+  # The build and the two guards that can only be read off its artefacts. One
+  # job, not two: `test:build` asserts on `.next/`, so it must run on the same
+  # filesystem as the build that produced it.
+  build:
+    name: Build, prérendu et budgets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # Never `continue-on-error`, never skipped: this is the only automated
+      # check of the project's central invariant. Without it the prerendering can
+      # disappear while the build stays green.
+      - run: npm run test:build
+
+  # Playwright, against a production build it makes itself — its `webServer` runs
+  # `npm run build && npm run start` with `reuseExistingServer: false`, and the
+  # comment in `playwright.config.ts` explains why that is deliberate: with reuse
+  # on, the suite once attached to a stray dev server and passed green against
+  # development HTML, with no build at all.
+  #
+  # So this job builds a second time, and that is the cheaper option. It runs
+  # ALONGSIDE `build`, not after it, so the second build costs runner time (free,
+  # public repository) and nothing at all in feedback latency. The alternatives
+  # both cost more: appending these steps to `build` would pay the two builds in
+  # series, and handing Playwright a pre-built server would mean weakening
+  # `reuseExistingServer: false` — trading a proven guard for ~40 s.
+  #
+  # What DOES deserve to be shared between runs is the browser download, below.
+  e2e:
+    name: Playwright (build de production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # The cache key must be the Playwright version, not the lockfile hash: the
+      # browser build a given Playwright expects is pinned to that version, and a
+      # cache serving the wrong one is a flake nobody traces back to here. Read
+      # from the installed package, so it cannot drift from what will run.
+      - name: Resolve the installed Playwright version
+        id: playwright
+        run: |
+          version="$(node -p "require('@playwright/test/package.json').version")"
+          echo "Playwright $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
+
+      # Chromium only: `playwright.config.ts` declares that single project.
+      #
+      # Two steps, not one, and this is the subtlety of caching Playwright: the
+      # browser lives in `~/.cache/ms-playwright` and is cached, but the system
+      # libraries `--with-deps` installs are apt packages on the runner image and
+      # are NOT. A cache hit therefore still needs `install-deps`, or Chromium
+      # starts and immediately dies on a missing shared object.
+      - name: Install Chromium and its system dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install only the system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - run: npm run test:e2e
+
+      - name: Upload the Playwright report
+        # Only when red — a green run's report is 200 KB nobody opens. `trace:
+        # on-first-retry` means a flaky test leaves its trace in here.
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # The single check name branch protection points at.
+  #
+  # Without it, protection has to list every job by name, and the day a job is
+  # added it is advisory until someone remembers to make it required — a new
+  # guard that guards nothing, which is the failure mode this repository already
+  # documents twice. `needs: [...]` here is the list, and it lives in the repo.
+  verify:
+    name: Vérifications
+    needs: [checks, build, e2e]
+    # `always()`, otherwise this job is skipped when a dependency fails — and a
+    # skipped required check is reported as neutral, not as a failure.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Refuse unless every job succeeded
+        # Through the environment, not interpolated into the script: expression
+        # output is never pasted straight into a shell here.
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Résultats des jobs : $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::une vérification n'est pas passée ($RESULTS)"
+              exit 1
+            fi
+          done
