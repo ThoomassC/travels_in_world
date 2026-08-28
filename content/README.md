@@ -7,6 +7,10 @@ fichiers sont le contenu du site, versionnés avec le code, lus au build.
 dossier existe déjà pour que `npm run validate:content` ait quelque chose à lire, et pour
 que la structure attendue soit écrite noir sur blanc avant le premier voyage.
 
+Tu n'as pas à écrire ce fichier depuis une page blanche : `npm run new-trip <slug>` en pose
+un squelette commenté (voir « Commandes » plus bas), et `npm run geocode <slug>` remplit les
+coordonnées. Les deux sections ci-dessous décrivent la cible, pas le travail à la main.
+
 ## Structure
 
 ```
@@ -34,14 +38,14 @@ places:
   - slug: tokyo
     name: Tokyo # le nom tel qu'il s'affichera
     countryCode: JP # ISO 3166-1 alpha-2, deux lettres majuscules
-    coordinates:
+    coordinates: # écrit par « npm run geocode », jamais à la main
       lat: 35.6762
       lon: 139.6503
   - slug: kyoto
     name: Kyoto
     countryCode: JP
-    coordinates:
-      lat: 35.0116
+    coordinates: # idem : une coordonnée tapée à la main passe la validation
+      lat: 35.0116 # et met le point au mauvais endroit sans un mot
       lon: 135.7681
 
 steps: # dans l'ordre chronologique
@@ -185,25 +189,104 @@ là, la validation ne pouvait pas encore les voir.
 ## Commandes
 
 ```bash
-npm run validate:content          # valide content/trips/ ; rapporte tout, sort en 1 s'il reste un problème
+npm run new-trip japon-2024        # crée le dossier et un trip.yaml commenté, sans coordonnées
+npm run geocode japon-2024         # résout les coordonnées des villes et les écrit dans le fichier
+npm run validate:content           # valide content/trips/ ; rapporte tout, sort en 1 s'il reste un problème
 npm run validate:content -- --help
 ```
 
-Elle tourne aussi automatiquement avant `npm run test` (script `pretest`) : un contenu
-fautif ne peut pas traverser la suite sans se faire voir.
+`npm run validate:content` tourne aussi automatiquement avant `npm run test` (script
+`pretest`) : un contenu fautif ne peut pas traverser la suite sans se faire voir. `geocode`,
+lui, ne tourne jamais tout seul — il appelle un service en ligne, ce n'est pas quelque chose
+qu'une suite de tests déclenche dans ton dos.
 
-Les messages nomment le fichier, la ligne, le champ et **la commande à lancer** :
+### Le `--` avant les options
+
+Aucune de ces trois commandes ne reçoit une option si tu oublies le `--` : npm la garde pour
+lui. Sans option, `npm run geocode japon-2024` suffit ; **dès qu'il y a une option**, il faut
+écrire `npm run geocode -- japon-2024 --pick 1`. Ce que fait npm sinon, mesuré :
+
+| Ce que tu tapes après le nom du script | Ce que le script reçoit | Ce que tu obtiens                                  |
+| -------------------------------------- | ----------------------- | -------------------------------------------------- |
+| `-- japon-2024 --pick 1`               | `japon-2024 --pick 1`   | ce que tu voulais                                  |
+| `japon-2024 --pick 1`                  | `japon-2024 1`          | refus en code 2 — le message te dit d'ajouter `--` |
+| `japon-2024 --pick=1`                  | `japon-2024`            | l'option a disparu, sans un mot                    |
+| `mon-test --content=/tmp/bac`          | `mon-test`              | le voyage est créé dans le vrai `content/trips`    |
+| `--help`                               | rien, npm ne lance pas  | l'aide de npm, en anglais                          |
+
+Les deux dernières lignes sont les dangereuses : la forme `--option=valeur` ne laisse aucune
+trace, donc aucun script ne peut la rattraper. Pour viser un autre dossier sans y penser,
+`TIW_CONTENT_DIR` n'est jamais avalé.
+
+### La boucle
+
+`new-trip` écrit un squelette **volontairement incomplet** : les villes n'ont pas de
+coordonnées, parce qu'une coordonnée inventée passe la validation et met le point au mauvais
+endroit sans un mot. La suite s'enchaîne d'elle-même :
+
+1. `npm run new-trip japon-2024` — le fichier existe, commenté champ par champ ;
+2. tu remplis les noms de villes et leurs codes pays ;
+3. `npm run validate:content` — refuse, et dit « lance `npm run geocode japon-2024` » ;
+4. `npm run geocode japon-2024` — liste les homonymes, demande un numéro, écrit ;
+5. `npm run validate:content` — vert.
+
+### Ce que `geocode` refuse de faire
+
+- **Il ne choisit jamais à ta place.** « Kyoto » renvoie Kyōto au Japon **et** Kyoto en
+  Tanzanie ; prendre le premier résultat place le voyage à 8 000 km. Les candidats sont
+  listés avec leur pays, leur région et leur population, et la commande demande un numéro.
+- **Il contre-vérifie le pays.** Le code pays renvoyé par le service est comparé au
+  `countryCode` du fichier. Divergence ⇒ rien n'est écrit **pour cette ville**, et le message
+  dit lequel est lequel. C'est ce qui rattrape un mauvais numéro tapé à l'étape précédente.
+- **Il refuse (0, 0)** et toute coordonnée hors des bornes du globe.
+- **Il n'écrit jamais une ville au hasard, mais il garde ce qui est tranché.** Ville
+  introuvable, service injoignable, 429, 500, réponse illisible, pays qui ne concorde pas :
+  **cette** ville reste telle quelle, les autres sont traitées **et enregistrées** quand
+  même, et la commande sort en 1. Un `q` au prompt suit la même règle : il abandonne **cette**
+  ville, pas le run — la question suivante est posée, et tout ce qui a été tranché est écrit
+  à la fin. C'est voulu : sortir en 1 sans rien écrire t'obligerait à refaire les choix déjà
+  faits. Donc « code 1 » ne veut pas dire « fichier intact » — lis le diff, il ne contient
+  que des lignes de coordonnées. Le seul cas où rien n'est écrit est celui où rien n'a été
+  résolu : même contenu, même horodatage.
+- **Il ne reformate rien.** Tes commentaires, l'ordre de tes clés, ton style de guillemets,
+  ton indentation et tes lignes vides sont conservés — seules les lignes de coordonnées
+  apparaissent dans le diff.
+- **Il ne fait rien deux fois.** Sur un voyage déjà complet il dit « toutes les villes ont
+  déjà leurs coordonnées » et ne réécrit pas le fichier : même contenu, même horodatage.
+
+Pour l'automatiser, `--pick <n>` répond à une ambiguïté sans rien demander, et se répète
+autant de fois qu'il y a d'ambiguïtés. Noter le `--`, sans quoi npm garde les options :
+
+```bash
+npm run geocode -- japon-2024 --pick 1 --pick 2
+printf '1\n2\n' | npm run geocode japon-2024   # même chose, sur l'entrée standard
+```
+
+L'entrée standard est lue jusqu'à la fin du flux, pas à l'instant où la commande démarre :
+un producteur lent (`( sleep 1; echo 1 ) | …`) est attendu, pas perdu.
+
+**`--pick` ne rejoue pas un choix déjà écrit.** Un lieu qui a déjà son bloc `coordinates:`
+n'est pas redemandé — relancer avec `--pick 2` sur un voyage complet répond « toutes les
+villes ont déjà leurs coordonnées, rien à faire », et le `--pick` est ignoré. Un mauvais
+numéro qui a passé la contre-vérification du pays est donc **définitif** : pour le refaire,
+supprime le bloc `coordinates:` du lieu concerné dans le `trip.yaml`, puis relance.
+
+Aucune clé d'API n'est nécessaire : le service (`geocoding-api.open-meteo.com`) n'en demande
+pas. Il n'y a donc aucun secret à configurer, et rien à faire fuiter.
+
+Les messages de `npm run validate:content` nomment le fichier, la ligne, le champ et **la
+commande à lancer** :
 
 ```
 content/trips/japon-2024/trip.yaml:13:5 — places[1].coordinates : la ville « Kyoto » est déclarée sans coordonnées → lance « npm run geocode japon-2024 »
 ```
 
-Deux réparations ont leur commande dédiée (livrées par TIW-10) :
+Deux réparations ont leur commande dédiée :
 
-| Problème               | Commande                      |
-| ---------------------- | ----------------------------- |
-| coordonnées manquantes | `npm run geocode <slug>`      |
-| dimensions de photo    | `npm run index-photos <slug>` |
+| Problème               | Commande                      | État                                  |
+| ---------------------- | ----------------------------- | ------------------------------------- |
+| coordonnées manquantes | `npm run geocode <slug>`      | livrée (TIW-10)                       |
+| dimensions de photo    | `npm run index-photos <slug>` | pas encore écrite (TIW-17), sort en 1 |
 
 ### Valider autre chose que le contenu réel
 

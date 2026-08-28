@@ -1,0 +1,37 @@
+/**
+ * The internal routes that are named by something other than the file they live
+ * in. One module, so a URL that is already in someone's history has exactly one
+ * definition in the codebase.
+ *
+ * This is *not* a replacement for `@/i18n/navigation`: the paths here are
+ * locale-agnostic, and it is `getPathname` that turns one into the `/fr/…` a
+ * browser can follow. Keeping the two apart is what lets a Server Component
+ * build a href without ever reading a request header — the locale arrives as a
+ * prop, never as ambient state.
+ */
+
+/**
+ * The first segment of a trip's URL. French, and deliberately not the English
+ * `slug` used inside the content directory: this string is what a visitor reads
+ * and what search engines index, and the site is French.
+ *
+ * The day a second locale is activated, this becomes a `pathnames` entry in
+ * `src/i18n/routing.ts` so the segment itself can be translated. It is not one
+ * today because declaring `pathnames` changes the type of `Link` and
+ * `getPathname` across the whole project, for a benefit that only exists once
+ * `en` is real — and `tests/smoke.test.tsx` holds the alarm that goes red on
+ * that day.
+ */
+export const TRIP_SEGMENT = "voyages";
+
+/**
+ * The canonical path of a trip page, without a locale prefix.
+ *
+ * TIW-16 creates the page this points at, and must read the segment from here
+ * rather than write `"voyages"` a second time — the map (TIW-13) already links
+ * to these URLs, so the two spellings drifting apart means a dead link on the
+ * home page with nothing failing to say so.
+ */
+export function tripPath(slug: string): string {
+  return `/${TRIP_SEGMENT}/${slug}`;
+}

@@ -483,9 +483,10 @@ describe("src/i18n/navigation.ts is exempt from the navigation ban and from noth
    * The dynamic ban reaches this file **by inheritance**, and that is exactly why
    * it needs a case of its own.
    *
-   * `navigation-primitives` replaces `no-restricted-imports` and never mentions
-   * `no-restricted-syntax`, so the selector from the block above survives here
-   * untouched. Measured, and it holds — but it holds because of what this block
+   * `travels-in-world/i18n-navigation` replaces `no-restricted-imports` and never
+   * mentions `no-restricted-syntax`, so the selectors from `content-facade` — the
+   * content one *and* the map one it spreads in — survive here untouched.
+   * Measured, and it holds — but it holds because of what this block
    * does *not* say, which is the most fragile way for an invariant to be true.
    * The day somebody adds a `no-restricted-syntax` to this block for any reason,
    * the whole dynamic ban vanishes from the one file every client component
