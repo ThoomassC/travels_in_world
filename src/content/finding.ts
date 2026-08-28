@@ -123,6 +123,21 @@ function truncate(text: string, limit: number): string {
 }
 
 /**
+ * A value from outside, made safe to print: bounded to {@link QUOTED_VALUE_LIMIT}
+ * code points and stripped of anything that could move the cursor.
+ *
+ * Exported for the one caller that prints such a value *without* quotation marks:
+ * the candidate list of `npm run geocode` (TIW-10), where a line already carrying
+ * five fields from a third-party API would be unreadable with five pairs of
+ * guillemets in it. The bounding and the neutralising are not negotiable there
+ * either — the strings come from an HTTP response — so they live here, in one
+ * place, rather than being restated at that call site.
+ */
+export function bounded(value: string): string {
+  return escapeControls(truncate(value, QUOTED_VALUE_LIMIT));
+}
+
+/**
  * French quotation marks. Plain spaces inside them, not narrow no-break ones:
  * these messages are read in a terminal and grepped in CI logs, where an unusual
  * space character is a trap for whoever tries to search for the text they saw.
@@ -131,7 +146,7 @@ function truncate(text: string, limit: number): string {
  * new message cannot forget to do it.
  */
 export function quoted(value: string): string {
-  return `« ${escapeControls(truncate(value, QUOTED_VALUE_LIMIT))} »`;
+  return `« ${bounded(value)} »`;
 }
 
 /** `« a », « b » et « c` », for a message that has to agree in number. */

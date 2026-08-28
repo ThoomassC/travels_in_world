@@ -2,6 +2,13 @@ import path from "node:path";
 import process from "node:process";
 import { formatReport } from "@/content/report";
 import { validateContent } from "@/content/validate";
+import {
+  fromEnvironment,
+  isArgumentError,
+  optionValue,
+  parseArguments,
+  spellArgument,
+} from "./arguments";
 
 /**
  * `npm run validate:content` — the build's gate on hand-written content.
@@ -46,89 +53,6 @@ Exemple
   npm run validate:content -- tests/fixtures/content/valid-trip/trips \\
     --public tests/fixtures/content/valid-trip/public`;
 
-type Arguments = {
-  readonly contentDir?: string;
-  readonly publicDir?: string;
-  readonly help: boolean;
-};
-
-type ArgumentError = { readonly error: string };
-
-function parseArguments(argv: readonly string[]): Arguments | ArgumentError {
-  let contentDir: string | undefined;
-  let publicDir: string | undefined;
-  let help = false;
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index] ?? "";
-
-    // `npm run validate:content -- ""` passes one empty argument. Resolving it
-    // would silently point the run at the working directory.
-    if (argument === "") {
-      continue;
-    }
-
-    if (argument === "-h" || argument === "--help") {
-      help = true;
-      continue;
-    }
-
-    // `--content=x` and `--content x` are both spellings people type; accepting
-    // only one of them is a paper cut on a command run by hand.
-    const [flag, inlineValue] =
-      argument.startsWith("--") && argument.includes("=")
-        ? [argument.slice(0, argument.indexOf("=")), argument.slice(argument.indexOf("=") + 1)]
-        : [argument, undefined];
-
-    if (flag === "--content" || flag === "--public") {
-      const value = inlineValue ?? argv[index + 1];
-      /**
-       * The empty string is refused, not accepted: `--content=` resolved to the
-       * working directory, and the script then walked the whole repository —
-       * `.git`, `node_modules`, `src` — reporting each folder as an unfinished
-       * trip. It covers `--content ""` too, which is the same mistake typed
-       * differently.
-       */
-      if (value === undefined || value === "" || value.startsWith("-")) {
-        return { error: `L'option ${flag} attend un dossier.` };
-      }
-      if (inlineValue === undefined) {
-        index += 1;
-      }
-      const already = flag === "--content" ? contentDir : publicDir;
-      // Two positional arguments were already refused; silently keeping the last
-      // of two options was the same mistake going unnoticed.
-      if (already !== undefined) {
-        return { error: `L'option ${flag} est donnée deux fois (déjà : ${already}).` };
-      }
-      if (flag === "--content") {
-        contentDir = value;
-      } else {
-        publicDir = value;
-      }
-      continue;
-    }
-
-    if (argument.startsWith("-")) {
-      return { error: `Option inconnue : ${argument}` };
-    }
-
-    if (contentDir !== undefined) {
-      return { error: `Un seul dossier de contenu à la fois (déjà : ${contentDir}).` };
-    }
-    contentDir = argument;
-  }
-
-  return { contentDir, publicDir, help };
-}
-
-/** An environment variable, ignoring the empty string an unset variable becomes. */
-function fromEnvironment(name: string): string | undefined {
-  const value = process.env[name];
-
-  return value === undefined || value.trim() === "" ? undefined : value;
-}
-
 /**
  * Colour only for a human at a terminal. CI captures this output into a log
  * file, where escape sequences turn an error message into noise; `NO_COLOR` is
@@ -142,9 +66,14 @@ function wantsColor(stream: { readonly isTTY?: boolean | undefined }): boolean {
 }
 
 function main(argv: readonly string[]): number {
-  const parsed = parseArguments(argv);
+  const parsed = parseArguments(argv, {
+    valued: [
+      { name: "--content", expects: "un dossier" },
+      { name: "--public", expects: "un dossier" },
+    ],
+  });
 
-  if ("error" in parsed) {
+  if (isArgumentError(parsed)) {
     process.stderr.write(`${parsed.error}\n\n${USAGE}\n`);
     return 2;
   }
@@ -154,12 +83,41 @@ function main(argv: readonly string[]): number {
     return 0;
   }
 
+  const [positional, ...extra] = parsed.positionals;
+  const optionContentDir = optionValue(parsed, "--content");
+
+  /**
+   * Two positional directories, or a positional *and* `--content`, are both the
+   * same typo: two answers to one question. Keeping either of them silently is
+   * how a run validates something other than what was asked.
+   */
+  if (extra.length > 0) {
+    process.stderr.write(
+      `Un seul dossier de contenu à la fois (déjà : ${positional}).\n\n${USAGE}\n`
+    );
+    return 2;
+  }
+  if (positional !== undefined && optionContentDir !== undefined) {
+    /**
+     * Named in the order they were typed: `--content a b` reported "(b et a)",
+     * which reads as an accusation against the wrong one of the two.
+     */
+    const designations = parsed.typed
+      .filter((argument) => argument.flag === undefined || argument.flag === "--content")
+      .map(spellArgument)
+      .join(" et ");
+    process.stderr.write(
+      `Le dossier de contenu est donné deux fois (${designations}).\n\n${USAGE}\n`
+    );
+    return 2;
+  }
+
   const validation = validateContent({
     contentDir: path.resolve(
-      parsed.contentDir ?? fromEnvironment("TIW_CONTENT_DIR") ?? DEFAULT_CONTENT_DIR
+      optionContentDir ?? positional ?? fromEnvironment("TIW_CONTENT_DIR") ?? DEFAULT_CONTENT_DIR
     ),
     publicDir: path.resolve(
-      parsed.publicDir ?? fromEnvironment("TIW_PUBLIC_DIR") ?? DEFAULT_PUBLIC_DIR
+      optionValue(parsed, "--public") ?? fromEnvironment("TIW_PUBLIC_DIR") ?? DEFAULT_PUBLIC_DIR
     ),
     repoRoot: REPO_ROOT,
   });

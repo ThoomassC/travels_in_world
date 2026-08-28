@@ -468,7 +468,7 @@ function deduplicate(findings: readonly ContentFinding[]): readonly ContentFindi
   const seen = new Set<string>();
 
   return findings.filter((finding) => {
-    const identity = `${describeField(finding.field)} ${finding.problem}`;
+    const identity = `${describeField(finding.field)}\u0000${finding.problem}`;
     if (seen.has(identity)) {
       return false;
     }
