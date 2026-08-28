@@ -26,6 +26,23 @@ public/
 Les chemins de photos sont **des chemins d'URL**, écrits depuis la racine du site
 (`/photos/...`), et résolus dans `public/`. C'est ce que le navigateur demandera.
 
+**Ce que `public/` implique pour un brouillon.** Ce dossier est servi tel quel par la
+plateforme : un fichier qui s'y trouve est en ligne, sans passer par la couche qui décide
+qu'un voyage est publié ou non. Mesuré sur un build de production où le brouillon était
+pourtant bien exclu — page en 404, absent du manifeste et de toutes les listes :
+
+```
+404  /fr/voyages/perou-2025
+200  /photos/perou-2025/machu.jpg     ← le fichier, servi
+```
+
+Le dossier porte le slug, donc l'adresse est devinable le jour de la publication. Aucun garde
+n'a été posé contre ça, et c'est un arbitrage explicite : le dépôt étant public, ces mêmes
+photos sont déjà lisibles dans le dépôt (voir « Un voyage en brouillon » plus bas), donc un
+garde qui ferait échouer le build imposerait une friction réelle pour une protection nulle.
+Le jour où le dépôt passerait en privé, ce garde deviendrait le premier à écrire : garder les
+photos d'un brouillon hors de `public/` jusqu'à sa publication.
+
 ## Un `trip.yaml` complet
 
 ```yaml
@@ -74,10 +91,102 @@ budget: # facultatif
 tags: # facultatif, mêmes règles qu'un slug
   - asie
   - train
+
+draft: false # facultatif, false par défaut : le voyage est publié — voir « Un voyage en brouillon »
 ```
 
 Le minimum vital est plus court : `slug`, `title`, `startDate`, `endDate`, un lieu et une
 étape. Tout le reste est facultatif.
+
+L'exemple ci-dessus se termine sur `draft: false` — c'est la valeur par défaut, écrite ici
+pour être copiée sans surprise. L'exemple portait `draft: true` : on copiait le modèle, on
+remplaçait les valeurs, la validation et le build passaient au vert, et le voyage
+n'apparaissait nulle part en ligne sans qu'un mot le dise. C'est précisément le mode
+d'échec silencieux que ce champ existe pour rendre visible.
+
+## Un voyage en brouillon
+
+`draft: true` en fin de fichier, et le voyage n'est **pas publié** : il n'apparaît ni sur la
+carte, ni dans les listes, ni dans le sitemap, et son URL répond 404. En développement
+(`npm run dev`), au contraire, il est là comme n'importe quel voyage.
+
+> **Ce que `draft: true` masque, et ce qu'il ne masque pas.** Il masque le **site rendu**. Il
+> ne masque pas la **source** — et ce dépôt est **public**, choix assumé.
+>
+> Concrètement : dès que tu pousses, `content/trips/<slug>/trip.yaml` est lisible en clair
+> par n'importe qui sur `raw.githubusercontent.com`, titre, itinéraire, dates et budget
+> compris, et les photos de `public/photos/<slug>/` avec. Fusionner ne referme rien :
+> l'historique Git garde ce qui y est entré, même après suppression du fichier.
+>
+> La conséquence pratique tient en une phrase : **`draft: true` est un outil de mise en page
+> — « pas encore fini » — et non une protection.** N'écris dans `content/` que ce que tu
+> accepterais de voir lu aujourd'hui. Un texte que tu ne veux montrer à personne se garde
+> hors du dépôt jusqu'à ce qu'il soit prêt.
+>
+> Le jour où ce dépôt passerait en privé, cette réserve tomberait et le champ redeviendrait
+> une vraie frontière de publication.
+
+C'est ce qui permet d'écrire un voyage en plusieurs fois. Sans ce champ, il n'y a que deux
+états : le fichier n'existe pas, ou il est en ligne à moitié écrit — et rien entre les deux.
+
+```yaml
+draft: true # visible sur localhost, absent de la production
+```
+
+Trois choses à savoir :
+
+- **La validation reste entière.** Un brouillon est validé exactement comme un voyage
+  publié : `npm run validate:content` refuse un itinéraire discontinu, une coordonnée
+  manquante ou une photo sans texte alternatif, `draft: true` ou pas. Un brouillon qui ne
+  serait vérifié qu'au moment de sa publication accumulerait ses fautes en silence jusqu'au
+  jour où on veut le mettre en ligne — le pire moment pour les découvrir.
+- **La clé est absente par défaut, pas facultative dans le code.** Ne rien écrire vaut
+  `draft: false`. Il n'y a donc pas de troisième état « brouillon inconnu » à gérer.
+- **`draft: "true"` entre guillemets est refusé.** C'est une chaîne, pas un booléen, et
+  toute chaîne non vide est vraie en JavaScript : la clé accepterait n'importe quoi et le
+  voyage disparaîtrait de la production sans un mot. Écris `true` ou `false`, sans
+  guillemets.
+
+Et la contrepartie, à savoir avant de s'y fier : **en développement, un brouillon ressemble
+trait pour trait à un voyage publié.** À l'écran, rien ne le distingue — ni bandeau, ni
+mention, ni style. Une seule chose le dit, et elle n'est pas dans le navigateur : une ligne
+apparaît dans la sortie du serveur, à chaque lecture du contenu.
+
+```
+2 brouillons, visibles seulement en développement : perou-2025, japon-2024
+```
+
+La ligne nomme **pourquoi** ils sont visibles, et ne dit jamais « seulement ici ». Quand la
+dérogation explicite est en jeu, elle l'écrit : `2 brouillons, visibles dans cet
+environnement (TIW_DRAFTS=visible) : …`. La distinction a été payée — dans le journal d'un
+`next start` de production, l'ancienne formulation annonçait « visible seulement ici » alors
+que le brouillon était servi en 200 sur le port public. Ce que ce code sait, c'est
+l'environnement ; « ici » est précisément ce qu'il ne peut pas savoir.
+
+C'est le terminal où tourne `npm run dev`, pas la console du navigateur. Le champ `draft`
+n'existe volontairement pas dans les données que reçoivent les pages : en production il
+vaudrait `false` pour tout voyage visible, donc un `if (voyage.draft)` marcherait sur
+localhost et ne s'exécuterait jamais en ligne.
+
+### Voir ce qui sera réellement publié
+
+`npm run build && npm run start` reste la réponse complète — c'est la production. Pour la
+question courante, entre deux éditions, une variable d'environnement suffit :
+
+| Variable             | Effet                                                        |
+| -------------------- | ------------------------------------------------------------ |
+| `TIW_DRAFTS=hidden`  | masque les brouillons, y compris en développement et en test |
+| `TIW_DRAFTS=visible` | montre les brouillons, y compris en production               |
+| non définie          | développement et test montrent, tout le reste masque         |
+
+```bash
+TIW_DRAFTS=hidden npm run dev     # le site tel qu'il sera en ligne, sans payer un build
+```
+
+Elle l'emporte sur tout le reste, et c'est le seul moyen de publier un brouillon : hors de
+ces deux valeurs explicites, un environnement inconnu **masque**. Une valeur non reconnue
+(`TIW_DRAFTS=oui`) est ignorée, pas interprétée : une faute de frappe ne décide pas d'une
+publication.
 
 ## Les règles que la validation fait respecter
 

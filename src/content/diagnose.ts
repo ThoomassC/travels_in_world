@@ -705,6 +705,29 @@ function diagnoseKnownShape(
     };
   }
 
+  /**
+   * `draft` takes a bare boolean, and the mistake worth its own sentence is
+   * `draft: "true"` between quotes: it is a *string*, and every non-empty string
+   * is truthy in JavaScript, so accepting it would make `draft: "false"` hide a
+   * published trip as effectively as `draft: "true"`. The fallback would answer
+   * that with half a French sentence and the schema's English rule appended,
+   * which is the one message shape this catalogue exists to avoid. No repair
+   * command: there is none for this field, the line is two words long.
+   */
+  if (shape === "draft") {
+    const value = valueAt(context.document, field);
+
+    return {
+      rule: "draft-not-boolean",
+      field,
+      problem:
+        typeof value === "string"
+          ? `${quoted("draft")} vaut la chaîne ${quoted(value)}, pas un booléen : toute chaîne non vide serait lue comme vraie`
+          : `${quoted("draft")} vaut ${writtenOr(context, field, "vide")}, qui n'est pas un booléen`,
+      action: `écris ${quoted("draft: true")} pour un brouillon ou ${quoted("draft: false")}, sans guillemets`,
+    };
+  }
+
   return undefined;
 }
 

@@ -165,6 +165,23 @@ const TripFieldsSchema = z.strictObject({
   tags: z.array(TagSchema).default([]),
   coverPhotoSrc: z.string().min(1).optional(),
   budget: BudgetSchema.optional(),
+  /**
+   * Publication state, last as it is in `content/README.md` — a contributor
+   * reads the two in the same order, and the key belongs to no content block.
+   *
+   * `.default(false)`, not `.optional()`: the absent key means "published", so
+   * there is no third "draft unknown" state for the loader to handle. With
+   * `optional` the publication filter is `trip.draft === true` in one place and
+   * `!trip.draft` in another, and the trip is eventually published by whichever
+   * spelling loses.
+   *
+   * `z.boolean()` and not something looser, because `draft: "true"` between
+   * quotes is a *string*, and every non-empty string is truthy in JavaScript:
+   * accepted, `draft: "false"` would hide a published trip from production as
+   * effectively as `draft: "true"`, and it would vanish from the map without a
+   * word. Refusing the string is the only way that mistake is ever said out loud.
+   */
+  draft: z.boolean().default(false),
 });
 
 type TripFields = z.infer<typeof TripFieldsSchema>;

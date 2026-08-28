@@ -413,8 +413,18 @@ describe("the controls that keep this suite from passing for the wrong reason", 
    * The rule is about crossing *into* the map from outside, not a project-wide
    * ban on deep aliased imports. A `files` glob or a pattern widened by accident
    * fails here rather than in a component nobody links to the config change.
+   *
+   * The third specifier used to be `@/content/validate`, and TIW-11 made that
+   * assertion **false on purpose**: `travels-in-world/content-facade` refuses
+   * every module under `src/content/` except the façade from anywhere in `src/**`,
+   * and `tests/lint/content-facade.test.ts` asserts the opposite verdict on this
+   * exact file/specifier pair ("refuses @/content/validate in a page"). Two
+   * suites cannot both be right about it, and the content boundary is the one
+   * that is deliberate. `@/content/trips` replaces it and keeps this case's whole
+   * point intact — it is still a deep aliased import outside `src/map`, still
+   * untouched by the map rule, and now the only content spelling a page may write.
    */
-  it.each(["@/domain/geo", "@/content/validate", "@/i18n/routing"])(
+  it.each(["@/domain/geo", "@/content/trips", "@/i18n/routing"])(
     "leaves the deep specifier %o outside src/map alone",
     async (specifier) => {
       await expectAccepted(

@@ -17,11 +17,23 @@ npm ci
 npm run dev     # http://localhost:3000 → redirige vers /fr
 ```
 
+**Le serveur de développement n'écoute que sur `127.0.0.1`**, et c'est délibéré : c'est le
+seul environnement où les voyages en `draft` sont visibles. Mesuré avant ce réglage — le
+socket était en `TCP *:3000 (LISTEN)` et un `curl http://<ip-du-poste>:3000/fr/voyages/<slug>`
+depuis une autre machine du réseau rendait un brouillon en 200. Sur le Wi-Fi d'un café ou
+d'un hôtel, « en local » ne veut pas dire « pour moi seul ».
+
+Pour tester depuis un téléphone, l'échappatoire est explicite et son coût est écrit :
+
+```bash
+npx next dev --hostname 0.0.0.0   # expose brouillons compris à tout le sous-réseau
+```
+
 ## Scripts
 
 | Script                     | Rôle                                                                      |
 | -------------------------- | ------------------------------------------------------------------------- |
-| `npm run dev`              | Serveur de développement                                                  |
+| `npm run dev`              | Serveur de développement, sur `127.0.0.1` seulement                       |
 | `npm run build`            | Build de production                                                       |
 | `npm run start`            | Sert le build de production                                               |
 | `npm run lint`             | ESLint (flat config)                                                      |
