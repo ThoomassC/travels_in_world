@@ -444,6 +444,55 @@ const config = [
           ],
         },
       ],
+      /**
+       * The same boundary, for the spelling `no-restricted-imports` cannot see.
+       * `await import("node:fs")` from `src/domain/**` linted, typechecked and
+       * built clean until this line existed — measured — because a dynamic import
+       * is a call expression and no `no-restricted-imports` option reaches one.
+       *
+       * **Why this block needs its own copy.** The `content-facade` block above
+       * carries a `no-restricted-syntax` too, and it `ignores` `src/domain/**` —
+       * so the domain was the one folder excluded from the very remedy that block
+       * introduced. `ignores` is per *block*, not per rule: exempting a folder
+       * from one family of patterns exempts it from everything else the block
+       * carries. That is the trap this file keeps re-teaching, and the rule it
+       * yields is: **the last block matching a file must carry everything that
+       * should apply to it.**
+       *
+       * **An allowlist, not a translation of `DOMAIN_FORBIDDEN_IMPORTS`.** Turning
+       * those gitignore-style globs into a regular expression would be a second
+       * declaration of the same list, free to drift from the first. The domain is
+       * a flat folder over Zod, so `./geo` — a bare sibling — is the only
+       * specifier it ever legitimately needs, and everything else is refused
+       * without naming it. Measured over 25 spellings, 0 mismatch:
+       *
+       *   refused | react · react-dom · next · next-intl · node:fs
+       *           | node:fs/promises · fs · path · d3-geo · topojson-client
+       *           | server-only · @/content/loader · @/content/trips
+       *           | @/domain/geo · ../content/loader · ./../content/loader
+       *           | .././content/loader · ../../src/content/loader
+       *           | .. · ./.. · ./sub/deep
+       *   allowed | ./geo · ./schema · ./route · ./trip
+       *
+       * `./sub/deep` is refused on purpose: the domain is flat, and the day it
+       * stops being flat is a decision to take in review rather than to discover
+       * through a dynamic import.
+       *
+       * The `ignores` above covers this rule as well, so a co-located spec may
+       * still `await import("vitest")` — verified, for the same reason the static
+       * rule exempts it.
+       *
+       * Still out of reach, and it is a limit rather than an oversight: a
+       * *computed* specifier (`await import(name)`) is not a `Literal`, so no
+       * syntactic selector can see it. `AGENTS.md` says so.
+       */
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportExpression > Literal[value=/^(?!\\.\\/[A-Za-z0-9-]+$)/]",
+          message: DOMAIN_PURITY_MESSAGE,
+        },
+      ],
     },
   },
 ];

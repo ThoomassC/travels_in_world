@@ -31,7 +31,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-const PURITY_RULE = "no-restricted-imports";
+/**
+ * Both rules, because the boundary is stated twice for one reason: a dynamic
+ * import is a call expression, invisible to every `no-restricted-imports` option,
+ * so the same wall needs a syntactic selector beside the specifier patterns.
+ * Counting only the first would let every case below pass on a domain that can
+ * still `await import("node:fs")`.
+ */
+const PURITY_RULES = ["no-restricted-imports", "no-restricted-syntax"];
 
 type Verdict = {
   /** Violations of the purity rule — what each case is really asserting on. */
@@ -64,7 +71,9 @@ async function lint(relativePath: string, source: string): Promise<Verdict> {
   const messages = results[0]?.messages ?? [];
 
   return {
-    purity: messages.filter((message) => message.ruleId === PURITY_RULE).length,
+    purity: messages.filter(
+      (message) => message.ruleId !== null && PURITY_RULES.includes(message.ruleId)
+    ).length,
     fatal: messages.filter((message) => message.fatal === true).map((message) => message.message),
     ruleIds: messages.map((message) => message.ruleId),
   };
@@ -189,6 +198,97 @@ describe("the controls that keep this suite from passing for the wrong reason", 
     const verdict = await lint(
       `src/domain/probe.test.${extension}`,
       'import { readFileSync } from "node:fs";\nimport { trips } from "@/content/trips";\nexport const a = [readFileSync, trips];'
+    );
+
+    expect(verdict.fatal).toEqual([]);
+    expect(verdict.purity).toBe(0);
+  });
+});
+
+/**
+ * The spelling the specifier patterns cannot see, and the reason the block states
+ * its boundary twice.
+ *
+ * `await import("node:fs")` from `src/domain/**` linted, typechecked and built
+ * clean until a `no-restricted-syntax` selector was added beside the patterns — a
+ * dynamic import is a call expression, and no `no-restricted-imports` option
+ * reaches one. `AGENTS.md` documents the same blind spot for `next/link`; this is
+ * the half of it that is now closed.
+ *
+ * The check is an **allowlist**: only a bare flat sibling passes. Translating
+ * `DOMAIN_FORBIDDEN_IMPORTS` into a regular expression would declare that list a
+ * second time, free to drift from the first — and the domain is flat over Zod, so
+ * `./geo` is the only specifier it ever needs.
+ */
+describe("the domain purity rule refuses a dynamic import too", () => {
+  it.each([
+    "react",
+    "react-dom",
+    "next",
+    "next-intl",
+    "node:fs",
+    "node:fs/promises",
+    "fs",
+    "path",
+    "d3-geo",
+    "topojson-client",
+    "server-only",
+    "@/content/loader",
+    "@/content/trips",
+    "@/domain/geo",
+    "../content/loader",
+    "./../content/loader",
+    ".././content/loader",
+    "../../src/content/loader",
+    "..",
+    "./..",
+    /** The domain is flat; a nested sibling is a decision for a review, not for an import. */
+    "./sub/deep",
+  ])("refuses await import(%o)", async (specifier) => {
+    await expectRefused(
+      "src/domain/probe.ts",
+      `export const a = async () => await import(${JSON.stringify(specifier)});`
+    );
+  });
+
+  /** The one relative form the domain needs, and the controls that keep this honest. */
+  it.each(["./geo", "./schema", "./route", "./trip"])(
+    "leaves await import(%o) alone",
+    async (specifier) => {
+      const verdict = await lint(
+        "src/domain/probe.ts",
+        `export const a = async () => await import(${JSON.stringify(specifier)});`
+      );
+
+      expect(verdict.fatal).toEqual([]);
+      expect(verdict.purity).toBe(0);
+    }
+  );
+
+  /**
+   * The exemption is per block, so it covers this rule as well as the patterns —
+   * otherwise the Vitest option `vitest.config.ts` offers would become a trap for
+   * a lazily-imported helper.
+   */
+  it("exempts a co-located spec, which may import anything dynamically", async () => {
+    const verdict = await lint(
+      "src/domain/probe.test.ts",
+      'export const a = async () => await import("node:fs");'
+    );
+
+    expect(verdict.fatal).toEqual([]);
+    expect(verdict.purity).toBe(0);
+  });
+
+  /**
+   * A **computed** specifier is not a `Literal`, so no syntactic selector can see
+   * it. Pinned as a known limit rather than left to be rediscovered: this case
+   * asserts the hole, and it is the honest counterpart to the table above.
+   */
+  it("cannot see a computed specifier, and that limit is deliberate", async () => {
+    const verdict = await lint(
+      "src/domain/probe.ts",
+      "export const a = async (name: string) => await import(name);"
     );
 
     expect(verdict.fatal).toEqual([]);
