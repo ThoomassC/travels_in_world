@@ -39,6 +39,16 @@ export type TripFile = {
       readonly state: "parsed";
       readonly value: unknown;
       readonly locate: Locate;
+      /**
+       * The file exactly as it is on disk.
+       *
+       * Carried rather than re-read because `npm run geocode` (TIW-10) edits this
+       * text at byte offsets and writes it back: reading the file a second time
+       * would open a window in which the author saves an edit between the read
+       * that produced the offsets and the read that produced the text — and the
+       * offsets would then point into a different file.
+       */
+      readonly source: string;
       /** Paths of keys JavaScript reads as instructions — see {@link UNSAFE_KEYS}. */
       readonly unsafeKeys: readonly FieldPath[];
     }
@@ -313,6 +323,7 @@ function readTripFile(contentDir: string, directory: string): TripFile {
     ...identity,
     state: "parsed",
     value,
+    source,
     locate: locator(document, lineCounter),
     unsafeKeys: unsafeKeyPaths(document),
   };
