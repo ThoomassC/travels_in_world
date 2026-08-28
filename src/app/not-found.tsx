@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { getPathname } from "@/i18n/navigation";
+import { homePathname } from "@/i18n/pathname";
 import { routing } from "@/i18n/routing";
 import "@/styles/tokens.css";
 
@@ -15,12 +15,22 @@ import "@/styles/tokens.css";
  * dynamic (`ƒ`), `/fr` included, instead of prerendered. Hence:
  *
  * - `getTranslations({ locale, namespace })` rather than `getTranslations(ns)`;
- * - `getPathname` + a plain anchor rather than the `Link` component, which
+ * - `homePathname()` + a plain anchor rather than the `Link` component, which
  *   reads the request locale even when handed a `locale` prop. A 404 is also
  *   the one place where a full document load beats client-side navigation:
  *   it leaves the error state behind entirely.
  *
  * Both were verified by building with and without them.
+ *
+ * The href comes from `@/i18n/pathname` and NOT from `getPathname` in
+ * `@/i18n/navigation`, and the difference on THIS route is 12.4 KB brotli of
+ * client JavaScript and two chunks — 123.5 KB / 7 chunks before, 111.1 KB / 5
+ * after. next-intl builds `getPathname` and its client `Link` in one call, so
+ * importing the first ships the second, and the `Link` in turn pulls `useLocale`
+ * from `use-intl` — the whole client intl runtime, onto a 404 that uses none of
+ * it. That is why the saving here is far larger than the 3.8 KB the same import
+ * costs a page inside `[locale]`. Measured both ways; see
+ * `src/i18n/pathname.ts` and docs/adr/0005-getpathname-sans-le-link-client.md.
  */
 
 /**
@@ -41,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function NotFound() {
   const t = await getTranslations({ locale: routing.defaultLocale, namespace: "notFound" });
-  const homeHref = getPathname({ href: "/", locale: routing.defaultLocale });
+  const homeHref = homePathname();
 
   return (
     <html lang={routing.defaultLocale}>

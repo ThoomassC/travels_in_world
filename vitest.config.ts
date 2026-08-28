@@ -7,10 +7,35 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      /**
+       * Not a convenience: `tests/i18n/pathname.test.ts` calls next-intl's real
+       * `getPathname` to prove that `src/i18n/pathname.ts` still agrees with it,
+       * and next-intl reaches `next/navigation` and `next/link` with bare,
+       * extensionless specifiers. Turbopack adds the extension; Vite's Node
+       * resolver does not, and the `next` package publishes no `exports` map to
+       * do it either — so the import fails with "Did you mean next/navigation.js".
+       *
+       * The two entries below are the extension and nothing else: both sides
+       * resolve to the same file. `@rollup/plugin-alias` matches a string key
+       * exactly or followed by `/`, so `next/navigation.js` is NOT re-aliased
+       * into `next/navigation.js.js`.
+       */
+      "next/navigation": "next/navigation.js",
+      "next/link": "next/link.js",
     },
   },
   test: {
     environment: "jsdom",
+    /**
+     * The aliases above only apply to code Vite transforms, and a package in
+     * `node_modules` is externalised to the Node resolver by default — where the
+     * bare specifier fails again. Inlining next-intl is what puts it back on
+     * Vite's resolver so the aliases are seen.
+     *
+     * Scoped to next-intl deliberately: `inline: true` would drag every
+     * dependency through the transform pipeline for one test file.
+     */
+    server: { deps: { inline: [/next-intl/] } },
     /**
      * `globals: true` is deliberately NOT set. It is a spring-loaded trap: the
      * globals it injects are only *typed* if `vitest/globals` is added to
