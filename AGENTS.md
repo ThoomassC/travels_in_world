@@ -119,13 +119,21 @@ réel, et chacun a été prouvé par un échec volontaire. **Ne les désactive p
 Les quatre exigent une étape préalable — `test:build` a besoin d'un build, `test:lint` de
 charger tout le graphe de configuration d'ESLint — et vivent donc hors de `npm run test`.
 
-**Elles ne sont branchées à rien d'automatique, et cette ligne disait le contraire.** Il n'y
-a aucun fichier de CI dans ce dépôt — vérifié sur tout l'historique, toutes branches
-confondues : `git log --all --name-only --pretty=format: | grep -icE '\.github/workflows'`
-répond `0`, et `.github/` n'existe pas. Les quatre gardes ne tiennent donc que si quelqu'un
-lance `npm run test:build` et `npm run test:lint` à la main. Les brancher est le périmètre de
-TIW-22 ; en attendant, **lance-les toi-même** après avoir touché un layout, le 404, les
-métadonnées, une règle de frontière ou le filtre de publication.
+**Elles sont branchées, depuis TIW-22** — et cette ligne a dit successivement le contraire de
+la vérité dans les deux sens, ce qui est la raison de la préciser plutôt que de l'abréger.
+`.github/workflows/ci.yml` lance les quatre gardes sur chaque pull request et sur chaque
+poussée vers `main` et `develop`, et la protection de branche fait de la vérification
+`Vérifications` un préalable à toute fusion : une PR rouge n'est pas fusionnable, administrateur
+compris sur `main`. `vercel.json` lance en plus `validate:content` puis `test:build` dans le
+build de déploiement lui-même — pas par redondance, mais parce que le garde des brouillons
+dépend de `TIW_DRAFTS`, qui vit dans le tableau de bord Vercel et n'existe pas sur le runner
+GitHub : la machine qui construit le déploiement est la seule à pouvoir constater qu'un
+brouillon part en ligne.
+
+Ce que ça ne dispense pas de faire : **lance-les toi-même** avant de pousser après avoir touché
+un layout, le 404, les métadonnées, une règle de frontière ou le filtre de publication. La CI
+te dira que c'est cassé quatre minutes plus tard ; elle ne te dira pas pourquoi aussi bien que
+la sortie que tu as sous les yeux.
 
 Histoire de **la pureté du domaine** : la règle a régressé **deux fois** en un seul ticket —
 un glob qui ne couvrait pas les fichiers `.tsx`, puis un motif qui laissait passer

@@ -26,6 +26,23 @@ public/
 Les chemins de photos sont **des chemins d'URL**, écrits depuis la racine du site
 (`/photos/...`), et résolus dans `public/`. C'est ce que le navigateur demandera.
 
+**Ce que `public/` implique pour un brouillon.** Ce dossier est servi tel quel par la
+plateforme : un fichier qui s'y trouve est en ligne, sans passer par la couche qui décide
+qu'un voyage est publié ou non. Mesuré sur un build de production où le brouillon était
+pourtant bien exclu — page en 404, absent du manifeste et de toutes les listes :
+
+```
+404  /fr/voyages/perou-2025
+200  /photos/perou-2025/machu.jpg     ← le fichier, servi
+```
+
+Le dossier porte le slug, donc l'adresse est devinable le jour de la publication. Aucun garde
+n'a été posé contre ça, et c'est un arbitrage explicite : le dépôt étant public, ces mêmes
+photos sont déjà lisibles dans le dépôt (voir « Un voyage en brouillon » plus bas), donc un
+garde qui ferait échouer le build imposerait une friction réelle pour une protection nulle.
+Le jour où le dépôt passerait en privé, ce garde deviendrait le premier à écrire : garder les
+photos d'un brouillon hors de `public/` jusqu'à sa publication.
+
 ## Un `trip.yaml` complet
 
 ```yaml
@@ -89,9 +106,25 @@ d'échec silencieux que ce champ existe pour rendre visible.
 
 ## Un voyage en brouillon
 
-`draft: true` en fin de fichier, et le voyage n'est **pas publié**. Il n'apparaît nulle part
-en ligne : ni sur la carte, ni dans les listes, ni dans le sitemap, et son URL répond 404.
-En développement (`npm run dev`), au contraire, il est là comme n'importe quel voyage.
+`draft: true` en fin de fichier, et le voyage n'est **pas publié** : il n'apparaît ni sur la
+carte, ni dans les listes, ni dans le sitemap, et son URL répond 404. En développement
+(`npm run dev`), au contraire, il est là comme n'importe quel voyage.
+
+> **Ce que `draft: true` masque, et ce qu'il ne masque pas.** Il masque le **site rendu**. Il
+> ne masque pas la **source** — et ce dépôt est **public**, choix assumé.
+>
+> Concrètement : dès que tu pousses, `content/trips/<slug>/trip.yaml` est lisible en clair
+> par n'importe qui sur `raw.githubusercontent.com`, titre, itinéraire, dates et budget
+> compris, et les photos de `public/photos/<slug>/` avec. Fusionner ne referme rien :
+> l'historique Git garde ce qui y est entré, même après suppression du fichier.
+>
+> La conséquence pratique tient en une phrase : **`draft: true` est un outil de mise en page
+> — « pas encore fini » — et non une protection.** N'écris dans `content/` que ce que tu
+> accepterais de voir lu aujourd'hui. Un texte que tu ne veux montrer à personne se garde
+> hors du dépôt jusqu'à ce qu'il soit prêt.
+>
+> Le jour où ce dépôt passerait en privé, cette réserve tomberait et le champ redeviendrait
+> une vraie frontière de publication.
 
 C'est ce qui permet d'écrire un voyage en plusieurs fois. Sans ce champ, il n'y a que deux
 états : le fichier n'existe pas, ou il est en ligne à moitié écrit — et rien entre les deux.
@@ -120,8 +153,15 @@ mention, ni style. Une seule chose le dit, et elle n'est pas dans le navigateur 
 apparaît dans la sortie du serveur, à chaque lecture du contenu.
 
 ```
-2 brouillons, visibles seulement ici : perou-2025, japon-2024
+2 brouillons, visibles seulement en développement : perou-2025, japon-2024
 ```
+
+La ligne nomme **pourquoi** ils sont visibles, et ne dit jamais « seulement ici ». Quand la
+dérogation explicite est en jeu, elle l'écrit : `2 brouillons, visibles dans cet
+environnement (TIW_DRAFTS=visible) : …`. La distinction a été payée — dans le journal d'un
+`next start` de production, l'ancienne formulation annonçait « visible seulement ici » alors
+que le brouillon était servi en 200 sur le port public. Ce que ce code sait, c'est
+l'environnement ; « ici » est précisément ce qu'il ne peut pas savoir.
 
 C'est le terminal où tourne `npm run dev`, pas la console du navigateur. Le champ `draft`
 n'existe volontairement pas dans les données que reçoivent les pages : en production il
