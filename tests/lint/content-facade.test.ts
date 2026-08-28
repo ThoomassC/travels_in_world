@@ -478,6 +478,32 @@ describe("src/i18n/navigation.ts is exempt from the navigation ban and from noth
   it("leaves the façade reachable", async () => {
     await expectAccepted("src/i18n/navigation.ts", importing("@/content/trips"));
   });
+
+  /**
+   * The dynamic ban reaches this file **by inheritance**, and that is exactly why
+   * it needs a case of its own.
+   *
+   * `navigation-primitives` replaces `no-restricted-imports` and never mentions
+   * `no-restricted-syntax`, so the selector from the block above survives here
+   * untouched. Measured, and it holds — but it holds because of what this block
+   * does *not* say, which is the most fragile way for an invariant to be true.
+   * The day somebody adds a `no-restricted-syntax` to this block for any reason,
+   * the whole dynamic ban vanishes from the one file every client component
+   * imports, in silence. These two cases are what turns red instead.
+   */
+  it("still refuses a dynamic import of the loader, inherited from the block above", async () => {
+    await expectRefused(
+      "src/i18n/navigation.ts",
+      'export const a = async () => await import("@/content/loader");'
+    );
+  });
+
+  it("still allows a dynamic import of the façade", async () => {
+    await expectAccepted(
+      "src/i18n/navigation.ts",
+      'export const a = async () => await import("@/content/trips");'
+    );
+  });
 });
 
 /* --------------------------------- the limits, pinned as limits and not as coverage -- */
