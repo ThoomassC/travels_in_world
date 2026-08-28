@@ -36,11 +36,27 @@ const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 const RESTRICTED_IMPORTS_RULE = "no-restricted-imports";
 
+/**
+ * The second half of the boundary, and a *different rule* on purpose.
+ *
+ * `no-restricted-imports` visits `ImportDeclaration` only, so `await import(...)`
+ * — an `ImportExpression` — walks past it no matter how its options are written.
+ * `travels-in-world/map-entry-point` therefore carries a `no-restricted-syntax`
+ * selector alongside it. The two are complementary, not redundant, and the cases
+ * below assert on the rule id rather than on a violation count so that neither
+ * can silently stand in for the other.
+ */
+const RESTRICTED_SYNTAX_RULE = "no-restricted-syntax";
+
 type Verdict = {
   /** Violations of the import restriction — what every case here asserts on. */
   readonly restricted: number;
   /** The messages of those violations, so a case can pin *which* ban fired. */
   readonly messages: readonly string[];
+  /** Violations of the dynamic-import restriction, counted separately. */
+  readonly dynamic: number;
+  /** The messages of those, so a dynamic case can pin *which* ban fired too. */
+  readonly dynamicMessages: readonly string[];
   /** Parse failures, asserted empty everywhere so they can never read as a pass. */
   readonly fatal: readonly string[];
   /** Every rule that fired, so an "accepted" case can demand complete silence. */
@@ -68,14 +84,30 @@ async function lint(relativePath: string, source: string): Promise<Verdict> {
   expect(results, `${relativePath} matched no ESLint configuration`).toHaveLength(1);
   const messages = results[0]?.messages ?? [];
   const restricted = messages.filter((message) => message.ruleId === RESTRICTED_IMPORTS_RULE);
+  const dynamic = messages.filter((message) => message.ruleId === RESTRICTED_SYNTAX_RULE);
 
   return {
     restricted: restricted.length,
     messages: restricted.map((message) => message.message),
+    dynamic: dynamic.length,
+    dynamicMessages: dynamic.map((message) => message.message),
     fatal: messages.filter((message) => message.fatal === true).map((message) => message.message),
     ruleIds: messages.map((message) => message.ruleId),
   };
 }
+
+/**
+ * The dynamic fixture, kept to a single `await import(...)` for the same reason
+ * the static ones hold a single declaration: a bare count of violations then
+ * identifies the specifier without depending on the wording of a message.
+ *
+ * It is an arrow function rather than a top-level `await` because a top-level
+ * `await` makes the fixture a module with different parse requirements, and a
+ * fixture that fails to parse would satisfy every "refuses" case in this file by
+ * accident — which is precisely what `verdict.fatal` is asserted against.
+ */
+const dynamicImport = (specifier: string): string =>
+  `export const load = async () => await import(${JSON.stringify(specifier)});`;
 
 /**
  * Every fixture below holds exactly **one** import, which is what lets a bare
@@ -99,6 +131,28 @@ async function expectAccepted(relativePath: string, source: string): Promise<voi
   expect(verdict.fatal).toEqual([]);
   expect(verdict.messages).toEqual([]);
   expect(verdict.restricted).toBe(0);
+  /**
+   * Both halves of the boundary have to stay quiet, not just the one a given
+   * case is about. A selector broad enough to trip on a static import — or on
+   * `@/map` itself — would otherwise pass unnoticed through every acceptance
+   * case in this file.
+   */
+  expect(verdict.dynamicMessages).toEqual([]);
+  expect(verdict.dynamic).toBe(0);
+}
+
+/** The dynamic counterparts, keyed on `no-restricted-syntax` rather than on the count. */
+async function expectDynamicRefused(relativePath: string, specifier: string): Promise<Verdict> {
+  const verdict = await lint(relativePath, dynamicImport(specifier));
+
+  expect(verdict.fatal).toEqual([]);
+  expect(verdict.dynamic).toBeGreaterThan(0);
+
+  return verdict;
+}
+
+async function expectDynamicAccepted(relativePath: string, specifier: string): Promise<void> {
+  await expectAccepted(relativePath, dynamicImport(specifier));
 }
 
 describe("the map entry-point rule refuses a deep import from outside src/map", () => {
@@ -513,5 +567,271 @@ describe("invariant 2 survives whatever the map rule adds", () => {
       "src/app/[locale]/page.tsx",
       'import { notFound } from "next/navigation";\nexport const a = notFound;'
     );
+  });
+});
+
+/**
+ * THE DYNAMIC HALF OF THE BOUNDARY, WHICH THE STATIC RULE CANNOT SEE AT ALL.
+ *
+ * `no-restricted-imports` visits `ImportDeclaration` and nothing else.
+ * `await import("@/map/world")` is an `ImportExpression` — a call expression —
+ * and **no option of that rule can be made to match it**. The comment on
+ * `MAP_ENTRY_POINT_PATTERNS` in `eslint.config.js` used to call this a known and
+ * accepted blind spot, aligned with the one the `next/link` ban carries; it is
+ * not accepted any more, because `no-restricted-syntax` reaches it.
+ *
+ * Measured against the real config, `new ESLint({ cwd })` with no
+ * `overrideConfig`, before the selector existed — from `src/app/[locale]/page.tsx`
+ * and from `src/i18n/navigation.ts` alike:
+ *
+ *   await import("@/map/world")                        -> ALLOWED
+ *   await import("../map/dataset")                     -> ALLOWED
+ *   await import("world-atlas/countries-110m.json")    -> ALLOWED
+ *   await import("d3-geo")                             -> ALLOWED
+ *   import { buildWorldGeometry } from "@/map/world";  -> REFUSED   <- the witness
+ *
+ * The witness line is what gives the four ALLOWEDs their meaning: the block was
+ * live on that file, it refused the declaration, and it let every dynamic
+ * spelling of the same module through. A `'use client'` component writing four
+ * extra characters shipped `d3-geo` and 105 KB of TopoJSON to the browser without
+ * meeting `import "server-only"`, with lint and build both green — criterion 1 of
+ * TIW-12, "0 Ko de bibliothèque côté client", defeated in silence.
+ *
+ * This suite is the reason the fix cannot quietly rot back: the selector is a
+ * regex transcription of two globs, and a regex that drifts from
+ * `["@/map/*", "**\/map/*"]` is exactly the failure this repository has already
+ * paid for twice under "Les deux gardes exécutables".
+ */
+describe("the map boundary refuses the dynamic import the static rule cannot see", () => {
+  /**
+   * `src/app/**` and `src/components/**` are matched by
+   * `travels-in-world/map-entry-point` directly.
+   *
+   * `src/i18n/navigation.ts` is the row that matters most, and it is covered by a
+   * mechanism worth naming: the `travels-in-world/i18n-navigation` block declared
+   * after it *replaces* `no-restricted-imports` for that file — which is why the
+   * map patterns are re-stated there — but it never mentions
+   * `no-restricted-syntax`, so the selector survives into it untouched. That is an
+   * inheritance, not a re-statement, and inheritances in this file are one careless
+   * edit from vanishing. These rows are what would go red.
+   *
+   * It is also the worst file in the repository to leave open: `@/i18n/navigation`
+   * exports `usePathname` and `useRouter`, so *every* client component imports it.
+   */
+  const IMPORTERS = [
+    "src/app/[locale]/page.tsx",
+    "src/components/map/world-map.tsx",
+    "src/i18n/navigation.ts",
+  ];
+
+  /**
+   * Every module under the folder, plus a path nested deeper than one segment.
+   * `@/map/index` is refused deliberately, for the reason the static cases above
+   * record: one module, one greppable spelling.
+   */
+  const DEEP_MODULES = [
+    "@/map/world",
+    "@/map/projection",
+    "@/map/iso-3166",
+    "@/map/dataset",
+    "@/map/path-context",
+    "@/map/index",
+    "@/map/sub/deep/thing",
+  ];
+
+  it.each(IMPORTERS.flatMap((file) => DEEP_MODULES.map((specifier) => ({ file, specifier }))))(
+    "refuses await import($specifier) from $file",
+    async ({ file, specifier }) => {
+      const verdict = await expectDynamicRefused(file, specifier);
+
+      expect(verdict.dynamicMessages.join("\n")).toMatch(/Import from "@\/map" instead/);
+    }
+  );
+
+  /**
+   * The relative spellings, which are the same module to the bundler. This is
+   * verbatim the hole the domain rule shipped with — `"../x"` refused while
+   * `"./../x"` linted clean — and the reason the selector's leading segments are
+   * written generically rather than as an `@/` prefix.
+   */
+  it.each([
+    "../map/world",
+    "../../map/dataset",
+    "./../map/world",
+    ".././map/world",
+    "../../src/map/world",
+  ])("refuses the relative spelling await import(%o) from src/app", async (specifier) => {
+    const verdict = await expectDynamicRefused("src/app/[locale]/page.tsx", specifier);
+
+    expect(verdict.dynamicMessages.join("\n")).toMatch(/Import from "@\/map" instead/);
+  });
+
+  /**
+   * The packages the façade encapsulates. Banning the modules and leaving these
+   * open ships the projection library — or the whole TopoJSON — anyway, and
+   * neither ever touches `@/map`, so neither meets the `server-only` guard.
+   *
+   * `d3-geo/src/path/index.js` is here because the reason it is caught is not the
+   * obvious one: the selector admits a `/…` tail on a banned package name, the way
+   * a `.gitignore` entry carries its subtree — which is what lets
+   * `MAP_PACKAGE_PATTERNS` stay a list of bare names with no `/*` companions.
+   */
+  it.each(
+    IMPORTERS.flatMap((file) =>
+      [
+        "world-atlas",
+        "world-atlas/countries-110m.json",
+        "d3-geo",
+        "topojson-client",
+        "d3-geo/src/path/index.js",
+      ].map((specifier) => ({ file, specifier }))
+    )
+  )("refuses await import($specifier) from $file", async ({ file, specifier }) => {
+    const verdict = await expectDynamicRefused(file, specifier);
+
+    expect(verdict.dynamicMessages.join("\n")).toMatch(/build-time only/);
+  });
+
+  /**
+   * `d3-*` does not stop at one hyphen: `d3-geo-projection` is d3, and the glob
+   * `"d3-*"` refuses it. The selector has to agree — measured, it does.
+   */
+  it("refuses a multi-word d3 package", async () => {
+    await expectDynamicRefused("src/app/[locale]/page.tsx", "d3-geo-projection");
+  });
+});
+
+describe("the dynamic selector leaves the legitimate paths alone", () => {
+  /**
+   * The façade, and it passes for the same counter-intuitive reason the static
+   * pattern lets it through: the selector requires a segment *after* `map/`, and
+   * `@/map` has none. A reader who "tidies" the regex into something anchored on
+   * `map` rather than on `map/` breaks these two rows and only these two.
+   */
+  it.each(["@/map", "../../map"])(
+    "accepts await import(%o), the façade, from src/app",
+    async (specifier) => {
+      await expectDynamicAccepted("src/app/[locale]/page.tsx", specifier);
+    }
+  );
+
+  it.each(["@/domain/geo", "@/i18n/navigation", "react", "next-intl", "node:path"])(
+    "leaves await import(%o) alone in src/app",
+    async (specifier) => {
+      await expectDynamicAccepted("src/app/[locale]/page.tsx", specifier);
+    }
+  );
+
+  /**
+   * THE FALSE POSITIVES, AND THEY ARE A DECISION RATHER THAN AN ACCIDENT.
+   *
+   * A prefix test would be shorter — `^(world-atlas|d3|topojson)` — and it would
+   * refuse an unrelated `world-atlas-lite` or `topojsonesque` on nothing but a
+   * shared prefix. That is not a harmless over-reach in a boundary rule: a rule
+   * that cries wolf on a legitimate package is a rule the next person switches
+   * off. So the hyphen is written into the pattern instead — `world-atlas` admits
+   * no suffix at all, because `MAP_PACKAGE_PATTERNS` has no `world-atlas-*` glob,
+   * while `d3` and `topojson` admit `-<anything>` because it has `d3-*` and
+   * `topojson-*`.
+   *
+   * `@/mapper/thing` and `sourcemap/x` are the same decision on the module half:
+   * the path segment must be exactly `map`.
+   *
+   * Measured: `no-restricted-imports` allows all four of these too. The selector
+   * is a faithful transcription including where it says no.
+   */
+  it.each(["world-atlas-lite", "topojsonesque", "@/mapper/thing", "sourcemap/x"])(
+    "does not trap the unrelated package %o",
+    async (specifier) => {
+      await expectDynamicAccepted("src/app/[locale]/page.tsx", specifier);
+    }
+  );
+
+  /**
+   * `src/map/**` is where these modules and packages are *supposed* to be
+   * reached, dynamically included. Without these rows, a selector broad enough to
+   * catch a component would satisfy every refusal above while making the map
+   * impossible to build — and the break would surface in code nobody had touched.
+   */
+  it.each([
+    { file: "src/map/world.ts", specifier: "@/map/iso-3166" },
+    { file: "src/map/world.ts", specifier: "./dataset" },
+    { file: "src/map/dataset.ts", specifier: "world-atlas/countries-110m.json" },
+    { file: "src/map/dataset.ts", specifier: "d3-geo" },
+    { file: "src/map/index.ts", specifier: "@/map/world" },
+  ])("accepts await import($specifier) from $file", async ({ file, specifier }) => {
+    await expectDynamicAccepted(file, specifier);
+  });
+
+  /**
+   * Co-located specs, exempted by the same `ignores` glob as the static rule —
+   * `vitest.config.ts` allows a spec next to the file it tests, and such a spec
+   * legitimately reaches its deep neighbours. Restricting it would make that
+   * option a trap. `tests/**` is not `src/**` and is untouched for the same
+   * reason.
+   */
+  it.each([
+    { file: "src/app/probe.test.ts", specifier: "@/map/world" },
+    { file: "src/app/probe.test.ts", specifier: "d3-geo" },
+    { file: "src/map/world.test.ts", specifier: "d3-geo" },
+    { file: "tests/map/support.ts", specifier: "world-atlas/countries-110m.json" },
+  ])("accepts await import($specifier) from $file", async ({ file, specifier }) => {
+    await expectDynamicAccepted(file, specifier);
+  });
+});
+
+/**
+ * THE CASE THAT TELLS THE TWO RULES APART.
+ *
+ * Everything above counts violations of one rule id or the other, but a reader —
+ * or a refactor — could still believe a single mechanism is doing all the work.
+ * It is not, and the distinction is load bearing: **each rule is blind to exactly
+ * what the other catches**. Delete the `no-restricted-syntax` entry and the
+ * static cases stay green; delete the `no-restricted-imports` options and the
+ * dynamic cases stay green. Only a case that asserts *which* rule fired, and that
+ * the other stayed silent, fails when one of the two halves is removed.
+ */
+describe("the static and dynamic bans are two rules, and each is blind to the other's case", () => {
+  it("attributes the static deep import to no-restricted-imports alone", async () => {
+    const verdict = await lint(
+      "src/app/[locale]/page.tsx",
+      'import { buildWorldGeometry } from "@/map/world";\nexport const a = buildWorldGeometry;'
+    );
+
+    expect(verdict.fatal).toEqual([]);
+    expect(verdict.ruleIds).toContain(RESTRICTED_IMPORTS_RULE);
+    expect(verdict.ruleIds).not.toContain(RESTRICTED_SYNTAX_RULE);
+  });
+
+  it("attributes the dynamic deep import to no-restricted-syntax alone", async () => {
+    const verdict = await lint("src/app/[locale]/page.tsx", dynamicImport("@/map/world"));
+
+    expect(verdict.fatal).toEqual([]);
+    expect(verdict.ruleIds).toContain(RESTRICTED_SYNTAX_RULE);
+    expect(verdict.ruleIds).not.toContain(RESTRICTED_IMPORTS_RULE);
+  });
+
+  /**
+   * The same split on the package half, and on the file where it costs the most.
+   * `src/i18n/navigation.ts` reaches `no-restricted-imports` through a re-statement
+   * in its own block and `no-restricted-syntax` through plain inheritance — two
+   * different mechanisms, one of which is invisible in that block. If either
+   * breaks, exactly one of these two expectations goes red, which is what names
+   * the culprit.
+   */
+  it("attributes both halves correctly from src/i18n/navigation.ts", async () => {
+    const dynamic = await lint("src/i18n/navigation.ts", dynamicImport("d3-geo"));
+    const statically = await lint(
+      "src/i18n/navigation.ts",
+      'import { geoPath } from "d3-geo";\nexport const a = geoPath;'
+    );
+
+    expect(dynamic.fatal).toEqual([]);
+    expect(dynamic.ruleIds).toContain(RESTRICTED_SYNTAX_RULE);
+    expect(dynamic.ruleIds).not.toContain(RESTRICTED_IMPORTS_RULE);
+
+    expect(statically.fatal).toEqual([]);
+    expect(statically.ruleIds).toContain(RESTRICTED_IMPORTS_RULE);
+    expect(statically.ruleIds).not.toContain(RESTRICTED_SYNTAX_RULE);
   });
 });

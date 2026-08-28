@@ -112,7 +112,7 @@ Deux conséquences, dans les deux sens :
 - Le bloc de la carte est placé **avant** `travels-in-world/i18n-navigation` et
   `travels-in-world/domain-purity`, pour que ces deux-là gardent le dernier mot
   sur les fichiers qu'ils nomment. Déplacé en fin de tableau,
-  `npm run test:lint` rend **28 échecs sur 75** — dont ceux de la pureté du
+  `npm run test:lint` rend **25 échecs sur 160** — dont ceux de la pureté du
   domaine et celui qui garde la liberté de `src/i18n/navigation.ts`. La position
   est un invariant testé, pas une convention.
 - Réciproquement, le bloc de la carte **étale** `NAVIGATION_RESTRICTED_PATTERNS`,
@@ -130,6 +130,38 @@ fois, et la question de l'ordre ne se poserait plus. Écartée dans ce ticket pa
 que `eslint.config.js` est modifié par trois branches simultanément, et qu'une
 restructuration du tableau entier est le pire diff possible dans cette situation.
 Notée comme dette.
+
+### Tout bloc de restauration doit restater _toutes_ les règles à options
+
+C'est la leçon la plus transférable de ce ticket, et elle a mis trois occurrences
+à se formuler correctement. La première tentative disait « attention à l'ordre des
+blocs ». La deuxième, « le dernier bloc qui matche un fichier doit contenir tout
+ce qui doit s'y appliquer ». Les deux sont vraies et les deux sont trop étroites,
+parce qu'elles ne parlent que de `no-restricted-imports`.
+
+La formulation qui couvre les trois cas mesurés :
+
+1. Le bloc de la carte est large sur `src/**`. Sans étaler
+   `NAVIGATION_RESTRICTED_PATTERNS`, il supprime l'invariant 2 partout où il
+   matche — c'est pourquoi il l'étale.
+2. Un bloc d'exemption écrit en `"off"` n'exempte pas ce qu'il vise, il éteint
+   tout : `src/i18n/navigation.ts` pouvait atteindre `@/map/dataset`.
+3. Un bloc de restauration qui restate `no-restricted-imports` mais oublie
+   `no-restricted-syntax` fait disparaître de son dossier le ban d'import
+   dynamique — une **autre règle**, que la formulation précédente ne couvrait pas.
+   Le même oubli, appliqué à `src/domain/**`, y rendait `await import("node:fs")`
+   acceptable alors que l'invariant le plus ancien du dépôt l'interdit.
+
+Les trois ont la même signature, et c'est elle qu'il faut reconnaître : **le
+remède existait dans le fichier, et le dossier qui en avait le plus besoin en
+était exempté.** Une fois par `ignores`, une fois par `"off"`, une fois par une
+règle qui ne voyait pas la bonne forme syntaxique.
+
+Corollaire opératoire, à vérifier par la mesure et non par la lecture : pour
+chaque dossier de `src/` — `app`, `content`, `domain`, `i18n`, `map`, `styles` —
+quel est le dernier bloc qui le matche, et porte-t-il **toutes** les règles à
+options qui doivent s'y appliquer ? Trois cases de ce tableau ont surpris leurs
+propres auteurs dans ce ticket.
 
 ### Une désactivation totale de la règle annule la frontière, présente et future
 
@@ -166,12 +198,73 @@ interdit nommément, et c'est pourquoi la règle liste maintenant `world-atlas`,
 bibliothèque ajoutée à `src/map/**` s'y ajoute aussi, sinon la frontière se rouvre
 d'un `npm install`.
 
-### L'angle mort déjà connu
+### L'angle mort de `no-restricted-imports` — comblé, mais pas entièrement
 
 `await import("@/map/world")` est une expression d'appel, pas une déclaration
-d'import : aucune option de `no-restricted-imports` ne la voit. Angle mort assumé,
-exactement le même que pour `next/link` (invariant 2) et pour `node:fs` dans le
-domaine (ADR 0001).
+d'import : **aucune option de `no-restricted-imports` ne la voit**, et ça reste
+vrai. Cette section affirmait qu'il fallait s'en accommoder, au même titre que pour
+`next/link` (invariant 2) et `node:fs` dans le domaine (ADR 0001). C'était faux :
+ce n'est pas la règle ESLint qui manquait, c'est la bonne règle.
+
+Mesuré contre la config réelle (`new ESLint({ cwd })`, sans `overrideConfig`),
+depuis `src/app/[locale]/page.tsx`, `src/components/map/world-map.tsx` **et**
+`src/i18n/navigation.ts` — verdicts identiques sur les trois :
+
+```
+await import("@/map/world")                        -> ALLOWED
+await import("../map/dataset")                     -> ALLOWED
+await import("world-atlas/countries-110m.json")    -> ALLOWED
+await import("d3-geo")                             -> ALLOWED
+import { buildWorldGeometry } from "@/map/world";  -> REFUSED   <- témoin
+```
+
+Le témoin est ce qui donne leur sens aux quatre premières lignes : le bloc était
+bien actif sur ce fichier, il refusait la déclaration, et il laissait passer toutes
+les orthographes dynamiques du même module. Un composant `'use client'` expédiait
+donc `d3-geo` et 105 Ko de TopoJSON au navigateur sans jamais croiser
+`import "server-only"`, avec lint **et** build verts, pour quatre caractères de
+plus. C'est le critère 1 mis en échec en silence.
+
+`no-restricted-syntax`, lui, lit l'AST et atteint le nœud `ImportExpression` :
+`travels-in-world/map-entry-point` porte maintenant les deux règles côte à côte.
+Après correction, les quatre `ALLOWED` sont `REFUSED` sur les trois fichiers, le
+témoin reste `REFUSED`.
+
+**Les deux règles sont nécessaires et aucune ne remplace l'autre** :
+`no-restricted-syntax` est aveugle à `import x from "@/map/world"` — il n'y a pas
+de nœud `ImportExpression` à matcher — et `no-restricted-imports` est aveugle à la
+forme dynamique. Vérifié dans les deux sens sur une copie de la config : retirer le
+sélecteur fait rougir 44 cas de `tests/lint/map-entry-point.test.ts` et **aucun**
+cas statique ; retirer les motifs de la carte de `no-restricted-imports` en fait
+rougir 33 et **aucun** cas dynamique. C'est aussi pourquoi ce test assert sur le
+`ruleId` et pas sur un compte de violations : un compte ne dirait pas laquelle des
+deux a mordu, et la suppression de l'une resterait verte.
+
+Le sélecteur est une transcription en expression régulière des motifs
+`["@/map/*", "**/map/*"]` et `["world-atlas", "d3", "d3-*", "topojson", "topojson-*"]`.
+Cette transcription est le vrai risque de l'affaire — une regex qui dérive de son
+glob est exactement la panne silencieuse que ce dépôt a déjà payée deux fois — donc
+les deux mécanismes ont été comparés spécificateur par spécificateur : **33
+orthographes, 0 désaccord**, faux positifs compris (`world-atlas-lite`,
+`topojsonesque`, `@/mapper/thing` passent des deux côtés ; `d3-geo-projection` est
+refusé des deux côtés).
+
+**Ce qui reste hors de portée, et qu'il ne faut pas sous-estimer non plus.** Un
+sélecteur syntaxique teste une chaîne littérale. `await import(someVariable)`, un
+gabarit `` `@/map/${name}` `` ou un spécificateur reconstruit à l'exécution
+n'exposent aucun littéral à matcher : **aucune règle ESLint de ce dépôt ne les
+voit**, et aucune ne le pourra sans analyse de flot de données. L'angle mort n'a
+pas disparu, il a rétréci — de « toute forme dynamique » à « la forme dynamique à
+spécificateur calculé ». Ce résidu est assumé pour la raison que la version
+précédente invoquait à tort pour l'ensemble : rien dans ce dépôt ne construit un
+spécificateur vers un module interne, et le motif serait voyant en revue.
+
+La leçon vaut au-delà de la carte. « `no-restricted-imports` ne voit pas les
+expressions d'appel » décrit une limite de _cette règle_, pas une limite d'ESLint,
+et cette section avait pris l'une pour l'autre pendant tout un ticket. L'invariant 2
+(`next/link`) et l'ADR 0001 (`node:fs` dans le domaine) portent aujourd'hui la même
+affirmation trop large, et le même remède leur est applicable ; le faire relève de
+leurs tickets, pas de celui-ci.
 
 ## Conséquences
 
