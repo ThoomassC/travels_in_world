@@ -92,6 +92,112 @@ const nextModuleSpellings = (name) => [
 ];
 
 /**
+ * The internal-navigation ban, extracted so it can be *reused* rather than
+ * recopied. This is not tidiness, it is the load-bearing part of the block below.
+ *
+ * `no-restricted-imports` resolves by last-matching-config-wins, per rule, and
+ * replaces the options rather than merging them — the `domain-purity` block says
+ * so in its own comment. So any new block adding patterns for `src/app/**` wipes
+ * these three out there, and invariant 2 of `AGENTS.md` dies with a green lint: a
+ * raw `next/link` drops the `[locale]` segment and the visitor gets a 404.
+ * `tests/lint/content-facade.test.ts` has a case per spelling, in both folders,
+ * for exactly that reason.
+ */
+const NAVIGATION_PATTERNS = [
+  {
+    group: nextModuleSpellings("link"),
+    message: INTERNAL_LINK_MESSAGE,
+  },
+  {
+    group: nextModuleSpellings("navigation"),
+    importNames: ["redirect", "permanentRedirect"],
+    message: INTERNAL_REDIRECT_MESSAGE,
+  },
+  {
+    group: nextModuleSpellings("navigation"),
+    importNames: ["usePathname", "useRouter"],
+    message: INTERNAL_HOOKS_MESSAGE,
+  },
+];
+
+/**
+ * `src/content/trips.ts` is the one module the application may import to reach
+ * the content, and it is the one module carrying `import "server-only"`.
+ * Every other module under `src/content/**` is plain Node code without the guard
+ * — `@/content/loader` reads the disk and lints, typechecks and builds perfectly
+ * clean from a page. Nothing but this rule stands between a client component and
+ * the filesystem reader.
+ */
+const CONTENT_FACADE_MESSAGE =
+  'Import from "@/content/trips" instead: it is the only content module carrying import "server-only", and the rest of src/content/** would ship the filesystem reader into a client bundle.';
+
+/**
+ * Everything under `content/` except the façade, in both the aliased and the
+ * relative spelling. Measured through ESLint's Node API over 24 spellings, and
+ * the results are worth writing down because two of them do not follow from
+ * reading the docs.
+ *
+ *   refused                        | accepted
+ *   -------------------------------|--------------------------
+ *   @/content/loader               | @/content/trips
+ *   @/content/validate             | ../content/trips
+ *   @/content/collection           | ./../content/trips
+ *   @/content/diagnose             | @/domain/trip
+ *   ../content/loader              | @/i18n/navigation
+ *   ./../content/loader            | ../lib/helper
+ *   .././content/loader            | ./sibling
+ *   ../../src/content/loader       | next-intl
+ *   @/content/loader.js            | react
+ *   @/content/loader/index         | node:path
+ *   @/content/sub/deep/thing       |
+ *   ../content/loader/index        |
+ *   ../../src/content/sub/deep     |
+ *
+ * Plus the controls, because a rule widened by accident would forbid the façade
+ * from doing its one job. Measured: `@/content/loader` is **accepted** from
+ * `src/content/trips.ts`, from `src/content/validate.ts`, from `scripts/**`, from
+ * `tests/**` and from a co-located spec — the block below matches none of them,
+ * either because its glob is anchored at `src/` or because its `ignores` says so,
+ * one line per reason. From `src/domain/**` it is refused, but by the
+ * `domain-purity` block, which forbids every `@/*` there.
+ *
+ * Two measured facts that do not guess right:
+ *
+ * - `"@/content/*"` and `"@/content/**"` return the **same** verdict on all 24
+ *   spellings, so the simple form is enough. The reason is *not* that `*` crosses
+ *   a `/` — it does not, measured separately: `"a/*\/c"` catches `"a/b1/c"` and
+ *   does not catch `"a/b1/b2/c"`. What catches the deep spellings is the
+ *   gitignore rule documented two comments above: an entry matching a directory
+ *   drags in everything under it, and `@/content/loader` is an ancestor of
+ *   `@/content/loader/index`.
+ * - `@/content/trips.js` is **refused**. An accepted false positive: gitignore
+ *   ancestry works on `/` segments, so the negation `!@/content/trips` does not
+ *   cover it. Same call as the `next/link.js` spelling this file already bans —
+ *   erring strict on a spelling nobody writes here beats widening the surface of
+ *   the exceptions.
+ *
+ * **And one hole left open on purpose: the bare `@/content` is accepted.** It is
+ * harmless today — there is no `src/content/index.ts` for it to resolve to, so the
+ * import does not build — and latent the day somebody adds one, since a barrel
+ * there would re-export the loader. It is *not* closed, and that is a measurement
+ * rather than an oversight: adding `"@/content"` to this group (with or without a
+ * `"**\/content"` companion) makes the pattern an ancestor of the façade itself,
+ * and the negation two lines below does not recover it —
+ *
+ *   REFUSED  src/app/[locale]/page.tsx   import * as p from "@/content/trips";
+ *
+ * — which forbids the one import the whole boundary exists to allow. The cheaper
+ * guard is the absence of the file: if a barrel is ever added under
+ * `src/content/`, it has to be `trips.ts` itself.
+ */
+const CONTENT_FACADE_ONLY = [
+  "@/content/*",
+  "**/content/*",
+  "!@/content/trips",
+  "!**/content/trips",
+];
+
+/**
  * `jsx-a11y` is not re-declared as a plugin here on purpose — eslint-config-next
  * already registers that namespace, and declaring it twice with a different
  * module instance makes ESLint throw. We only override its rule severities,
@@ -146,36 +252,164 @@ const config = [
        * expression, not an import declaration, and no `no-restricted-imports`
        * option can see it.
        */
+      "no-restricted-imports": ["error", { patterns: NAVIGATION_PATTERNS }],
+    },
+  },
+  {
+    /**
+     * The application reaches the content through `@/content/trips` and through
+     * nothing else. See {@link CONTENT_FACADE_ONLY} for the measured table of
+     * spellings, and {@link NAVIGATION_PATTERNS} for why the navigation ban is
+     * spread in here rather than assumed to survive: this block *replaces* the
+     * options of the global one for every file it matches.
+     *
+     * **`src/**` minus what owns or outranks the rule, not a list of consumer
+     * folders.** A glob naming `src/app/**` and `src/map/**` only guards the
+     * folders that exist today, and the folder that does not exist yet is exactly
+     * where the breach lands: TIW-17 ships the photo viewer, one of the two
+     * `'use client'` components milestone 1 allows, and it goes in
+     * `src/components/`. Measured through ESLint's Node API over 22 cases, the
+     * two scopes side by side:
+     *
+     *   file                                 | import              | app+map | src/**
+     *   -------------------------------------|---------------------|---------|-------
+     *   src/components/photo-viewer.tsx      | @/content/loader    | allow   | refuse
+     *   src/ui/trip-card.tsx                 | @/content/loader    | allow   | refuse
+     *   src/lib/sitemap.ts                   | @/content/loader    | allow   | refuse
+     *   src/i18n/request.ts                  | @/content/loader    | allow   | refuse
+     *   src/components/photo-viewer.tsx      | ../content/loader   | allow   | refuse
+     *   src/components/deep/nested/thing.tsx | @/content/collection| allow   | refuse
+     *   src/app/[locale]/page.tsx            | @/content/loader    | refuse  | refuse
+     *   src/app/[locale]/page.tsx            | @/content/trips     | allow   | allow
+     *   src/components/photo-viewer.tsx      | @/content/trips     | allow   | allow
+     *
+     * Six holes, all of them a file that lints, typechecks and builds clean while
+     * importing the unguarded disk reader — `loader.ts` carries no `server-only`,
+     * which is the whole point of the split, so nothing else is behind this rule.
+     *
+     * **Why the three `ignores`, one reason each:**
+     *
+     * - `src/content/**` *owns* the loader: the façade re-exports it and
+     *   `validate.ts` imports `collection.ts`. Refusing there would forbid the
+     *   rule's own subject from existing.
+     * - `src/domain/**` is guarded harder by `domain-purity` below, which forbids
+     *   every `@/*` import including `@/content/trips`. Matching it here would
+     *   *replace* that stricter rule with this looser one — last matching config
+     *   wins, per rule.
+     * - A co-located spec, for the reason the `domain-purity` block records for
+     *   its own: `vitest.config.ts` allows a spec next to the file it tests
+     *   (`include: ["src/**\/*.test.{ts,tsx}"]`), a spec is never part of a client
+     *   bundle, so the failure this rule defends against cannot happen in one, and
+     *   refusing it would turn that Vitest option into a trap. Measured: without
+     *   it, `src/app/[locale]/page.test.tsx`, `src/map/world.test.ts` and
+     *   `src/components/photo-viewer.test.tsx` are refused.
+     *
+     * **`src/i18n/navigation.ts` is deliberately *not* in that list any more, and
+     * that is a fix rather than a tidy-up.** An `ignores` entry exempts a file from
+     * the whole block, so it switched the content patterns off along with the
+     * navigation ones — measured: `src/i18n/navigation.ts` importing
+     * `@/content/loader` was **ACCEPTED**. And that file is the one every client
+     * component imports; it exists to export `Link`, `useRouter` and `usePathname`.
+     * A helper there that needed a slug would have pulled the filesystem reader
+     * into the client graph through the most-imported module of the bundle.
+     * The opposite trap is real too and was measured: with no exemption at all,
+     * this block — being *later* than the old `no-restricted-imports: "off"` one —
+     * turned the rule back on there and **refused `next/link`**, which makes the
+     * locale-aware wrappers unwritable and kills invariant 2. So the exemption is
+     * now a block of its own, *after* this one, restoring the content pattern only:
+     * `travels-in-world/navigation-primitives` below.
+     *
+     * `tests/**` needs no `ignores` at all and never did: a glob anchored at
+     * `src/` cannot reach it. The content suites stay free to import the
+     * internals, which is what a unit test of the disk reader is.
+     *
+     * All four TypeScript extensions, as the domain block learned to do: `.mts`
+     * and `.cts` match no other content block in this file.
+     *
+     * **Two limits, measured and documented rather than fixed:**
+     *
+     * - **A relay outside `src/` is not covered.** `import "../../../scripts/relay"`
+     *   from a page is **accepted**, because every glob here is anchored at `src/`.
+     *   Contrived — nothing imports `scripts/` today — but it is the honest answer
+     *   to "is the intermediate relay closed": inside `src/`, yes; outside, no. The
+     *   bundler is what closes it for a *client* component, and that is the split
+     *   `src/content/trips.ts` documents.
+     * - **A computed specifier is out of reach of any lint.**
+     *   `await import(`@/content/${name}`)` is caught by neither rule below: the
+     *   `no-restricted-syntax` selector needs a `Literal`. Nothing here can fix
+     *   that; it is written down so the next reader does not mistake the silence
+     *   for coverage.
+     */
+    name: "travels-in-world/content-facade",
+    files: ["src/**/*.{ts,tsx,mts,cts}"],
+    ignores: ["src/content/**", "src/domain/**", "src/**/*.test.{ts,tsx,mts,cts}"],
+    rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
+            ...NAVIGATION_PATTERNS,
             {
-              group: nextModuleSpellings("link"),
-              message: INTERNAL_LINK_MESSAGE,
-            },
-            {
-              group: nextModuleSpellings("navigation"),
-              importNames: ["redirect", "permanentRedirect"],
-              message: INTERNAL_REDIRECT_MESSAGE,
-            },
-            {
-              group: nextModuleSpellings("navigation"),
-              importNames: ["usePathname", "useRouter"],
-              message: INTERNAL_HOOKS_MESSAGE,
+              group: CONTENT_FACADE_ONLY,
+              message: CONTENT_FACADE_MESSAGE,
             },
           ],
+        },
+      ],
+      /**
+       * The dynamic spelling of the same crossing. `no-restricted-imports` sees
+       * import *declarations* only — a known blind spot for `next/link`, and a
+       * worse one here, because `await import()` is the natural way to load
+       * something lazily in a Server Component. Measured before this rule:
+       * `await import("@/content/loader")` was **accepted** from a page and from
+       * `src/components/**`.
+       *
+       * The selector matches the specifier string of an `ImportExpression`, and
+       * the regex is anchored on the folder — `(^|/)content/` — so a package
+       * called `x-content/y` is not swept in. `(?!trips$)` is what lets the façade
+       * through; `@/content/trips.js` is refused, the same accepted false positive
+       * `CONTENT_FACADE_ONLY` already makes for the static spelling.
+       *
+       * Measured through ESLint's Node API: refuses `@/content/loader` and
+       * `../content/loader`, accepts `@/content/trips`.
+       */
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportExpression > Literal[value=/(^|\\/)content\\/(?!trips$)/]",
+          message: CONTENT_FACADE_MESSAGE,
         },
       ],
     },
   },
   {
-    // The single place allowed to reach for the raw Next.js primitives: this is
-    // where the locale-aware wrappers are built.
-    name: "travels-in-world/i18n-navigation",
+    /**
+     * The one file allowed to reach for the raw Next.js navigation primitives:
+     * this is where the locale-aware wrappers are built, so `next/link` and
+     * `next/navigation` must be importable here and nowhere else.
+     *
+     * **A block, and not an `ignores` entry on the block above.** `ignores` is
+     * per-block, so exempting this file there switched off the *content* pattern
+     * too — measured: `@/content/loader` was accepted in the module that every
+     * client component imports. This block instead restores exactly one of the two
+     * bans: `no-restricted-imports` with the content group only.
+     *
+     * **Order is load-bearing.** ESLint resolves a rule by last-matching-config
+     * wins, replacing the options rather than merging them, so this block must
+     * come *after* `content-facade` — before it, the façade block would reinstate
+     * the navigation ban here. `tests/lint/content-facade.test.ts` pins both
+     * halves: `next/link` accepted, `@/content/loader` refused, in this file.
+     *
+     * `no-restricted-syntax` is deliberately not overridden: the dynamic-import
+     * ban from the block above still applies here, which is what it is for.
+     */
+    name: "travels-in-world/navigation-primitives",
     files: ["src/i18n/navigation.ts"],
     rules: {
-      "no-restricted-imports": "off",
+      "no-restricted-imports": [
+        "error",
+        { patterns: [{ group: CONTENT_FACADE_ONLY, message: CONTENT_FACADE_MESSAGE }] },
+      ],
     },
   },
   {
