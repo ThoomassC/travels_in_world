@@ -11,9 +11,9 @@ const [scriptName = "this script", ticket = "the follow-up ticket"] = process.ar
 
 process.stderr.write(
   `\n  ${scriptName}: not implemented yet — see ${ticket}.\n` +
-    `  The content pipeline (YAML/MDX loading, geocoding, photo indexing) is\n` +
-    `  delivered by TIW-9 / TIW-10. This placeholder fails on purpose so that no\n` +
-    `  pipeline can mistake it for a successful run.\n\n`
+    `  Content validation (TIW-9), the trip skeleton and geocoding (TIW-10) are\n` +
+    `  delivered; photo indexing is not. This placeholder fails on purpose so\n` +
+    `  that no pipeline can mistake it for a successful run.\n\n`
 );
 
 process.exit(1);

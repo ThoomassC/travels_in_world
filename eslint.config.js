@@ -351,6 +351,18 @@ const config = [
       "playwright-report/**",
       "test-results/**",
       "next-env.d.ts",
+      /**
+       * Agent worktrees: other checkouts of *this* repository, on other branches.
+       * `eslint .` is a traversal target rather than an anchored glob — unlike
+       * `vitest.config.ts`, whose `tests/**` and `src/**` do not match a nested
+       * checkout — so without this line a sibling branch's work in progress fails
+       * `npm run lint` here, and this branch's fails it there.
+       *
+       * `.gitignore` carries the same path and does **not** replace this one: the
+       * flat config does not read `.gitignore`, and `.gitignore` does not hide
+       * anything from ESLint. Removing either one re-opens half the problem.
+       */
+      ".claude/worktrees/**",
     ],
   },
   ...nextCoreWebVitals,
