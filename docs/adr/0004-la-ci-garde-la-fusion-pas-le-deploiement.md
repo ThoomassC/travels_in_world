@@ -43,10 +43,29 @@ retenue jusqu'au vert du pipeline transformerait la relecture d'un brouillon en
 attente de quatre minutes, pour un gain nul — personne ne publie depuis une
 prévisualisation.
 
+> **Correction (TIW-11, audit de la frontière de publication).** Le paragraphe
+> ci-dessus reste valable sur son sujet — le pipeline ne retient pas le
+> déploiement — mais sa prémisse sur les brouillons était fausse au moment où il a
+> été écrit, et la décision n'est pas modifiée : elle est corrigée par ajout.
+>
+> Mesuré : `VERCEL_ENV=preview npx next build` **masque** les brouillons, comme un
+> build de production. Une prévisualisation ne montre donc rien de plus qu'une
+> production tant que `TIW_DRAFTS=visible` n'est pas posé, et ce réglage demande
+> deux précautions écrites dans `docs/deploiement.md` : portée `Preview`
+> uniquement, et Deployment Protection activée d'abord — l'URL de prévisualisation
+> est publique et Vercel la commente sur la pull request.
+>
+> Cette phrase avait une conséquence réelle : en promettant une relecture de
+> brouillon qui n'existait pas, elle créait la pression qui fait poser la variable,
+> et le formulaire de Vercel coche les trois portées par défaut. Le code refuse
+> désormais ce cas (`showsDrafts()` ne peut plus publier quand `VERCEL_ENV` vaut
+> `production`), et `vercel.json` lance `test:build` après le build, sur la seule
+> machine où cette configuration existe.
+
 **Le build Vercel valide le contenu lui-même.** `vercel.json` porte
 
 ```
-"buildCommand": "npm run validate:content && npm run build"
+"buildCommand": "npm run validate:content && npm run build && npm run test:build"
 ```
 
 ce qui déplace la seule vérification dont dépend le rendu des pages du côté de la
@@ -59,11 +78,18 @@ machine qui sert. Trois raisons de la mettre là et pas seulement en CI :
    serait invisible depuis le code, non revu, non versionné, et disparaîtrait au
    prochain projet recréé.
 
-Ce qui n'y va **pas** : `test:build`, `test`, `lint`. Un build de déploiement doit
-construire. Faire tourner la suite complète à chaque prévisualisation ajoute des
-minutes à chaque brouillon relu et ne détecte rien que la pull request n'ait déjà
-détecté — le budget de bundle et le prérendu sont des propriétés du code, pas de
-l'environnement, et la CI les mesure sur la même sortie de build.
+Ce qui n'y va **pas** : `test`, `lint`. Un build de déploiement doit construire.
+Faire tourner la suite complète à chaque prévisualisation ajoute des minutes à
+chaque brouillon relu et ne détecte rien que la pull request n'ait déjà détecté.
+
+> **Correction (TIW-11).** `test:build` figurait dans cette liste, au motif que le
+> budget de bundle et le prérendu sont des propriétés du **code** et non de
+> l'environnement. C'est vrai de ces deux-là, et faux du troisième garde que le
+> même fichier porte depuis TIW-11 : **aucun voyage `draft: true` n'est prérendu**.
+> Celui-là dépend de `TIW_DRAFTS`, qui vit dans le tableau de bord Vercel et
+> n'existe pas sur le runner GitHub — la CI ne peut donc structurellement pas le
+> vérifier pour le déploiement. `test:build` est passé dans le `buildCommand` pour
+> cette raison, et pour elle seule. Coût mesuré : moins d'une seconde.
 
 ### Un seul nom de vérification requis
 

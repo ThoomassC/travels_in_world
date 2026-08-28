@@ -2,18 +2,26 @@
 
 Deux machines regardent chaque poussée, et elles ne gardent pas la même chose.
 
-| Machine                   | Se déclenche sur                        | Exécute                                     | Ce qu'elle empêche              |
-| ------------------------- | --------------------------------------- | ------------------------------------------- | ------------------------------- |
-| GitHub Actions (`ci.yml`) | pull request, push sur `main`/`develop` | toute la chaîne de vérifications            | **la fusion**                   |
-| Vercel                    | toute poussée, toute branche            | `npm run validate:content && npm run build` | qu'un contenu fautif soit servi |
+| Machine                   | Se déclenche sur                        | Exécute                                        | Ce qu'elle empêche                              |
+| ------------------------- | --------------------------------------- | ---------------------------------------------- | ----------------------------------------------- |
+| GitHub Actions (`ci.yml`) | pull request, push sur `main`/`develop` | toute la chaîne de vérifications               | **la fusion**                                   |
+| Vercel                    | toute poussée, toute branche            | `validate:content`, `build`, puis `test:build` | qu'un contenu fautif ou un brouillon soit servi |
 
 Elles sont **indépendantes** : Vercel n'attend pas le pipeline et n'en connaît pas
 l'existence. Une prévisualisation est donc en ligne pendant que le pipeline tourne
 encore, et le reste s'il finit rouge. Ce n'est pas un défaut de réglage, c'est le
-dispositif : la prévisualisation est l'endroit où se relit un voyage en `draft`,
-elle doit arriver vite. Ce qui protège la production, c'est que la production ne
-part que de `main`, qu'on n'atteint `main` que par une fusion, et qu'une fusion est
-refusée si le pipeline est rouge.
+dispositif : la prévisualisation doit arriver vite. Ce qui protège la production,
+c'est que la production ne part que de `main`, qu'on n'atteint `main` que par une
+fusion, et qu'une fusion est refusée si le pipeline est rouge.
+
+**Pourquoi `test:build` tourne aussi chez Vercel, alors que le pipeline le fait
+déjà.** Ce n'est pas une redondance : les deux machines ne voient pas la même
+chose. Le garde des brouillons dépend de la configuration du **déploiement** —
+`TIW_DRAFTS`, posé dans le tableau de bord Vercel — et cette variable n'existe pas
+sur le runner GitHub. La seule machine qui puisse constater qu'un brouillon part en
+ligne est donc celle qui construit le déploiement. Mesuré : `test:build` ajoute
+moins d'une seconde à un build Vercel, et il lit `.next/` sur le même disque, d'où
+sa place en fin de chaîne.
 
 Le raisonnement complet, les alternatives pesées et ce qui invaliderait ce choix
 sont dans [`adr/0004-la-ci-garde-la-fusion-pas-le-deploiement.md`](adr/0004-la-ci-garde-la-fusion-pas-le-deploiement.md).
@@ -116,9 +124,31 @@ Dans l'ordre, sur <https://vercel.com>.
    déploiements (le comportement par défaut est « toutes les branches »), et
    **« Ignored Build Step » doit rester vide**. La vérification qui compte n'est pas
    dans les réglages : pousser une branche, ouvrir une pull request, et constater
-   que Vercel commente l'URL de prévisualisation. C'est cette URL qui sert à relire
-   un voyage en `draft`.
-8. **Domaine** : `*.vercel.app` suffit pour l'instant. Un domaine propre se règle
+   que Vercel commente l'URL de prévisualisation.
+
+### Relire un brouillon sur une prévisualisation — ce que ça demande vraiment
+
+Ce document a d'abord écrit que la prévisualisation était l'endroit où se relit un
+voyage en `draft`. **C'est faux tel quel, et la mesure le dit :**
+`VERCEL_ENV=preview npx next build` **masque** les brouillons, exactement comme un
+build de production. Par défaut, un brouillon n'est visible qu'en développement
+local (`npm run dev`).
+
+Pour qu'une prévisualisation les montre, il faut poser `TIW_DRAFTS=visible` dans
+**Settings → Environment Variables**, et deux précautions valent d'être connues
+avant de le faire :
+
+1. **Cocher la portée `Preview` uniquement.** Le formulaire d'ajout coche
+   Production, Preview et Development **par défaut** : laissé tel quel, il publie
+   les brouillons sur le site en ligne. Le code refuse désormais ce cas — la
+   variable ne peut plus rien publier quand `VERCEL_ENV` vaut `production` — mais
+   se reposer sur ce garde plutôt que sur la case cochée serait faire l'inverse de
+   ce que ce dépôt fait partout ailleurs.
+2. **Activer la Deployment Protection d'abord** (Settings → Deployment Protection →
+   Vercel Authentication). Une URL de prévisualisation est **publique**, et Vercel
+   la commente sur la pull request — d'un dépôt public. Sans cette protection,
+   « relire un brouillon en privé » signifie le publier à qui lit la pull request.
+3. **Domaine** : `*.vercel.app` suffit pour l'instant. Un domaine propre se règle
    dans **Settings → Domains** et demande un enregistrement DNS chez le
    registraire — hors périmètre de ce ticket.
 
