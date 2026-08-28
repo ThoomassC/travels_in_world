@@ -25,6 +25,14 @@ blob-report
 .vercel
 .eslintcache
 
+# Content tooling — leftover of an atomic write killed mid-rename (npm run geocode)
+*.geocode-*.tmp
+
+# Agent worktrees — a sibling checkout of this very repository, hundreds of MB.
+# Only `worktrees/`: whether project-level Claude settings belong in version
+# control is a separate decision, and this line does not make it.
+.claude/worktrees/
+
 # Logs
 logs
 *.log
