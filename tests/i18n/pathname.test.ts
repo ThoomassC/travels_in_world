@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { getPathname } from "@/i18n/navigation";
 import { homePathname, localePathname } from "@/i18n/pathname";
@@ -42,9 +44,20 @@ const CASES: ReadonlyArray<{ href: string; expected: string }> = [
   // What the map (TIW-13) and the trip page (TIW-16) build, via `tripPath`.
   { href: tripPath("japon-2024"), expected: "/fr/voyages/japon-2024" },
   { href: "/voyages", expected: "/fr/voyages" },
-  // A trailing slash is preserved, not normalised: `trailingSlash` is unset in
-  // `next.config.ts`, and with no `pathnames` declared upstream never calls its
-  // `normalizeTrailingSlash` on this path either.
+  /**
+   * A trailing slash is preserved, not normalised: `trailingSlash` is unset in
+   * `next.config.ts`, and with no `pathnames` declared upstream never calls its
+   * `normalizeTrailingSlash` on this path either.
+   *
+   * DO NOT DELETE OR "CORRECT" THIS ROW. Of the whole table it is the only one
+   * whose differential assertion detects a declared `pathnames` map on a path
+   * that is otherwise unaffected: declaring one routes upstream through
+   * `compileLocalizedPathname`, which DOES normalise, so `/fr/a/` becomes
+   * `/fr/a` while the fork keeps the slash. Measured — with a one-segment
+   * `pathnames` map this row and `/voyages` are the two that go red. Remove it
+   * and the alarm advertised in the header of `src/i18n/pathname.ts` gets
+   * quieter with nothing to show for it.
+   */
   { href: "/a/", expected: "/fr/a/" },
   // A query string rides along, and the root is the special case: the prefix
   // absorbs the lone slash so `/fr` and `/fr?b=1` carry no trailing slash.
@@ -72,12 +85,23 @@ describe("localePathname", () => {
    * The differential assertion. Not `it.each` over a computed expectation — that
    * would be a tautology if both sides were wrong the same way; the literal
    * table above is the independent anchor, and this is the equivalence.
+   *
+   * Over `routing.locales`, NOT `defaultLocale`, and the difference is the whole
+   * point of the loop. The fork's riskiest simplification is
+   * `` const prefix = `/${locale}` `` against upstream's `getLocalePrefix`, which
+   * is `localePrefix.prefixes?.[locale] || "/" + locale`. Declaring
+   * `prefixes: { en: "/english" }` makes upstream emit `/english/voyages/x` where
+   * the fork emits `/en/voyages/x` — every English link a silent 404. Iterating
+   * the real locale list means the day `en` is activated it is checked here
+   * automatically, rather than the suite continuing to prove something about `fr`
+   * only.
    */
-  it.each(CASES)("agrees with next-intl's own getPathname on $href", ({ href }) => {
-    expect(localePathname({ href, locale: defaultLocale })).toBe(
-      getPathname({ href, locale: defaultLocale })
-    );
-  });
+  it.each(routing.locales.flatMap((locale) => CASES.map(({ href }) => ({ locale, href }))))(
+    "agrees with next-intl's own getPathname on $href for $locale",
+    ({ href, locale }) => {
+      expect(localePathname({ href, locale })).toBe(getPathname({ href, locale }));
+    }
+  );
 
   it("reads nothing ambient: same arguments, same answer, called twice", () => {
     // The point of the whole exercise. `src/app/not-found.tsx` lives OUTSIDE the
@@ -106,6 +130,16 @@ describe("localePathname", () => {
  * protocol-relative and backslash forms, empty and whitespace, query/fragment
  * combinations, percent-encoding, non-ASCII and astral characters, and control
  * characters inside a path.
+ *
+ * WHAT THE SCHEME ROWS ACTUALLY EXERCISE, because it is not what it looks like:
+ * `HTTPS://`, `MAILTO:`, `tel:`, `data:`, `javascript:`, `a:`, `1a:` and `://x`
+ * are all decided by the SAME branch as `./x` — "does not start with `/`". There
+ * is no separate scheme test in `localePathname`, deliberately: for a string
+ * href it could never decide, since matching `/^[a-z]+:/i` means starting with a
+ * letter and therefore not with a slash. See the note on the function. These
+ * rows are still worth their line — they pin that the collapse is safe, which is
+ * a claim about upstream's behaviour and not only about ours — but nobody should
+ * read them as covering a branch that does not exist.
  */
 const ADVERSARIAL_HREFS = [
   " ",
@@ -153,11 +187,12 @@ const ADVERSARIAL_HREFS = [
 ] as const;
 
 describe("localePathname, on inputs it should never be given", () => {
-  it.each(ADVERSARIAL_HREFS)("still answers exactly like next-intl on %j", (href) => {
-    expect(localePathname({ href, locale: defaultLocale })).toBe(
-      getPathname({ href, locale: defaultLocale })
-    );
-  });
+  it.each(routing.locales.flatMap((locale) => ADVERSARIAL_HREFS.map((href) => ({ locale, href }))))(
+    "still answers exactly like next-intl on $href for $locale",
+    ({ href, locale }) => {
+      expect(localePathname({ href, locale })).toBe(getPathname({ href, locale }));
+    }
+  );
 });
 
 describe("homePathname", () => {
@@ -188,6 +223,32 @@ describe("the routing config that src/i18n/pathname.ts is allowed to assume", ()
     expect(routing.localePrefix, WHY).toBe("always");
   });
 
+  /**
+   * The `prefixes` alarm, separate from the assertion above because it survives
+   * the obvious refactor: someone switching to the object form
+   * `localePrefix: { mode: "always" }` — which is legitimate, and which upstream
+   * normalises to the same thing — would turn the string assertion red and be
+   * tempted to relax it to a mode check. That is the moment `prefixes` could slip
+   * in unnoticed.
+   *
+   * It is the fork's single most dangerous divergence: upstream's
+   * `getLocalePrefix` returns `prefixes?.[locale] || "/" + locale`, and the fork
+   * only ever writes the second half. `prefixes: { en: "/english" }` would make
+   * every English link a silent 404.
+   */
+  it("names no custom prefix for any locale", () => {
+    const localePrefix: unknown = routing.localePrefix;
+    const prefixes =
+      typeof localePrefix === "object" && localePrefix !== null
+        ? (localePrefix as { prefixes?: unknown }).prefixes
+        : undefined;
+
+    expect(
+      prefixes,
+      `${WHY} A custom prefix (e.g. { en: "/english" }) makes next-intl emit it and the fork emit "/en" — every link for that locale a 404. Widen localePathname's prefix computation, or go back to getPathname.`
+    ).toBeUndefined();
+  });
+
   it("declares no localised pathnames and no per-domain routing", () => {
     // With `pathnames` declared, upstream compiles a localised template per
     // locale and the fork would ship the untranslated internal pathname.
@@ -213,5 +274,46 @@ describe("the routing config that src/i18n/pathname.ts is allowed to assume", ()
       "localePrefix",
       "locales",
     ]);
+  });
+});
+
+/**
+ * THE DELETION TRIGGER, and the reason it is a test rather than a note.
+ *
+ * `src/i18n/pathname.ts` exists only because next-intl couples `getPathname` to
+ * its client `Link`. Its header says to delete the module the day that stops
+ * being true — which, as written, nothing would ever tell us. A fork kept alive
+ * by inertia after its reason has gone is a fork that will eventually be wrong
+ * for no benefit at all, so the condition is asserted instead of hoped for.
+ *
+ * This reads a dependency's internals on purpose. That is normally a bad idea,
+ * and here it is the point: the coupling is an implementation detail of
+ * next-intl's packaging, so an implementation detail is exactly what has to be
+ * watched. Going red does NOT mean something broke — it means to re-measure
+ * `/fr` with `getPathname` and, if the extra chunk is gone, delete the fork and
+ * this test with it.
+ */
+const SHARED_NAVIGATION_SOURCE = path.resolve(
+  import.meta.dirname,
+  "../../node_modules/next-intl/dist/esm/production/navigation/shared/createSharedNavigationFns.js"
+);
+
+describe("the reason src/i18n/pathname.ts exists", () => {
+  it("still holds: next-intl builds getPathname in a module that imports the client Link", () => {
+    expect(
+      existsSync(SHARED_NAVIGATION_SOURCE),
+      `next-intl no longer ships ${SHARED_NAVIGATION_SOURCE}. Its navigation packaging has been restructured: re-measure /fr with getPathname before trusting this fork or keeping it.`
+    ).toBe(true);
+
+    const source = readFileSync(SHARED_NAVIGATION_SOURCE, "utf8");
+
+    // Both halves of the defect, so a partial upstream fix is still noticed:
+    // `getPathname` is defined here, and `BaseLink` — a "use client" module — is
+    // imported statically at the top level of the very same file.
+    expect(source).toContain("getPathname");
+    expect(
+      source,
+      "next-intl no longer statically imports BaseLink where it builds getPathname — the packaging defect behind TIW-28 may be FIXED. Re-measure /fr with `getPathname` (npm run build && npm run test:build): if the initial JS stays at 6 chunks, delete src/i18n/pathname.ts, re-export getPathname from @/i18n/navigation, and delete this test. See docs/adr/0005-getpathname-sans-le-link-client.md."
+    ).toContain("./BaseLink.js");
   });
 });
