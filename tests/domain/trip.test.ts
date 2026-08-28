@@ -1,12 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { PlaceSchema, StepSchema, TripSchema } from "@/domain/schema";
 import type { TripDetail, TripSummary } from "@/domain/trip";
-import { budgetPerPerson, durationOf, visitedCountryCodes } from "@/domain/trip";
 import {
+  budgetPerPerson,
+  detailOf,
+  durationOf,
+  firstArrivalOf,
+  summaryOf,
+  visitedCountryCodes,
+} from "@/domain/trip";
+import {
+  BANGKOK,
+  KYOTO,
+  layoverTripInput,
   LYON,
   minimalTripInput,
   multiCountryTripInput,
   openEndedTripInput,
+  PARIS,
   stay,
   TOKYO,
   tripInput,
@@ -238,6 +249,7 @@ describe("TripSummary and TripDetail", () => {
       endDate: trip.endDate,
       duration: durationOf(trip),
       countryCodes: visitedCountryCodes(trip),
+      firstArrival: firstArrivalOf(trip),
       coverPhotoSrc: trip.coverPhotoSrc,
       tags: trip.tags,
     };
@@ -255,5 +267,193 @@ describe("TripSummary and TripDetail", () => {
     expect(summary.countryCodes).toEqual(["JP", "TH"]);
     expect(detail.steps).toHaveLength(5);
     expect(detail.budgetPerPerson).toEqual({ amountCents: 210000, currency: "EUR" });
+  });
+});
+
+describe("firstArrivalOf", () => {
+  /**
+   * **The place the trip's first step arrives at.** A stay arrives where it is
+   * spent; a move arrives at its `toSlug`.
+   *
+   * Two readings are excluded, and each one is a real bug rather than a matter of
+   * taste.
+   *
+   * *Not `places[0]`.* The order of `places[]` in a `trip.yaml` is declarative —
+   * the order somebody happened to type the cities in — and reordering it is a
+   * legitimate edit that must not move a single pixel of the page.
+   *
+   * *Not the first step's departure either.* This is the reading that reads
+   * plausibly and is wrong: for a trip that opens on a flight, the departure is
+   * home. `openEndedTripInput` is Paris → Tokyo → Paris, a shape `TripSchema`
+   * documents as valid and very likely the majority of real trips — nobody
+   * declares a night at home before leaving — and the departure reading labels a
+   * trip to Japan with Paris. Nothing structural catches it: the trip is valid,
+   * the coordinates are real, the country exists. It is an error of meaning, so
+   * the test for it has to be the one below.
+   *
+   * `TripSchema` guarantees both halves this needs — at least one step, every step
+   * referencing a declared place — which is why the result is a `Place` and not
+   * `Place | undefined`.
+   *
+   * One accepted limit, documented rather than fixed: a contributor who *does*
+   * declare a night at home before leaving gets home as the first arrival. That is
+   * defensible — they wrote that stay — and correcting it would mean knowing where
+   * "home" is, which is a concept the model does not have.
+   */
+  it("returns the place of the first step when that step is a stay", () => {
+    const trip = TripSchema.parse(minimalTripInput());
+
+    expect(firstArrivalOf(trip)).toEqual(PlaceSchema.parse(LYON));
+  });
+
+  /**
+   * The decisive case. Paris → Tokyo → Paris: the answer is Tokyo, the place the
+   * first flight lands in, and explicitly not Paris, the place it left. Reading
+   * `referencedPlaceSlugs(steps[0])[0]` — the obvious spelling — answers Paris
+   * here, and every other test in this file stays green.
+   */
+  it("returns the destination of the first step when that step is a move, not its origin", () => {
+    const trip = TripSchema.parse(openEndedTripInput());
+
+    expect(firstArrivalOf(trip)).toEqual(PlaceSchema.parse(TOKYO));
+    expect(firstArrivalOf(trip).slug).not.toBe("paris");
+  });
+
+  /**
+   * `places[0]` is Kyoto and the first step is a stay in Tokyo. Any fixture where
+   * the two happen to coincide is satisfied by a `places[0]` implementation, so it
+   * proves nothing at all.
+   */
+  it("ignores places[0] when the first step does not arrive there", () => {
+    const trip = TripSchema.parse(tripInput({ places: [KYOTO, TOKYO, BANGKOK] }));
+
+    expect(trip.places[0]?.slug).toBe("kyoto");
+    expect(firstArrivalOf(trip).slug).toBe("tokyo");
+  });
+
+  /**
+   * A layover counts. `layoverTripInput` flies Paris → Bangkok → Tokyo with no
+   * stay in Bangkok, and the answer is **Bangkok**: the traveller did arrive
+   * there first, and this projection reports the itinerary rather than guessing at
+   * the trip's "real" destination. Deliberate, not an accident of the rule — the
+   * assertion is here to freeze the choice, and `places[0]` is Tokyo so a
+   * `places[0]` reading fails it too.
+   */
+  it("returns the layover when the trip opens on a flight that stops on the way", () => {
+    const trip = TripSchema.parse(layoverTripInput({ places: [TOKYO, BANGKOK, PARIS] }));
+
+    expect(trip.places[0]?.slug).toBe("tokyo");
+    expect(firstArrivalOf(trip).slug).toBe("bangkok");
+    expect(firstArrivalOf(trip).slug).not.toBe("paris");
+  });
+});
+
+describe("summaryOf", () => {
+  it("carries the fields the list page renders", () => {
+    const trip = TripSchema.parse(tripInput());
+
+    expect(summaryOf(trip)).toEqual({
+      slug: "japon-2024",
+      title: "Japon, printemps 2024",
+      startDate: "2024-04-12",
+      endDate: "2024-04-22",
+      duration: { nights: 10, days: 11 },
+      countryCodes: ["JP", "TH"],
+      firstArrival: PlaceSchema.parse(TOKYO),
+      coverPhotoSrc: "/photos/japon-2024/tokyo.jpg",
+      tags: ["asie", "train"],
+    });
+  });
+
+  /**
+   * The derivations are not recomputed by hand here: the summary must *be* the
+   * derivation, so that fixing a rounding or an ordering rule in one place fixes
+   * the card too.
+   */
+  it("takes its duration, its countries and its first arrival from the derivations", () => {
+    const trip = TripSchema.parse(multiCountryTripInput());
+    const summary = summaryOf(trip);
+
+    expect(summary.duration).toEqual(durationOf(trip));
+    expect(summary.countryCodes).toEqual(visitedCountryCodes(trip));
+    expect(summary.firstArrival).toEqual(firstArrivalOf(trip));
+  });
+
+  /**
+   * The list page never needs the itinerary, the photos or the money — and it
+   * must not receive `draft` either. In production that flag is `false` for every
+   * trip the page can see, so the only thing a consumer could do with it is draw
+   * a conclusion that is always wrong on the one environment where it is not.
+   */
+  it.each(["steps", "photos", "budget", "budgetPerPerson", "places", "draft"])(
+    "leaves %s off the summary",
+    (field) => {
+      const trip = TripSchema.parse(tripInput());
+
+      expect(summaryOf(trip)).not.toHaveProperty(field);
+    }
+  );
+
+  it("leaves draft off the summary of a draft trip too", () => {
+    const trip = TripSchema.parse(tripInput({ draft: true }));
+
+    expect(trip.draft).toBe(true);
+    expect(summaryOf(trip)).not.toHaveProperty("draft");
+  });
+
+  /** A trip with no cover and no tag still projects — both are optional content. */
+  it("projects a minimal trip, cover and tags included as they are", () => {
+    const trip = TripSchema.parse(minimalTripInput());
+    const summary = summaryOf(trip);
+
+    expect(summary.coverPhotoSrc).toBeUndefined();
+    expect(summary.tags).toEqual([]);
+  });
+});
+
+describe("detailOf", () => {
+  it("carries every summary field plus the itinerary, the photos and the budget", () => {
+    const trip = TripSchema.parse(tripInput());
+    const detail = detailOf(trip);
+
+    expect(detail).toMatchObject(summaryOf(trip));
+    expect(detail.places).toEqual(trip.places);
+    expect(detail.steps).toEqual(trip.steps);
+    expect(detail.photos).toEqual(trip.photos);
+    expect(detail.budget).toEqual({ totalCents: 420000, currency: "EUR", travellers: 2 });
+  });
+
+  it("computes the per-person budget when the trip records one", () => {
+    const trip = TripSchema.parse(
+      tripInput({ budget: { totalCents: 10001, currency: "EUR", travellers: 3 } })
+    );
+
+    expect(detailOf(trip).budgetPerPerson).toEqual({ amountCents: 3334, currency: "EUR" });
+  });
+
+  /**
+   * `null`, not zero and not an absent key. "No budget recorded" and "this trip
+   * cost nothing" are different statements, and the trip page renders them
+   * differently — one hides the line, the other prints 0 €.
+   */
+  it("reports a null per-person budget when the trip records none", () => {
+    const trip = TripSchema.parse(minimalTripInput());
+    const detail = detailOf(trip);
+
+    expect(detail.budget).toBeUndefined();
+    expect(detail.budgetPerPerson).toBeNull();
+    expect(detail.photos).toEqual([]);
+  });
+
+  /**
+   * The detail is what the trip page consumes, and the page decides on 404 before
+   * it renders — so `draft` is the loader's business, not the projection's. Kept
+   * off both projections rather than only off the summary: one shape to reason
+   * about, and no field that means something different per environment.
+   */
+  it("leaves draft off the detail as well", () => {
+    const trip = TripSchema.parse(tripInput({ draft: true }));
+
+    expect(detailOf(trip)).not.toHaveProperty("draft");
   });
 });

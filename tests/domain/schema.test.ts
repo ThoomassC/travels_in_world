@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import {
   BudgetSchema,
   PhotoSchema,
@@ -603,5 +606,123 @@ describe("TripSchema — itinerary continuity", () => {
     });
 
     expect(attempt(TripSchema, shortHop).accepted).toBe(true);
+  });
+});
+
+/**
+ * `draft` — the field the whole of TIW-11 turns on. It is what makes "write a
+ * trip over several sittings" possible: without it a trip has exactly two states,
+ * absent from the repository or live and half-written, and nothing in between.
+ *
+ * The schema's share of that promise is narrow and load-bearing: the key parses
+ * to a **boolean**, and its absence parses to `false` rather than to `undefined`.
+ * Whether a draft is then hidden is the loader's business
+ * (`tests/content/loader.test.ts`).
+ */
+describe("TripSchema — draft", () => {
+  /**
+   * `.default(false)`, not `.optional()`. The difference is not cosmetic: with
+   * `optional` the loader has a third state to handle — "draft unknown" — and the
+   * publication filter becomes `trip.draft === true` in one place and
+   * `!trip.draft` in another, which is how a draft eventually gets published by
+   * whichever spelling loses.
+   */
+  it("parses an absent draft key to false, not to undefined", () => {
+    const trip = TripSchema.parse(minimalTripInput());
+
+    expect(trip.draft).toBe(false);
+    expect("draft" in trip).toBe(true);
+  });
+
+  it.each([
+    { label: "a trip marked as a draft", value: true },
+    { label: "a trip explicitly published", value: false },
+  ])("accepts $label and keeps the boolean it was given", ({ value }) => {
+    const trip = TripSchema.parse(minimalTripInput({ draft: value }));
+
+    expect(trip.draft).toBe(value);
+  });
+
+  /**
+   * `draft: "true"` between quotes is the mistake with real consequences: it is a
+   * *string*, and every non-empty string is truthy in JavaScript. Accepted, it
+   * would make `draft: "false"` hide the trip from production as effectively as
+   * `draft: "true"` — a published trip vanishing from the site without a word.
+   * `content/README.md` states the rule; this is what makes it mechanical.
+   */
+  it.each([
+    { label: "the string true", value: "true" },
+    { label: "the string false", value: "false" },
+    { label: "the string yes", value: "yes" },
+    { label: "the number one", value: 1 },
+    { label: "the number zero", value: 0 },
+    { label: "null", value: null },
+  ])("rejects $label, and points the error at draft", ({ value }) => {
+    const outcome = attempt(TripSchema, minimalTripInput({ draft: value }));
+
+    expect(outcome.accepted).toBe(false);
+    expect(pathsUnder(outcome, "draft")).toEqual(["draft"]);
+  });
+});
+
+/**
+ * The documented example, read from `content/README.md` rather than copied here.
+ *
+ * Copying it is the version that rots: the README is what a contributor writes
+ * their first `trip.yaml` from, and an example the schema has quietly stopped
+ * accepting is worse than no example — it sends someone to debug their own file
+ * for a fault that is in the documentation. Parsed from the file, the two cannot
+ * drift apart without this test saying so.
+ */
+describe("the complete trip.yaml documented in content/README.md", () => {
+  const readme = readFileSync(path.join(process.cwd(), "content", "README.md"), "utf8");
+
+  /** The first fenced YAML block: the complete example, `draft` key included. */
+  const firstYamlBlock = (markdown: string): string => {
+    const match = /```yaml\n([\s\S]*?)```/.exec(markdown);
+    const block = match?.[1];
+    if (block === undefined) {
+      throw new Error("content/README.md no longer holds a fenced YAML example");
+    }
+
+    return block;
+  };
+
+  const example: unknown = parse(firstYamlBlock(readme));
+
+  it("is accepted as written", () => {
+    const outcome = attempt(TripSchema, example);
+
+    expect(outcome.errors).toBe("");
+    expect(outcome.accepted).toBe(true);
+  });
+
+  /**
+   * The documented default and the real default are the same value, checked
+   * against each other rather than each asserted alone.
+   *
+   * This case used to expect `true`, because the example ended on `draft: true`
+   * — and that was the trap it should have caught. The complete example is what
+   * a contributor copies for their first trip: they replace the values, the
+   * validation passes, the build passes, and the trip is nowhere online with
+   * nothing said about it. Exactly the silent failure the field exists to make
+   * visible. `draft: false` is written in the example on purpose, so copying it
+   * publishes; this asserts the two never drift apart again.
+   */
+  it("declares the draft key the README documents, and publishes by default", () => {
+    const trip = TripSchema.parse(example);
+
+    expect(trip.draft).toBe(false);
+    expect(trip.slug).toBe("japon-2024");
+  });
+
+  /**
+   * The key is written in the example, not merely defaulted into the parsed
+   * value: a contributor who copies it can see the field exists and flip it.
+   * Reading the parsed trip alone cannot tell the two apart, since `.default()`
+   * fills the key in either case.
+   */
+  it("writes the draft key in the example rather than relying on the default", () => {
+    expect(firstYamlBlock(readme)).toMatch(/^draft: false\b/m);
   });
 });
