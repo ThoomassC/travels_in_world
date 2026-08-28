@@ -270,8 +270,54 @@ Pour s'en passer, `agentRules: false` dans `next.config.ts`.
   fuite entre tests) : un stub qui s'écarte du navigateur fait passer au vert du code qui
   casse en production.
 
+## Intégration continue
+
+`.github/workflows/ci.yml` rejoue toute la chaîne sur chaque pull request, et sur chaque
+poussée vers `main` et `develop` : `lint`, `typecheck`, `validate:content`, `test`,
+`test:lint`, `build`, `test:build`, `test:e2e`. Trois jobs en parallèle — les vérifications
+sans build, le build avec ses deux gardes d'artefact, Playwright — plus un quatrième,
+`Vérifications`, qui n'exécute rien et refuse si l'un des trois a échoué. C'est ce quatrième
+nom, et lui seul, que la protection de branche connaît : sinon un job ajouté demain serait
+consultatif — rouge, visible, et la fusion passerait quand même — jusqu'à ce que quelqu'un
+pense à cocher une case dans une interface.
+
+`test:build` vit dans le job du build, pas ailleurs : il lit
+`.next/prerender-manifest.json` et pèse les chunks de `.next/static`, donc il lui faut
+l'artefact réel sur le même disque. Il n'est ni `continue-on-error`, ni conditionnel, ni
+sautable — c'est la seule vérification automatique du prérendu et des budgets. L'E2E est un
+job séparé parce que `playwright.config.ts` reconstruit tout (`reuseExistingServer: false`,
+délibéré) : on paie donc deux builds, mais en parallèle, donc en zéro seconde de latence de
+retour. Ce qui est mutualisé d'un run à l'autre, c'est le téléchargement de Chromium, mis en
+cache sur la version de Playwright installée.
+
+La version de Node est lue depuis `.nvmrc` (`node-version-file`), jamais écrite en dur : une
+version figée dans le workflow est une seconde source de vérité qui s'écarte silencieusement
+de `engines` et du runtime Vercel. Les actions tierces sont épinglées au SHA, avec le tag en
+commentaire, et le jeton du workflow est en lecture seule (`permissions: contents: read`).
+
+**Ce que la CI ne garde pas : le déploiement.** Vercel se déclenche sur l'événement Git et
+n'attend pas le pipeline — une prévisualisation est en ligne pendant qu'il tourne, et le
+reste s'il finit rouge. C'est voulu : c'est là que se relit un voyage en `draft`. Ce qui
+protège la production, c'est que la production ne part que de `main`, qu'on n'y arrive que
+par une fusion, et qu'une fusion est refusée quand le pipeline est rouge.
+
 ## Déploiement
 
-Vercel. Les en-têtes de sécurité et le cache long des assets sont dans `vercel.json`.
+Vercel. Les en-têtes de sécurité et le cache long des assets sont dans `vercel.json`, qui
+porte aussi `buildCommand: "npm run validate:content && npm run build"` : le build de
+déploiement refuse un contenu que les pages ne sauraient pas charger, y compris s'il est
+arrivé sur `main` sans passer par une pull request. Le reste de la suite n'y est pas — un
+build de déploiement doit construire, et le budget de bundle comme le prérendu sont des
+propriétés du code que la pull request a déjà mesurées.
+
 `output: "export"` est exclu : il désactiverait l'optimisation des images et interdirait la
-route API prévue. Aucun secret n'est committé — injection au runtime uniquement.
+route API prévue. Aucun secret n'est committé — injection au runtime uniquement, et le projet
+n'en a aujourd'hui aucun : `geocoding-api.open-meteo.com` ne demande pas de clé.
+
+**Deux réglages vivent hors du dépôt** et ne sont donc pas garantis par lui : le rattachement
+du projet Vercel (branche de production `main` — et non `develop`, la branche par défaut du
+dépôt, que Vercel prendrait sans qu'on lui dise ; runtime Node 24.x, et non le défaut de la
+plateforme) et la protection de branche GitHub. La check-list ordonnée de ce qu'il faut
+cliquer, les commandes `gh` exactes et la procédure de rollback sont dans
+[`docs/deploiement.md`](docs/deploiement.md) ; la décision qui explique ce découpage est
+l'ADR [`0004`](docs/adr/0004-la-ci-garde-la-fusion-pas-le-deploiement.md).
