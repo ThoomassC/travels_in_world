@@ -22,12 +22,16 @@ sont dans [`adr/0004-la-ci-garde-la-fusion-pas-le-deploiement.md`](adr/0004-la-c
 
 `.github/workflows/ci.yml`, quatre jobs : trois en parallèle, un qui les agrège.
 
-| Job                                     | Ce qu'il exécute                                             | Mesuré en local |
-| --------------------------------------- | ------------------------------------------------------------ | --------------- |
-| `Lint, types, contenu, tests unitaires` | `lint`, `typecheck`, `validate:content`, `test`, `test:lint` | ~20 s           |
-| `Build, prérendu et budgets`            | `build` puis `test:build`                                    | ~7 s            |
-| `Playwright (build de production)`      | installation de Chromium puis `test:e2e`                     | ~5 s + install  |
-| `Vérifications`                         | rien — refuse si l'un des trois n'a pas réussi               | —               |
+| Job                                     | Ce qu'il exécute                                             | Sur le runner |
+| --------------------------------------- | ------------------------------------------------------------ | ------------- |
+| `Lint, types, contenu, tests unitaires` | `lint`, `typecheck`, `validate:content`, `test`, `test:lint` | 54 s          |
+| `Build, prérendu et budgets`            | `build` puis `test:build`                                    | 34 s          |
+| `Playwright (build de production)`      | installation de Chromium puis `test:e2e`                     | 73 s          |
+| `Vérifications`                         | rien — refuse si l'un des trois n'a pas réussi               | 4 s           |
+
+Mesures du premier run réel (`ubuntu-latest`, caches froids) : **83 s de bout en
+bout**, soit le job le plus long plus l'agrégat — et non la somme des trois, ce qui
+est exactement ce qu'on achète avec le parallélisme.
 
 Trois points qui ne se devinent pas en lisant le fichier :
 
