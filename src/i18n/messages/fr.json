@@ -9,6 +9,12 @@
     "placeholderHeading": "Socle en place",
     "placeholderBody": "La carte du monde et les pages de voyage arrivent dans les prochains lots. Cette page est volontairement un placeholder."
   },
+  "map": {
+    "summary": "Carte du monde : {trips, plural, =0 {aucun voyage publié} one {# voyage} other {# voyages}}, {countries, plural, =0 {aucun pays} one {# pays} other {# pays}}",
+    "visitedCountries": "Pays visités : {countries}.",
+    "markListLabel": "Voyages sur la carte, du plus récent au plus ancien",
+    "markLabel": "{title}, {place}"
+  },
   "notFound": {
     "title": "Page introuvable",
     "description": "Cette adresse ne correspond à aucune page du carnet.",

@@ -1,0 +1,296 @@
+import { describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import frMessages from "@/i18n/messages/fr.json";
+import { defaultLocale } from "@/i18n/routing";
+import { WorldMap, type MapCountry, type WorldMapProps } from "@/components/map/world-map";
+import type { TripMark } from "@/components/map/marks";
+
+/**
+ * The rendered map, queried the way a reader meets it: by accessible role and
+ * accessible name. There is no `data-testid` and no snapshot in this repository,
+ * and neither would help here — a snapshot of 177 `<path>` elements records the
+ * dataset, not the behaviour.
+ *
+ * jsdom computes no layout: `getBBox`, `getScreenCTM` and `getComputedTextLength`
+ * do not exist, so no assertion below is about pixels. What *is* assertable is
+ * everything the server emitted — the `viewBox`, the custom properties carrying
+ * each marker's position, the `href`s, the roles and the names — which is the
+ * whole of this component's output, since it ships no JavaScript to change any
+ * of it afterwards.
+ */
+
+/** The projected world, identical to production. */
+const WORLD = { width: 960, height: 500 };
+
+/**
+ * The name is never drawn — a `<path>` inside an `aria-hidden` SVG has nothing
+ * to say — but it is read for the visited countries, to name them in text under
+ * the caption. Without that, which countries hold a trip is carried by the tint
+ * alone, and the tint is a 1.16:1 distinction.
+ */
+const country = (code: string | null, name: string): MapCountry => ({
+  code,
+  name,
+  // Shape irrelevant: the component copies `d` through and never reads it.
+  path: "M0,0L10,0L10,10Z",
+});
+
+/**
+ * Three entries with `code: null` on purpose. The 110m dataset leaves exactly
+ * three territories unidentified, so `code` cannot be the React key — if it
+ * were, these three would collide and two of the three paths would disappear
+ * from the DOM. The path count assertions below are what catch that.
+ */
+const COUNTRIES: readonly MapCountry[] = [
+  country("FR", "France"),
+  country("JP", "Japon"),
+  country("IS", "Islande"),
+  country("CL", "Chili"),
+  country(null, "Territoire non identifié A"),
+  country(null, "Territoire non identifié B"),
+  country(null, "Territoire non identifié C"),
+];
+
+function tripMark(index: number): TripMark {
+  const slug = `voyage-${index}`;
+
+  return {
+    slug,
+    title: `Voyage ${index}`,
+    placeName: `Ville ${index}`,
+    href: `/fr/voyages/${slug}`,
+    // Scattered across the world box so that 60 markers really do frame the
+    // whole world, rather than all landing on one pixel.
+    point: { x: 40 + ((index * 13) % 880), y: 30 + ((index * 7) % 440) },
+  };
+}
+
+/** Dead centre of the world box, which makes the expected percentages exact. */
+const CENTRED_MARK: TripMark = {
+  slug: "japon-2024",
+  title: "Japon 2024",
+  placeName: "Tokyo",
+  href: "/fr/voyages/japon-2024",
+  point: { x: 480, y: 250 },
+};
+
+const SIXTY_MARKS: readonly TripMark[] = Array.from({ length: 60 }, (_, index) => tripMark(index));
+
+/**
+ * The expected accessible name, built from the catalogue rather than retyped:
+ * this asserts that the component feeds the right two values into the right
+ * message, and leaves the wording where it belongs.
+ */
+const linkName = (mark: TripMark): string =>
+  frMessages.map.markLabel.replace("{title}", mark.title).replace("{place}", mark.placeName);
+
+function renderMap(props: Partial<WorldMapProps> = {}) {
+  return render(
+    <NextIntlClientProvider locale={defaultLocale} messages={frMessages}>
+      <WorldMap countries={COUNTRIES} visited={[]} marks={[]} world={WORLD} {...props} />
+    </NextIntlClientProvider>
+  );
+}
+
+function mapSvg(container: HTMLElement): SVGSVGElement {
+  const svg = container.querySelector("svg");
+
+  if (svg === null) {
+    throw new Error("the map rendered no <svg>");
+  }
+
+  return svg;
+}
+
+const viewBoxOf = (container: HTMLElement): string =>
+  mapSvg(container).getAttribute("viewBox") ?? "";
+
+/** The `<g>` layers, in paint order: background first, tinted second. */
+const layersOf = (container: HTMLElement): readonly Element[] =>
+  Array.from(mapSvg(container).querySelectorAll(":scope > g"));
+
+describe("WorldMap", () => {
+  describe("with no published trip", () => {
+    it("frames the whole world", () => {
+      const { container } = renderMap({ marks: [] });
+
+      expect(viewBoxOf(container)).toBe("0 0 960 500");
+    });
+
+    it("renders no marker at all, and no empty list to announce", () => {
+      renderMap({ marks: [] });
+
+      expect(screen.queryAllByRole("link")).toHaveLength(0);
+      expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    });
+
+    it("still draws the countries and still states the count", () => {
+      const { container } = renderMap({ marks: [] });
+
+      expect(screen.getByRole("figure")).toBeInTheDocument();
+      expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length);
+      expect(screen.getByText("Carte du monde : aucun voyage publié, aucun pays")).toBeVisible();
+    });
+  });
+
+  describe("with a single published trip", () => {
+    it("crops the frame instead of zooming without bound", () => {
+      const { container } = renderMap({ marks: [CENTRED_MARK] });
+
+      // 30 % of the world's width, the legibility floor `frameAround` applies to
+      // a point-sized extent, normalised to the world's 960/500 ratio. A frame
+      // as wide as the world would mean the crop never happened; a much narrower
+      // one would mean a flat wash of one country's interior.
+      expect(viewBoxOf(container)).toBe("336 175 288 150");
+    });
+
+    it("gives the container exactly the frame's aspect ratio", () => {
+      const { container } = renderMap({ marks: [CENTRED_MARK] });
+      const canvas = mapSvg(container).parentElement;
+
+      // Asserted as a *relation* to the `viewBox`, not as a literal: these are
+      // the two numbers that must never disagree, because the markers are
+      // positioned in percentages of the container while the countries are drawn
+      // in percentages of the drawing.
+      const [, , width, height] = viewBoxOf(container).split(" ");
+      expect(canvas?.style.getPropertyValue("--frame-aspect")).toBe(`${width} / ${height}`);
+    });
+
+    it("anchors the marker on its projected point", () => {
+      renderMap({ marks: [CENTRED_MARK] });
+
+      const [item] = screen.getAllByRole("listitem");
+
+      // The mark sits at the centre of the world, the frame is centred on it, so
+      // both percentages are exactly 50. Any drift here is the aspect-ratio bug.
+      expect(item?.style.getPropertyValue("--mark-left")).toBe("50%");
+      expect(item?.style.getPropertyValue("--mark-top")).toBe("50%");
+    });
+
+    it("names the link after the trip and its anchor place", () => {
+      renderMap({ marks: [CENTRED_MARK] });
+
+      const link = screen.getByRole("link", { name: linkName(CENTRED_MARK) });
+
+      expect(link).toHaveAttribute("href", CENTRED_MARK.href);
+      // The name says where the link goes, and it is real text in the tree —
+      // an `aria-label` on an empty link would satisfy the query above while
+      // leaving nothing for voice control to match on.
+      expect(link.textContent).toContain(CENTRED_MARK.title);
+      expect(link.textContent).toContain(CENTRED_MARK.placeName);
+    });
+
+    it("labels the marker list", () => {
+      renderMap({ marks: [CENTRED_MARK] });
+
+      expect(screen.getByRole("list")).toHaveAccessibleName(frMessages.map.markListLabel);
+    });
+  });
+
+  describe("with sixty published trips", () => {
+    it("renders one marker per trip", () => {
+      renderMap({ marks: SIXTY_MARKS });
+
+      expect(screen.getAllByRole("listitem")).toHaveLength(SIXTY_MARKS.length);
+      expect(screen.getAllByRole("link")).toHaveLength(SIXTY_MARKS.length);
+    });
+
+    it("keeps the DOM order the content façade sorted, and every href intact", () => {
+      renderMap({ marks: SIXTY_MARKS });
+
+      const links = screen.getAllByRole("link");
+
+      // `marks` arrives sorted by `startDate` descending then `slug`; the
+      // component must not re-sort, because that order is the tab order.
+      expect(links.map((link) => link.getAttribute("href"))).toEqual(
+        SIXTY_MARKS.map((mark) => mark.href)
+      );
+      expect(links.map((link) => link.textContent)).toEqual(SIXTY_MARKS.map(linkName));
+    });
+
+    it("paints the first tab stop last, so it wins an overlap", () => {
+      renderMap({ marks: SIXTY_MARKS });
+
+      const orders = screen
+        .getAllByRole("listitem")
+        .map((item) => Number(item.style.getPropertyValue("--mark-order")));
+
+      // Absolutely positioned siblings paint in DOM order, which would bury the
+      // newest trip under every older one it overlaps. The inverted stacking
+      // order is what keeps the pointer and the keyboard agreeing on which
+      // marker is on top.
+      expect(orders).toEqual(SIXTY_MARKS.map((_, index) => SIXTY_MARKS.length - index));
+    });
+
+    it("frames the whole world once the trips span it", () => {
+      const { container } = renderMap({ marks: SIXTY_MARKS });
+
+      expect(viewBoxOf(container)).toBe("0 0 960 500");
+    });
+  });
+
+  describe("the country layers", () => {
+    it("draws the visited countries in addition to the background layer", () => {
+      const visited = COUNTRIES.slice(0, 3);
+      const { container } = renderMap({ visited, marks: [CENTRED_MARK] });
+
+      const [background, tinted] = layersOf(container);
+
+      expect(background?.querySelectorAll("path")).toHaveLength(COUNTRIES.length);
+      expect(tinted?.querySelectorAll("path")).toHaveLength(visited.length);
+      expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length + visited.length);
+    });
+
+    it("hides the whole drawing from assistive technology", () => {
+      const { container } = renderMap({ visited: COUNTRIES, marks: [CENTRED_MARK] });
+      const svg = mapSvg(container);
+
+      expect(svg).toHaveAttribute("aria-hidden", "true");
+      expect(svg).toHaveAttribute("focusable", "false");
+    });
+
+    it("leaves nothing focusable or interactive inside the drawing", () => {
+      const { container } = renderMap({ visited: COUNTRIES, marks: SIXTY_MARKS });
+      const svg = mapSvg(container);
+
+      // "The other countries are neutral, not focusable and have no hover
+      // state": true by construction, not by a list of CSS rules. A `<title>`,
+      // a `tabindex` or a nested `<a>` added later turns this red.
+      expect(svg.querySelectorAll("[tabindex], a, button, title, [role]")).toHaveLength(0);
+    });
+  });
+
+  /**
+   * The counter is the repository's first ICU plural, and the two French traps
+   * it has to survive are why these expectations are written out in full rather
+   * than read from `frMessages`: reading the expectation from the same catalogue
+   * that supplies the plural rule would make the assertion vacuous, and the
+   * point here is precisely the rule.
+   *
+   * - In French CLDR, the `one` category covers **0 and 1**, so without an
+   *   explicit `=0` branch ahead of it the map announces "0 voyage" — measured.
+   * - "pays" is invariable: the plural branch must add no `s`.
+   */
+  describe("the counter", () => {
+    const cases: readonly { trips: number; countries: number; expected: string }[] = [
+      { trips: 0, countries: 0, expected: "Carte du monde : aucun voyage publié, aucun pays" },
+      { trips: 1, countries: 1, expected: "Carte du monde : 1 voyage, 1 pays" },
+      { trips: 2, countries: 2, expected: "Carte du monde : 2 voyages, 2 pays" },
+      { trips: 60, countries: 23, expected: "Carte du monde : 60 voyages, 23 pays" },
+    ];
+
+    for (const { trips, countries, expected } of cases) {
+      it(`reads "${expected}"`, () => {
+        renderMap({
+          marks: SIXTY_MARKS.slice(0, trips),
+          visited: Array.from({ length: countries }, (_, index) =>
+            country(`C${index}`, `Pays ${index}`)
+          ),
+        });
+
+        expect(screen.getByText(expected)).toBeVisible();
+      });
+    }
+  });
+});

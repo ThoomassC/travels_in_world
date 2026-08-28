@@ -373,6 +373,17 @@ const config = [
     rules: {
       // eslint-config-next ships most of these as "warn"; strict raises them to error.
       ...jsxA11y.flatConfigs.strict.rules,
+      /**
+       * `role="list"` on a `<ul>` is redundant markup that is not redundant in
+       * practice: `list-style: none` makes Safari drop the list role, and with
+       * it the list's `aria-label` and its item count. A reader landing among
+       * the world map's sixty trip links needs both. The rule ships an option
+       * for exactly this case, and it is the narrowest possible exception — only
+       * `list` on `ul`; every other redundant role stays an error.
+       *
+       * No test can see the underlying bug: jsdom keeps the role either way.
+       */
+      "jsx-a11y/no-redundant-roles": ["error", { ul: ["list"] }],
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",

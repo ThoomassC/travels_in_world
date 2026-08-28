@@ -9,7 +9,7 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
  *
  * - `output: "export"` — a static export disables the Image Optimization
  *   pipeline and forbids Route Handlers. The world map is rendered on the
- *   server at build time (TIW-11), which a normal Next build already does;
+ *   server at build time (TIW-13), which a normal Next build already does;
  *   exporting would only cost us images and the planned API route.
  * - security headers / long-lived asset cache — those live in `vercel.json`,
  *   next to the platform that actually serves them.
