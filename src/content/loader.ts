@@ -54,16 +54,23 @@ import type { FieldPath } from "./finding";
  * wording is user-visible it is copied from `validate.ts` verbatim rather than
  * rephrased: the same rule seen twice must not read as two different rules.
  *
- * **And nothing runs the validator for you.** `npm run validate:content` is wired
- * to `pretest`, so it runs when somebody runs `npm test`, and to nothing else:
- * there is no CI in this repository — no `.github/`, and no workflow file
- * anywhere in the history on any branch — and `npm run build` does not call it.
- * So no check blocks a deployment today. The concrete consequence is the one
- * family this module cannot see: a declared photo whose file is missing, or whose
- * path differs from the file's only by case, **ships to production**. The likely
- * spelling of that is a case-insensitive macOS working tree deployed onto a
- * case-sensitive Linux host, where the image is there locally and 404s online.
- * Wiring the validator into the build is TIW-22's scope.
+ * **Who runs the validator, since TIW-22.** This paragraph used to say that
+ * nothing did, and that a fault therefore shipped to production. Both halves are
+ * now false, and the correction matters more than the original claim: a reader who
+ * trusts a stale "nothing is guarded" note mis-prices every risk below it.
+ *
+ * `npm run validate:content` runs in three places today — `pretest`, so `npm test`
+ * pays for it; `.github/workflows/ci.yml`, as its own step, so a broken trip shows
+ * up as a red check naming the file, the line and the command; and `vercel.json`'s
+ * `buildCommand`, ahead of `next build`, which is the one that covers content
+ * reaching `main` without a pull request.
+ *
+ * What remains true is the *family* of faults this module cannot see, and the
+ * validator can: a declared photo whose file is missing, or whose path differs
+ * from the file's only by case. The likely spelling is a case-insensitive macOS
+ * working tree deployed onto a case-sensitive Linux host, where the image is there
+ * locally and 404s online. That one is now caught before the deployment rather
+ * than after it — which is the whole difference TIW-22 bought.
  *
  * **What it never hands back.** Only domain values — `TripDetail`, `TripSummary`,
  * `{ slug }`. No type from `./collection` appears in an exported signature, and
@@ -460,10 +467,12 @@ const PRODUCTION_BUILD_PHASE = "phase-production-build";
  * script that calls `loadTrips()` (sitemap, feed, photo indexing). It also does
  * not cover `next build --debug-prerender`, which sets `NODE_ENV=development`.
  *
- * Hence the order below: an explicit answer, then the build signal, then the two
- * environments that are demonstrably not a deployment. Do **not** simplify this
- * to `NODE_ENV !== "production"` or `NODE_ENV !== "development"` — the table above
- * is why the shape is an allowlist and not a negation.
+ * Hence the order below: an explicit answer **capped by `VERCEL_ENV`**, then the
+ * build signal, then the two environments that are demonstrably not a deployment.
+ * Do **not** simplify this to `NODE_ENV !== "production"` or
+ * `NODE_ENV !== "development"` — the table above is why the shape is an allowlist
+ * and not a negation, and the cap on the explicit answer has its own note below:
+ * it is the one clause that answers a misconfiguration rather than a code path.
  *
  * Under Vitest `NODE_ENV` is `"test"`, so drafts stay visible in the suite by
  * design: a test that wants the production behaviour says so. A façade that hid
@@ -471,10 +480,32 @@ const PRODUCTION_BUILD_PHASE = "phase-production-build";
  * it means to assert on.
  */
 function showsDrafts(): boolean {
-  // An explicit answer wins: `TIW_DRAFTS=hidden npm run dev` is how an author
-  // sees what will actually be online without paying for a build.
   const asked = process.env.TIW_DRAFTS;
-  if (asked === "visible") return true;
+
+  /**
+   * An explicit answer wins — **except against the production deployment**, and
+   * that exception is the whole point of the clause.
+   *
+   * `TIW_DRAFTS=hidden npm run dev` is how an author sees what will actually be
+   * online without paying for a build, and it stays absolute: asking for *less*
+   * can never leak.
+   *
+   * Asking for *more* is capped, because the failure is a hand slip nobody would
+   * ever see. Measured on this branch: `TIW_DRAFTS=visible VERCEL_ENV=production
+   * npx next build` prerenders the draft and writes its title into the HTML —
+   * the explicit answer used to outrank both `NEXT_PHASE` and `VERCEL_ENV`. What
+   * makes that likely rather than theoretical is the Vercel dashboard itself: its
+   * add-a-variable form ticks **Production, Preview and Development by default**,
+   * so a variable set once to review a draft on a preview URL publishes it to the
+   * production site too, with a green CI and nothing to notice.
+   *
+   * An override that can publish production is not an override, it is a switch.
+   * `VERCEL_ENV` is the only name that distinguishes the three deployments, it is
+   * set by the platform and not by us, and it is absent everywhere else — so this
+   * costs nothing locally and in the suite, where `asked === "visible"` still
+   * answers `true`.
+   */
+  if (asked === "visible") return process.env.VERCEL_ENV !== PRODUCTION_ENVIRONMENT;
   if (asked === "hidden") return false;
 
   // A build never publishes a draft, whatever NODE_ENV happens to hold.
@@ -535,9 +566,22 @@ function announceVisibleDrafts(trips: readonly Trip[]): void {
   // the author writing the trip.
   const plural = slugs.length > 1 ? "s" : "";
 
-  process.stderr.write(
-    `${slugs.length} brouillon${plural}, visible${plural} seulement ici : ${slugs.join(", ")}\n`
-  );
+  /**
+   * The message names *why* drafts are visible, and never says "seulement ici".
+   *
+   * It used to, and it reassured in exactly the one case where it should not:
+   * measured in the log of a production `next start`, `TIW_DRAFTS=visible` printed
+   * « 1 brouillon, visible seulement ici » while that draft was being served with
+   * a 200 on the public port. "Ici" is the one thing this function cannot know —
+   * it knows the process, not who can reach it. The environment name is something
+   * it does know, so that is what it prints.
+   */
+  const because =
+    process.env.TIW_DRAFTS === "visible"
+      ? `visible${plural} dans cet environnement (TIW_DRAFTS=visible)`
+      : `visible${plural} seulement en développement`;
+
+  process.stderr.write(`${slugs.length} brouillon${plural}, ${because} : ${slugs.join(", ")}\n`);
 }
 
 /* ------------------------------------------------------------- memoisation -- */
@@ -654,7 +698,34 @@ export async function findTrip(slug: string): Promise<TripDetail | undefined> {
 /**
  * The `generateStaticParams` of the trip page: exactly the trips that must be
  * prerendered, in the same order as the listings. A draft is absent from it in
- * production, which is what makes its URL a 404 rather than an empty page.
+ * production.
+ *
+ * **Being absent from this list is not, by itself, a 404 — and this comment said
+ * it was.** Under the App Router's defaults, a slug that `generateStaticParams`
+ * did not return is *rendered on demand*. Measured on a build that had correctly
+ * excluded a draft:
+ *
+ * - `prerender-manifest.json` carries `dynamicRoutes["/[locale]/voyages/[slug]"]`
+ *   with `"fallback": null, "compute": "blocking"` — an unknown slug reaches a
+ *   server function rather than a static 404;
+ * - `page.js.nft.json` traces the draft's own `trip.yaml` into that function's
+ *   bundle, so the file ships to the production runtime;
+ * - `process.env.TIW_DRAFTS` survives in the compiled server chunk as a **runtime**
+ *   read (only `NODE_ENV` is folded), so the decision is taken per request, by a
+ *   function that has the draft on hand.
+ *
+ * With the variable set at runtime only — on that same build — the URL answered
+ * `200` with the draft's content. And removing it does not immediately unpublish:
+ * the first request afterwards still served the draft from the ISR cache
+ * (`x-nextjs-cache: STALE`) before the background revalidation wrote the 404. On
+ * Vercel that cache is durable and CDN-served.
+ *
+ * **What the page must therefore carry**, and what makes the 404 real:
+ * `export const dynamicParams = false;` on the trip detail route. Verified: with
+ * it, the same request answers `404` with `x-nextjs-cache: HIT` and creates no
+ * cache entry at all — no function, no disk read, no per-request decision. The
+ * route is TIW-16's to write and TIW-24's to fill; this note is here because the
+ * requirement belongs to whoever reads this function, not to a ticket description.
  */
 export async function tripStaticParams(): Promise<readonly { readonly slug: string }[]> {
   return publishedTrips().map((trip) => ({ slug: trip.slug }));

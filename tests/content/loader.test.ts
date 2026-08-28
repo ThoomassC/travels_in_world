@@ -393,10 +393,13 @@ describe("draft: true", () => {
   });
 
   /**
-   * `TIW_DRAFTS` is the explicit answer, and it wins over both signals — in both
-   * directions. `hidden` is the point of it: an author sees what will actually be
-   * online without paying for a build, which is the question
+   * `TIW_DRAFTS` is the explicit answer, and it wins over both signals — with one
+   * cap, asserted separately below: it cannot publish the production deployment.
+   *
+   * `hidden` is the point of it, and it stays absolute: an author sees what will
+   * actually be online without paying for a build, which is the question
    * `content/README.md` used to answer with `npm run build && npm run start`.
+   * Asking for *less* can never leak, so nothing caps that direction.
    */
   it.each([
     {
@@ -434,6 +437,35 @@ describe("draft: true", () => {
     vi.stubEnv("TIW_DRAFTS", asked);
 
     await expect(tripStaticParams()).resolves.toEqual(expected);
+  });
+
+  /**
+   * **The one cap on the explicit answer, and the reason it exists.**
+   *
+   * Measured before it did: `TIW_DRAFTS=visible VERCEL_ENV=production npx next
+   * build` prerendered the draft and wrote its title into the HTML — the override
+   * outranked `NEXT_PHASE` and `VERCEL_ENV` alike. What makes that a hand slip
+   * rather than a hypothesis is the Vercel dashboard: its add-a-variable form
+   * ticks Production, Preview **and** Development by default, so a variable set
+   * once to review a draft on a preview URL publishes it to the live site too,
+   * with a green CI and nothing to notice.
+   *
+   * `VERCEL_ENV` is set by the platform, never by us, and is absent everywhere
+   * else — which is why the two rows below that are not `production` still show
+   * the draft, and why the whole suite is unaffected.
+   */
+  it.each([
+    { label: "caps the override on the production deployment", vercel: "production", expected: 1 },
+    { label: "leaves a preview deployment alone", vercel: "preview", expected: 2 },
+    { label: "leaves a machine with no VERCEL_ENV alone", vercel: undefined, expected: 2 },
+  ] as const)("VERCEL_ENV=$vercel $label", async ({ vercel, expected }) => {
+    useTrips(WITH_A_DRAFT);
+    vi.stubEnv("TIW_DRAFTS", "visible");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PHASE", "phase-production-build");
+    vi.stubEnv("VERCEL_ENV", vercel);
+
+    await expect(tripStaticParams()).resolves.toHaveLength(expected);
   });
 
   /**
@@ -529,7 +561,9 @@ describe("the stderr notice naming the drafts a read is about to serve", () => {
 
     await listTripSummaries();
 
-    expect(written).toEqual(["2 brouillons, visibles seulement ici : perou-2025, japon-2024\n"]);
+    expect(written).toEqual([
+      "2 brouillons, visibles seulement en développement : perou-2025, japon-2024\n",
+    ]);
   });
 
   /** Agreement in number, since the line is French and read by a human. */
@@ -540,7 +574,30 @@ describe("the stderr notice naming the drafts a read is about to serve", () => {
 
     await listTripSummaries();
 
-    expect(written).toEqual(["1 brouillon, visible seulement ici : perou-2025\n"]);
+    expect(written).toEqual(["1 brouillon, visible seulement en développement : perou-2025\n"]);
+  });
+
+  /**
+   * The line names the *cause*, and never says "seulement ici" — the one thing
+   * this layer cannot know is who can reach the process it runs in.
+   *
+   * Measured before this distinction existed, in the log of a production
+   * `next start` with the override set: « 1 brouillon, visible seulement ici »,
+   * while that draft was being served with a 200 on the public port. The message
+   * reassured in precisely the case that deserved a warning, which is why the
+   * wording is asserted rather than left to taste.
+   */
+  it("names the override when that is why the draft is visible", async () => {
+    useTrips(WITH_A_DRAFT);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("TIW_DRAFTS", "visible");
+    const written = captureStderr();
+
+    await listTripSummaries();
+
+    expect(written).toEqual([
+      "1 brouillon, visible dans cet environnement (TIW_DRAFTS=visible) : perou-2025\n",
+    ]);
   });
 
   /**
