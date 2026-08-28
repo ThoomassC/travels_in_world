@@ -8,6 +8,18 @@ node_modules
 package-lock.json
 next-env.d.ts
 
+# Git worktrees: other checkouts of this repository, sitting inside it. Without
+# this line `npm run format` (`prettier --write .`) rewrites files in another
+# branch's worktree while somebody is editing them — measured: neither
+# `.gitignore` nor this file excluded them, and Prettier 3 reads both by default,
+# so `.` reached straight into them.
+#
+# The ESLint config ignores them too, in its own `ignores` array, and one does not
+# stand in for the other: flat config does not read these files, and Prettier does
+# not read `eslint.config.js`. Three tools, three lists — remove one and that
+# tool walks back in.
+.claude/worktrees
+
 # Fixture qui porte une faute de syntaxe YAML volontaire : Prettier ne sait pas la
 # lire, et la reformater lui ferait perdre exactement ce qu'elle teste.
 tests/fixtures/content/invalid-yaml

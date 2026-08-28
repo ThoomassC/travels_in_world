@@ -106,6 +106,20 @@ const config = [
       "playwright-report/**",
       "test-results/**",
       "next-env.d.ts",
+      /**
+       * Git worktrees, which are *other checkouts of this repository* sitting
+       * inside it. `eslint .` walks into them, so a half-written file in one
+       * branch fails `npm run lint` in another, and nobody can tell "my lint is
+       * green" from "my neighbour's is". Measured: a `jsx-a11y` error in one
+       * worktree failed the barrier of a checkout that did not contain the file.
+       *
+       * Flat config does not read `.gitignore`, so ignoring them in git — which
+       * also matters, one worktree measured 579 MB a `git add -A` would have
+       * committed — does not answer this. Both are needed.
+       *
+       * No effect on CI: a clone has no worktrees.
+       */
+      ".claude/worktrees/**",
     ],
   },
   ...nextCoreWebVitals,
