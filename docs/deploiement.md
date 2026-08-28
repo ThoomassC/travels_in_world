@@ -198,5 +198,6 @@ vercel ls travels-in-world --prod   # lister les déploiements de production pou
 ```
 
 La CLI n'est pas installée sur le poste aujourd'hui, et le rattachement du projet
-s'est fait par l'interface web : le chemin du tableau de bord est donc le chemin de
-référence.
+se fera par l'interface web : le chemin du tableau de bord est donc le chemin de
+référence — c'est celui qui marche sans rien installer, le jour où il faut aller
+vite.
