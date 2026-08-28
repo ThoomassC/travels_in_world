@@ -133,6 +133,40 @@ global, `src/styles/tokens.css`, qui porte les jetons ; le style par composant s
 Modules à côté du composant. La palette est volontairement identique à celle du portfolio :
 toute modification de couleur doit y être répercutée.
 
+**La carte du monde.** Un `<svg>` **entièrement inerte** — `aria-hidden`, sans `tabindex`,
+sans `:hover`, `pointer-events: none` — surmonté d'un calque HTML de `<a>` positionnés en
+pourcentages. Zéro octet de JavaScript : le zoom et le panneau de survol sont TIW-14, qui
+possède l'unique `'use client'` réservé à la carte.
+
+Trois choses à savoir avant d'y toucher, chacune détaillée dans
+`docs/adr/0003-carte-svg-inerte-et-balises-html.md` :
+
+1. **Les balises sont du HTML, pas des formes SVG**, et c'est ce qui rend la cible de 44 px
+   indépendante du zoom : un `<circle r="6">` se dilate avec le `viewBox`, un `<a>` en `rem`
+   non. Conséquence heureuse : le SVG étant sans élément interactif, « les pays non
+   actionnables ne sont ni focusables ni survolables » est vrai par construction, pas par une
+   liste de règles CSS qu'on peut défaire une par une.
+2. **Le cadrage écrase le `viewBox`, il ne reprojette pas.** `src/map/**` produit les chemins
+   dans une boîte fixe de 960 × 500 ; `src/components/map/frame.ts` en découpe une fenêtre.
+   Recadrer est un zoom exact et préserve la calibration de l'arrondi des chemins à une
+   décimale ; reprojeter la détruirait pour le même résultat visuel. La règle de cadrage a
+   sept étapes nommées et deux cas dégénérés qui décident de tout — zéro voyage (le rendu de
+   production actuel, `content/trips` étant vide jusqu'à TIW-24) et un seul voyage, dont
+   l'emprise est un point.
+3. **Le rapport d'aspect du conteneur doit être celui du `viewBox`, exactement**, sinon
+   `preserveAspectRatio` ajoute des bandes et chaque balise dérive du pays qu'elle nomme.
+   C'est le seul usage de `style` inline de cette couche, et il est irréductible : faire
+   passer un nombre calculé au build jusqu'à une déclaration CSS n'a pas d'autre voie sans
+   JavaScript. Corollaire pour le jour où une CSP arrivera — sans `style-src 'unsafe-inline'`
+   ni nonce, toutes les balises se superposent en haut à gauche **sans erreur bloquante**.
+
+Les couleurs viennent toutes de `tokens.css`, mais pas de n'importe lesquelles : le trait de
+côte et la bordure de la carte sont en `--control-border` (le jeton documenté `>= 3:1`) parce
+que `--border-subtle` mesurait 1,37:1 et que la forme du monde est l'objet graphique
+nécessaire à la compréhension ; la distinction visité / non visité est portée par un contour
+en `--text-accent` **et par son épaisseur**, parce qu'aucune valeur de remplissage ne dépasse
+3:1 en thème clair et qu'un canal non coloré est nécessaire.
+
 **Dépendances écartées** (délibérément, ne pas les rajouter sans ticket) : bibliothèque de
 carte côté client (Leaflet, MapLibre), gestionnaire d'état (Redux, Zustand), client HTTP ou
 React Query, bibliothèque de formulaires, Tailwind, bibliothèque d'icônes React
