@@ -248,6 +248,58 @@ contraste et l'anneau blanc est invisible (1,11:1) ; en sombre c'est exactement
 l'inverse. Supprimer l'un des deux « parce qu'il ne sert à rien » casse un thème
 sans casser l'autre, et aucun test ne le voit.
 
+### Ce que l'intégration a réellement mesuré
+
+Les chiffres ci-dessous viennent d'une branche d'intégration jetable — TIW-12
+mergée, `src/app/[locale]/page.tsx` câblé, `next build` puis lecture de
+`.next/server/app/fr.html`. Ils remplacent des affirmations, et l'un d'eux
+contredisait la première rédaction de cette décision.
+
+|                            | 0 voyage    | 60 voyages                |
+| -------------------------- | ----------- | ------------------------- |
+| document `/fr`, brut       | 251,0 Ko    | 396,3 Ko                  |
+| **document `/fr`, brotli** | **34,4 Ko** | **37,4 Ko** (plafond 100) |
+| `<path>` rendus            | 177         | 217                       |
+| données `d` brutes         | 115,1 Ko    | 160,4 Ko                  |
+
+**Le budget document tient très largement, et la compression explique pourquoi :**
+115,1 Ko de données de chemin brutes se compressent avec le reste du document à
+34,4 Ko au total. Les 177 tracés se ressemblent, brotli partage son dictionnaire
+entre eux, et la somme réelle est donc bien inférieure à l'addition des poids
+mesurés séparément. C'est la raison pour laquelle ni la couche géométrie ni
+celle-ci ne pouvaient déduire ce chiffre sans le mesurer ensemble.
+
+**`npm run test:build` passe avec la carte réellement dans l'arbre** — `/fr` en
+`●`. Ni les façades serveur, ni `useTranslations` dans un Server Component
+synchrone, ni `getPathname` ne dé-statifient l'arbre. C'était la première fois
+que cette garde s'exécutait sur un build où `@/map` était vraiment importé.
+
+**Le JavaScript, et la seule surprise :**
+
+```
+ligne de base (placeholder)     120,2 Ko brotli, 7 chunks
+carte câblée, sans getPathname  120,2 Ko brotli, 7 chunks
+carte câblée, avec getPathname  123,7 Ko brotli, 8 chunks
+```
+
+Identique à l'octet, à 0 comme à 60 voyages : **la carte coûte bien zéro octet de
+JavaScript client, et c'est mesuré.** Les 3,4 Ko de différence viennent
+entièrement d'`import { getPathname } from "@/i18n/navigation"`. Le chunk contient
+le `Link` **client** de next-intl : `src/i18n/navigation.ts` déstructure
+`createNavigation(routing)` en une seule expression, donc importer n'importe
+lequel des cinq exports tire tout le module. Vérifié : un `createNavigation`
+dédié n'exportant que `getPathname` ne change rien — le `Link` est créé à
+l'intérieur de l'appel.
+
+**Décision : on garde `getPathname`.** Les deux budgets passent, et l'alternative
+serait de fabriquer l'URL à la main — vérifié, `` `/${locale}${tripPath(slug)}` ``
+rend un `href` identique à l'octet sous la configuration actuelle. Mais c'est
+précisément ce que l'invariant 2 interdit, avec un historique de 404 silencieux
+derrière lui, et le prochain qui copiera le motif ne copiera pas le test-alarme
+qui en garde l'hypothèse. Trois kilo-octets ne valent pas ce précédent. C'est un
+défaut d'empaquetage de next-intl, pas de ce ticket — `src/app/not-found.tsx` le
+paie déjà sur sa propre route — et il mérite le sien.
+
 ## Conséquences
 
 **Ce qu'on gagne.** Zéro octet de JavaScript pour une carte du monde
