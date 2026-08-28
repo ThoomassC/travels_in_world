@@ -29,9 +29,11 @@ sont dans [`adr/0004-la-ci-garde-la-fusion-pas-le-deploiement.md`](adr/0004-la-c
 | `Playwright (build de production)`      | installation de Chromium puis `test:e2e`                     | 73 s          |
 | `Vérifications`                         | rien — refuse si l'un des trois n'a pas réussi               | 4 s           |
 
-Mesures du premier run réel (`ubuntu-latest`, caches froids) : **83 s de bout en
-bout**, soit le job le plus long plus l'agrégat — et non la somme des trois, ce qui
-est exactement ce qu'on achète avec le parallélisme.
+Mesuré sur `ubuntu-latest` : **83 s de bout en bout à caches froids, 67 s à caches
+chauds** — le job le plus long plus l'agrégat, et non la somme des trois, ce qui est
+exactement ce qu'on achète avec le parallélisme. Les durées de la colonne sont
+celles du premier run ; le job Playwright passe de 73 s à 57 s une fois Chromium en
+cache.
 
 Trois points qui ne se devinent pas en lisant le fichier :
 
