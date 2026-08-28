@@ -92,7 +92,7 @@ dont la suite de tests se sert pour ne jamais sortir de la machine.
 ## Conventions
 
 **Internationalisation.** L'arbre de routes est bilingue dès maintenant (`/fr/...`, plus tard
-`/en/...`) avec une seule langue active. Trois règles :
+`/en/...`) avec une seule langue active. Quatre règles :
 
 1. Aucune chaîne d'interface en dur, y compris dans un placeholder — tout passe par
    `src/i18n/messages/<locale>.json`.
@@ -105,7 +105,18 @@ dont la suite de tests se sert pour ne jamais sortir de la machine.
    refuse partout sauf dans `src/i18n/navigation.ts`. Angle mort connu et assumé :
    `await import("next/link")` est un appel, pas une déclaration d'import — la règle ne
    peut pas le voir.
-3. `src/app/layout.tsx` ne rend que `{children}`. `<html lang>` et `<body>` sont émis par
+3. **Pour un simple `href` dans un composant serveur, c'est `localePathname` de
+   `@/i18n/pathname` — pas `getPathname` de `@/i18n/navigation`.** Les cinq exports de
+   `@/i18n/navigation` sortent d'un seul `createNavigation(routing)`, dans un module qui
+   importe le `BaseLink` `"use client"` au niveau supérieur : importer n'importe lequel
+   enregistre une référence client pour la route et y expédie le `Link` **client** de
+   next-intl. Mesuré sur `/fr`, même `href` rendu à l'octet : 119,9 Ko et 6 chunks contre
+   123,7 Ko et 8 chunks. Un module dédié n'y change rien, et next-intl 4.14.1 non plus —
+   les deux ont été vérifiés. `@/i18n/navigation` reste la bonne porte quand on veut le
+   runtime client (`Link`, `redirect`, `usePathname`, `useRouter`) ; l'assemblage d'URL
+   reste dans `src/i18n/**` dans les deux cas, ce qui est ce qu'exige la règle 2. Détail
+   et gardes : `docs/adr/0005-getpathname-sans-le-link-client.md`.
+4. `src/app/layout.tsx` ne rend que `{children}`. `<html lang>` et `<body>` sont émis par
    `src/app/[locale]/layout.tsx`, qui connaît la locale, et par `src/app/not-found.tsx`.
 
 **Rendu statique.** Toutes les routes doivent rester prérendues (`○`/`●` dans la sortie de
@@ -120,9 +131,18 @@ pages (3/3)`, et le HTML servi est identique — seul `.next/server/app/fr.html`
 `npm run test:build` est la seule vérification automatique de cet invariant : elle lit
 `.next/prerender-manifest.json` et exige `/fr` et `/_not-found`. Elle exige un build avant
 elle et ne le fait pas à votre place (branchée en CI par TIW-22). Le même fichier porte le
-budget de charge utile de `/fr` : 1,5 Ko brotli de HTML pour un plafond de 100 Ko, 120 Ko
-brotli de JS initial pour un plafond de 150 Ko — chunk `noModule` exclu, c'est le bundle de
-compatibilité que jamais aucun navigateur moderne n'exécute et il vaut 35 Ko à lui seul.
+budget de charge utile, désormais appliqué aux **deux** routes prérendues et non à `/fr`
+seule : 1,5 Ko brotli de HTML pour un plafond de 100 Ko, et pour un plafond de 150 Ko de JS
+initial, 119,9 Ko sur `/fr` (6 chunks) et 111,1 Ko sur `/_not-found` (5 chunks) — chunk
+`noModule` exclu, c'est le bundle de compatibilité que jamais aucun navigateur moderne
+n'exécute et il vaut 35 Ko à lui seul.
+
+Ne mesurer que `/fr` a coûté exactement ce que ce genre d'angle mort coûte : le `Link`
+client de next-intl dormait dans le bundle initial de `/_not-found`, la seule route que rien
+ne regardait, pendant que `/fr` était déclaré propre (TIW-28). Le même fichier porte donc
+aussi un garde qui refuse ce `Link` dans tout chunk initial de toute route prérendue, par
+empreinte et non par plafond : à 123,7 Ko la régression passait les 150 Ko sans encombre, et
+un plafond assez serré pour l'attraper aurait refusé les 3 Ko de travail légitime suivants.
 
 **Pas de proxy ni de middleware.** La redirection `/` → `/fr` est une entrée de
 `redirects()` dans `next.config.ts`. Un proxy s'exécuterait en runtime Node sur **chaque**
