@@ -26,7 +26,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   /**
    * The E2E suite runs against a production build: the locale redirect and the
-   * server-rendered map (TIW-11) behave differently under `next dev`, so
+   * server-rendered map (TIW-13) behave differently under `next dev`, so
    * testing dev would test something we never ship.
    *
    * `reuseExistingServer: false` everywhere, CI and workstation alike — that is
