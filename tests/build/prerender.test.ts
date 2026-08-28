@@ -83,15 +83,41 @@ describe("the build output stays prerendered", () => {
 
 /**
  * Every route that is prerendered, and therefore every route with a payload to
- * budget. This used to be `/fr` alone — and TIW-28 is what that cost: 12.4 KB
- * brotli of next-intl's client `Link` and its `use-intl` baggage sat in the
- * initial bundle of `/_not-found`, the one route nothing measured, while `/fr`
- * was reported clean. The `describe.each` below is that hole closed, and it is
- * not cosmetic.
+ * budget — READ FROM THE MANIFEST, never written down here.
+ *
+ * The hardcoded list this replaces is the bug it exists to prevent, and the
+ * project has now paid for it twice. First `/fr` alone was measured, which is
+ * what TIW-28 cost: 12.4 KB brotli of next-intl's client `Link` and its
+ * `use-intl` baggage sat in the initial bundle of `/_not-found` — the one route
+ * nothing looked at — while `/fr` was reported clean. The first fix was to add
+ * `/_not-found` to a two-entry list, which MOVED the hole rather than closing
+ * it: the build also prerenders `/_global-error`, whose 111.1 KB and 5 chunks
+ * still answered to nothing.
+ *
+ * A list derived from the artefact cannot drift from the artefact. It also means
+ * TIW-16's `/fr/voyages/[slug]` pages arrive already budgeted, with no diff here
+ * — the file-name mapping below handles their nesting.
  */
-const PRERENDERED_ROUTES = ["fr", "_not-found"] as const;
+function readPrerenderedRoutes(): string[] {
+  const manifestPath = path.join(NEXT_DIR, "prerender-manifest.json");
+  if (!existsSync(manifestPath)) return [];
 
-const documentHtml = (route: string) => readFileSync(path.join(APP_DIR, `${route}.html`), "utf8");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+    routes?: Record<string, unknown>;
+  };
+
+  return Object.keys(manifest.routes ?? {}).sort();
+}
+
+const PRERENDERED_ROUTES = readPrerenderedRoutes();
+
+/**
+ * `/fr` → `fr.html`, `/_global-error` → `_global-error.html`, and
+ * `/fr/voyages/japon-2024` → `fr/voyages/japon-2024.html`, which is how Next
+ * lays the prerendered documents out under `.next/server/app`.
+ */
+const documentHtml = (route: string) =>
+  readFileSync(path.join(APP_DIR, `${route.replace(/^\//, "")}.html`), "utf8");
 
 /**
  * The `<script src>` chunks a browser fetches before the page is interactive,
@@ -126,7 +152,37 @@ function initialChunks(route: string): { counted: Map<string, number>; excludedN
   return { counted, excludedNoModule };
 }
 
-describe.each(PRERENDERED_ROUTES)("the /%s payload stays within budget", (route) => {
+/**
+ * Guards the derivation itself. Two ways it could go quietly useless: the
+ * manifest is unreadable and the list is empty, so `describe.each` generates no
+ * test at all; or the manifest is readable but the two routes the whole project
+ * rests on are no longer in it. The first would report success by running
+ * nothing, which is the failure mode this entire file exists to refuse.
+ *
+ * Measured on the current build: `['/_global-error', '/_not-found', '/fr']`.
+ */
+describe("the budget knows which routes to measure", () => {
+  it("derives at least the two routes the project cannot lose", () => {
+    expect(
+      PRERENDERED_ROUTES.length,
+      "No prerendered route was derived from the manifest, so every budget below generated zero tests."
+    ).toBeGreaterThanOrEqual(2);
+    expect(PRERENDERED_ROUTES).toContain("/fr");
+    expect(PRERENDERED_ROUTES).toContain("/_not-found");
+  });
+
+  it("has an HTML document on disk for every route it names", () => {
+    for (const route of PRERENDERED_ROUTES) {
+      const file = path.join(APP_DIR, `${route.replace(/^\//, "")}.html`);
+
+      // A manifest entry with no document means the route→file mapping above has
+      // stopped matching Next's output layout, and the budgets would throw.
+      expect(existsSync(file), `${route} is in the manifest but ${file} is missing.`).toBe(true);
+    }
+  });
+});
+
+describe.each(PRERENDERED_ROUTES)("the %s payload stays within budget", (route) => {
   it("keeps the document under the HTML budget", () => {
     const bytes = brotliBytes(Buffer.from(documentHtml(route), "utf8"));
 
@@ -166,6 +222,24 @@ describe.each(PRERENDERED_ROUTES)("the /%s payload stays within budget", (route)
  * on the *identity* of the bytes: next-intl's client `Link` must not appear in
  * any initial chunk of any prerendered route. `src/i18n/pathname.ts` is what
  * keeps it out; this is what notices when it comes back.
+ *
+ * PROVEN BY DELIBERATE FAILURE, which is this repository's standard for a guard
+ * and not a formality. Restore the pre-TIW-28 call site:
+ *
+ *   // src/app/not-found.tsx
+ *   -import { homePathname } from "@/i18n/pathname";
+ *   +import { getPathname } from "@/i18n/navigation";
+ *   -const homeHref = homePathname();
+ *   +const homeHref = getPathname({ href: "/", locale: routing.defaultLocale });
+ *
+ *   npm run build      -> EXIT 0, /fr still ●, /_not-found still ○
+ *   measured           -> /fr 120.2 KB / 7 chunks, /_not-found 123.5 KB / 7
+ *   npm run test:build -> 1 failed | 9 passed
+ *                         "× /_not-found ships no chunk carrying it"
+ *
+ * Both routes stay inside the 150 KB budget while that regression is present, so
+ * the numeric assertions above pass and only this one fails. That is the whole
+ * argument for fingerprinting rather than counting, and it is measured.
  */
 const BASE_LINK_SOURCE = path.resolve(
   import.meta.dirname,
@@ -204,8 +278,28 @@ describe("next-intl's client Link stays out of the initial bundle", () => {
     }
   });
 
-  it.each(PRERENDERED_ROUTES)("/%s ships no chunk carrying it", (route) => {
+  it.each(PRERENDERED_ROUTES)("%s ships no chunk carrying it", (route) => {
     const { counted } = initialChunks(route);
+
+    /**
+     * The same assertion the budget above makes, and it is load-bearing HERE for
+     * a different reason: this test proves a NEGATIVE. `initialChunks` drops
+     * script tags silently in two places — an `src` that does not resolve to a
+     * file on disk, and the `src="..."` pattern itself, which requires double
+     * quotes and a `/_next/` prefix. So the day Next or Turbopack changes how it
+     * declares the initial payload — `<link rel="modulepreload">`, an inline
+     * manifest, single quotes — `counted` becomes empty, `carriers` is `[]`, and
+     * this test would report success WITHOUT HAVING READ A SINGLE BYTE.
+     *
+     * The `fingerprints a BaseLink that is really there` case above does not
+     * cover this path: it greps next-intl's own file in `node_modules`, never the
+     * build output. Nothing else in this file would notice either.
+     */
+    expect(
+      counted.size,
+      `No initial chunk was found for ${route}, so the assertion below would pass by reading nothing. \`initialChunks\` parses <script src="/_next/..."> tags — check whether the build now declares its initial payload some other way.`
+    ).toBeGreaterThan(0);
+
     const carriers: string[] = [];
 
     for (const src of counted.keys()) {
