@@ -121,6 +121,51 @@ Vérifié par sabotage : `getPathname` réintroduit dans un Server Component, le
 build sort en **code 0**, passe le plafond de 150 Ko, et `npm run test:build`
 rougit en nommant le chunk et le remplacement à utiliser.
 
+## Ce que la revue adverse a corrigé
+
+La revue n'a pas réussi à casser `localePathname` : 116 href de type `string`
+comparés à un `getPathname` reconstitué depuis les vrais modules, **zéro écart**.
+Elle a en revanche trouvé deux trous dans le **garde de build**, tous deux
+confirmés par échec volontaire, et deux affirmations fausses dans les
+commentaires.
+
+**`/_global-error` n'était gardée par rien.** La liste des routes était écrite en
+dur (`["fr", "_not-found"]`) alors que le manifeste en contient trois. Le trou
+avait donc été **déplacé**, pas bouché — et il se serait rouvert seul à TIW-16.
+La liste vient maintenant de `Object.keys(manifest.routes)` : une liste dérivée
+de l'artefact ne peut pas diverger de l'artefact. Prouvé en ajoutant une page :
+`/fr/probe-route` est mesurée nommément par trois tests, sans toucher au fichier
+de test. `/_global-error` mesure 2,0 Ko de HTML et 111,1 Ko de JS sur 5 chunks,
+donc elle passe les plafonds existants sans en mériter un à elle.
+
+**Le test d'empreinte pouvait passer sans rien lire.** Il appelait
+`initialChunks` sans le `counted.size > 0` que le test de budget, lui, fait. Une
+version de Next déclarant sa charge initiale autrement (`modulepreload`,
+manifeste inline) vidait `counted`, laissait `carriers` à `[]`, et le test
+annonçait un succès sur zéro octet. Prouvé : motif `src` cassé, les trois tests
+d'empreinte sont **verts** avant le correctif et rouges après.
+
+**Un terme de condition était mort.** `hasScheme` ne pouvait jamais décider :
+une chaîne qui satisfait `/^[a-z]+:/i` commence par une lettre, donc pas par `/`,
+donc `isRelative` avait déjà tranché. Vérifié sur 26 orthographes. Le terme est
+retiré — mais le vrai défaut était le commentaire, qui annonçait « une branche =
+une fonction amont » alors que `isLocalHref` n'est pas redondant **chez
+l'amont** : il traite aussi la forme objet.
+
+**Le différentiel ne tournait que sur la locale par défaut.** Il tourne
+maintenant sur `routing.locales`, et une alarme dédiée refuse un `prefixes`
+personnalisé — la simplification `` `/${locale}` `` face à `getLocalePrefix` est
+le seul vrai pari du fork.
+
+## Le déclencheur de suppression, qui manquait
+
+L'instruction « supprimer ce module le jour où next-intl corrige » n'avait aucun
+déclencheur : rien n'aurait jamais dit que ce jour était arrivé. Un test assure
+désormais que le couplage **existe encore** dans le paquet publié de next-intl,
+et rougit avec la marche à suivre quand il disparaît. Lire les entrailles d'une
+dépendance est normalement une mauvaise idée ; ici c'est exactement le sujet,
+puisque le défaut est un détail d'empaquetage.
+
 ## Conséquences
 
 **Ce qu'on gagne.** `/fr` passe de 120,2 Ko et 7 chunks à **119,9 Ko et
