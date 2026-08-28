@@ -1,0 +1,228 @@
+/* =============================================================================
+   World map — the whole component's styling, and its whole behaviour.
+
+   There is no JavaScript for this map (TIW-13 ships 0 byte of it), so every
+   state below is a CSS state. Only existing tokens from `src/styles/tokens.css`
+   are used: no colour is declared here, which is what keeps the dark theme
+   working without this file knowing that it exists.
+   ============================================================================ */
+
+.figure {
+  /* `<figure>` carries a 40 px UA margin; the page owns spacing, not the map. */
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /**
+   * Room for the half of a marker that hangs outside the canvas.
+   *
+   * A marker is centred on its point by `translate(-50%, -50%)`, so one sitting
+   * at `leftPercent: 0` — reachable: `projectPoint` puts the westernmost land at
+   * x = 6.3 in a 960-wide world — puts its own left edge 22 px outside the
+   * canvas, plus 4 px of focus ring. `main` only offers 24 px of padding
+   * (`tokens.css`), so at a 320 px viewport the page gained a 2 px horizontal
+   * scrollbar (WCAG 1.4.10). Eight more pixels close it.
+   *
+   * NOT `overflow: hidden` on the canvas, which is the obvious fix and the wrong
+   * one: it would clip both the interaction target and the focus ring of every
+   * edge marker.
+   */
+  padding-inline: var(--space-2);
+}
+
+/**
+ * The positioning context shared by the drawing and the markers. Deliberately
+ * NOT `overflow: hidden`: the markers are 44 px boxes centred on their point, so
+ * a trip close to an edge of the frame would have half its interaction target
+ * clipped away. The rounded corners are applied to the `<svg>` instead, which
+ * clips its own drawing to its viewport anyway.
+ */
+.canvas {
+  position: relative;
+  /* Exactly the `viewBox`'s ratio, passed in as a custom property by the
+     component. Any other value letterboxes the SVG and every marker drifts off
+     the country it names. */
+  aspect-ratio: var(--frame-aspect);
+  width: 100%;
+}
+
+.map {
+  display: block;
+  width: 100%;
+  /* Overrides the `img, svg { height: auto }` of the global base: the drawing
+     has to fill the ratio-locked box, not re-derive a height from its own. */
+  height: 100%;
+  background: var(--surface);
+  /* Same reason as the coastline below: `--border-subtle` measures 1.34:1
+     against the page background, so the map had no perceivable edge at all.
+     `--control-border` is the token documented `>= 3:1`. */
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+  /* The other half of "not actionable must not look like a button": with the
+     shapes unable to answer a pointer at all, no country can be hovered,
+     dragged or clicked — there is no rule left to forget. */
+  pointer-events: none;
+}
+
+/**
+ * Land, and land only. No `:hover`, no `cursor`, no transition anywhere in this
+ * block or the next: a tint means "there is a trip here", it is information, and
+ * an affordance would promise an interaction that does not exist until TIW-14.
+ *
+ * **The coastline carries the map, not the fill.** Measured: land composed over
+ * sea is 1.08:1 in the light theme and 1.17:1 in the dark one — the continents
+ * are, as fills, invisible. So the only thing that draws the world is this
+ * stroke, which makes it a graphical object required to understand the content
+ * (WCAG 1.4.11, 3:1). `--border-subtle` scored 1.37:1 and its own declaration in
+ * `tokens.css` says `decorative only`; `--control-border` is the token the
+ * palette documents as `>= 3:1` and measures 4.26:1 against land and 3.93:1
+ * against sea in the light theme, 4.48 and 5.26 in the dark one.
+ */
+.land path {
+  fill: var(--surface-muted);
+  stroke: var(--control-border);
+}
+
+/**
+ * A visited country is distinguished by **three** channels, and that is not
+ * belt-and-braces.
+ *
+ * The fill alone cannot do it: composed over neutral land, `--accent-quiet`
+ * measures 1.16:1 in the light theme, and no alpha fixes it — measured, α=0.5
+ * reaches 1.98:1 and α=0.8 only 3.15:1, by which point the map is a flat wash.
+ * So the contrast is carried by the outline, in `--text-accent`: 7.03:1 against
+ * neutral land, well past the 3:1 of 1.4.11.
+ *
+ * And the outline is also **thicker**, which is the part that matters for 1.4.1
+ * (use of colour): a heavier line is a non-colour visual cue, so the distinction
+ * survives for a reader who cannot separate the two hues at all. The fill stays
+ * as reinforcement, because it is what makes the map readable at a glance for
+ * everyone else.
+ */
+.visited path {
+  fill: var(--accent-quiet);
+  stroke: var(--text-accent);
+  stroke-width: 2;
+}
+
+.land path,
+.visited path {
+  /* Stroke width is in user units, so a cropped frame would scale it: at the
+     0.3-world-width floor `frameAround` applies to a single trip, a 1-unit
+     border renders over 3 px. `non-scaling-stroke` pins it to device pixels
+     whatever the crop — which is also what keeps the 1 px / 2 px difference
+     above legible instead of letting the crop swallow it. */
+  vector-effect: non-scaling-stroke;
+}
+
+.land path {
+  stroke-width: 1;
+}
+
+/**
+ * The markers are HTML over the SVG, not shapes inside it. That is the only
+ * arrangement in which the 44 px target is genuinely independent of the drawn
+ * icon and of the crop: a `<circle r="6">` grows and shrinks with the `viewBox`,
+ * an `<a>` sized in `rem` does not.
+ */
+.marks {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* Keeps the per-marker `z-index` below from competing with anything the page
+     stacks around the map. */
+  isolation: isolate;
+  /* Only the links are targets; the list is a transparent sheet over the map. */
+  pointer-events: none;
+}
+
+.mark {
+  position: absolute;
+  left: var(--mark-left);
+  top: var(--mark-top);
+  /* The percentages place the marker's top-left corner; this pulls it back by
+     half its own size so the drawn dot sits on the projected point. */
+  transform: translate(-50%, -50%);
+  /* Inverted DOM order, computed at build time: siblings paint in DOM order, so
+     without this the first tab stop (the most recent trip) would be painted
+     underneath every older marker overlapping it. */
+  z-index: var(--mark-order);
+}
+
+/**
+ * A focused marker is the one the reader is aiming for: it comes out from under
+ * its neighbours so its focus ring is whole (WCAG 2.4.11).
+ *
+ * **Focus only, not hover.** With both raised by the same amount, a *hovered*
+ * marker of order 50 painted at z-index 1050, above a *focused* marker of order
+ * 5 at 1005 — a pointer resting anywhere near the map could cover the keyboard's
+ * focus ring. Hover has no claim on being on top; it already has the dot's
+ * `scale(1.3)` as its feedback.
+ */
+.mark:focus-within {
+  z-index: calc(var(--mark-order) + 1000);
+}
+
+.link {
+  display: grid;
+  place-items: center;
+  /* 2.75rem = 44 px at the root size — WCAG 2.2 target size (minimum), and the
+     acceptance criterion's "at least 44 px, independent of the drawn icon". In
+     `rem` rather than `px` so it grows with a reader's larger default size. */
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: var(--radius-pill);
+  /* Re-armed against the `pointer-events: none` of the list above. */
+  pointer-events: auto;
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.link:hover {
+  background: var(--accent-quiet);
+}
+
+.dot {
+  inline-size: var(--space-3);
+  block-size: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  /* A ring, not a border: it separates the dot from whichever tint it lands on —
+     tinted land, neutral land or sea — without changing its size. */
+  box-shadow: 0 0 0 2px var(--text-on-accent);
+  transition: transform 120ms ease;
+}
+
+.link:hover .dot,
+.link:focus-visible .dot {
+  transform: scale(1.3);
+}
+
+/**
+ * Real text, present in the accessibility tree, removed only from the visual
+ * layout. `display: none` and `visibility: hidden` are excluded: both drop the
+ * text from the tree, which would leave a link unnamed and a caption silent.
+ *
+ * Used twice — for a marker's accessible name, and for the list of visited
+ * countries under the caption. Out of flow, so it changes neither the 44 px box
+ * of a marker nor the height of the caption, and `white-space: nowrap` inside a
+ * 1 px box cannot scroll anything.
+ */
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.caption {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
