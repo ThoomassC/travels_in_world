@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { SiteNav } from "@/components/site/site-nav";
 import { routing } from "@/i18n/routing";
 import "@/styles/tokens.css";
 
@@ -53,7 +54,23 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
   return (
     <html lang={locale}>
       <body>
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <NextIntlClientProvider>
+          {/*
+            The main navigation lives in the layout and not in each page, so that
+            every route under `[locale]` — the trip pages of TIW-16 included —
+            carries it without doing anything. It is two plain anchors and zero
+            byte of JavaScript; the one thing it gives up for that is
+            `aria-current="page"`, and `SiteNav` records why at length.
+
+            Inside the provider rather than around it: a Server Component reading
+            `useTranslations` needs the request configuration, which
+            `setRequestLocale` above has just set, and keeping the nav in the same
+            subtree as the pages means one place decides what "the current locale"
+            is.
+          */}
+          <SiteNav locale={locale} />
+          {children}
+        </NextIntlClientProvider>
       </body>
     </html>
   );

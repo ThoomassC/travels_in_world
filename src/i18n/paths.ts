@@ -35,3 +35,15 @@ export const TRIP_SEGMENT = "voyages";
 export function tripPath(slug: string): string {
   return `/${TRIP_SEGMENT}/${slug}`;
 }
+
+/**
+ * The full listing — the index of the collection {@link tripPath} addresses an
+ * item of, and the second entry of the main navigation.
+ *
+ * It is a function rather than a constant so that the two paths of this module
+ * read alike at every call site, and so that the day `TRIP_SEGMENT` becomes a
+ * translated `pathnames` entry there is one shape to change and not two.
+ */
+export function tripsPath(): string {
+  return `/${TRIP_SEGMENT}`;
+}

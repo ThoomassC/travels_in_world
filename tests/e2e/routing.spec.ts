@@ -11,15 +11,77 @@ test("the bare root redirects to the default locale", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
 });
 
-test("the French home page renders the placeholder from the message catalogue", async ({
+/**
+ * The home page's first screen, asserted against the state production is really
+ * in: `content/trips` is empty, so this is what a reader sees today.
+ */
+test("the French home page carries the sentence, the map and an honest empty block", async ({
   page,
 }) => {
   await page.goto("/fr");
 
   await expect(page.getByRole("heading", { level: 1, name: frMessages.home.title })).toBeVisible();
+  await expect(page.getByText(frMessages.home.intro)).toBeVisible();
+  // The map is a `<figure>` carrying a counted caption — see TIW-13.
+  await expect(page.getByRole("figure")).toBeVisible();
+
+  // No trip published: the waiting message, and NOT a "Derniers voyages" heading
+  // above nothing. That distinction is an acceptance criterion, not a nicety.
   await expect(
-    page.getByRole("heading", { level: 2, name: frMessages.home.placeholderHeading })
+    page.getByRole("heading", { level: 2, name: frMessages.home.emptyHeading })
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: frMessages.home.latestHeading })
+  ).toHaveCount(0);
+});
+
+test("the main navigation reaches the full listing, at the same level as the map", async ({
+  page,
+}) => {
+  await page.goto("/fr");
+
+  const nav = page.getByRole("navigation", { name: frMessages.trips.navLabel });
+  await expect(nav.getByRole("link", { name: frMessages.trips.navMap })).toBeVisible();
+
+  await nav.getByRole("link", { name: frMessages.trips.navAll }).click();
+
+  // The listing is the index of the collection the trip pages are items of, so
+  // its URL is `tripsPath()` — built on the same segment as `tripPath()`.
+  await expect(page).toHaveURL(/\/fr\/voyages$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: frMessages.trips.allHeading })
+  ).toBeVisible();
+});
+
+/**
+ * "Rendered by the server and readable without JavaScript" is an acceptance
+ * criterion, and switching JavaScript off is the only way to assert it: a green
+ * suite in a JavaScript-enabled browser cannot tell a server-rendered page from
+ * one that hydration filled in.
+ *
+ * `browser.newContext` does not inherit the project's `use`, hence the explicit
+ * `baseURL` — without it `page.goto("/fr/voyages")` throws on a relative URL.
+ */
+test("the full listing is readable with JavaScript disabled", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+  const page = await context.newPage();
+
+  try {
+    const response = await page.goto("/fr/voyages");
+
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByRole("heading", { level: 1, name: frMessages.trips.allHeading })
+    ).toBeVisible();
+    // Empty today, so what has to be readable is the waiting message and the way
+    // back to the map — a page with neither is a dead end.
+    await expect(
+      page.getByRole("heading", { level: 2, name: frMessages.trips.emptyHeading })
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: frMessages.trips.emptyBackHome })).toBeVisible();
+  } finally {
+    await context.close();
+  }
 });
 
 test("an unknown path under the active locale renders the localised 404", async ({ page }) => {

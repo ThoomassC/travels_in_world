@@ -5,9 +5,33 @@
   },
   "home": {
     "title": "Travels in World",
-    "tagline": "Carnet de voyages",
-    "placeholderHeading": "Socle en place",
-    "placeholderBody": "La carte du monde et les pages de voyage arrivent dans les prochains lots. Cette page est volontairement un placeholder."
+    "intro": "Un carnet de voyages : une carte du monde semée de balises, et un récit par voyage — les étapes, les dates, les photos. Ouvrez une balise sur la carte, ou parcourez la liste complète.",
+    "latestHeading": "Derniers voyages",
+    "latestAll": "Voir tous les voyages",
+    "emptyHeading": "Le carnet commence ici",
+    "emptyBody": "Aucun voyage n’est encore publié. La carte ci-dessus se remplira balise par balise, dès le premier récit."
+  },
+  "trips": {
+    "navLabel": "Navigation principale",
+    "navMap": "Carte",
+    "navAll": "Tous les voyages",
+    "metaTitle": "Tous les voyages",
+    "metaDescription": "La liste complète des voyages du carnet, groupée par continent puis par pays.",
+    "allHeading": "Tous les voyages",
+    "allIntro": "{count, plural, one {# voyage, groupé par continent puis par pays, du plus récent au plus ancien.} other {# voyages, groupés par continent puis par pays, du plus récent au plus ancien.}}",
+    "continentCount": "{count, plural, one {# voyage} other {# voyages}}",
+    "emptyHeading": "Aucun voyage publié",
+    "emptyBody": "Le carnet est encore vide. Les récits apparaîtront ici, groupés par continent puis par pays, dès le premier voyage publié.",
+    "emptyBackHome": "Retour à la carte",
+    "cardDuration": "{days, plural, one {# jour} other {# jours}}",
+    "cardRead": "Lire le récit",
+    "continentAfrica": "Afrique",
+    "continentAmericas": "Amériques",
+    "continentAntarctica": "Antarctique",
+    "continentAsia": "Asie",
+    "continentEurope": "Europe",
+    "continentOceania": "Océanie",
+    "continentUnplaced": "Ailleurs"
   },
   "map": {
     "summary": "Carte du monde : {trips, plural, =0 {aucun voyage publié} one {# voyage} other {# voyages}}, {countries, plural, =0 {aucun pays} one {# pays} other {# pays}}",

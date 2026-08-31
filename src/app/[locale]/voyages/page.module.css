@@ -1,0 +1,52 @@
+/* =============================================================================
+   "Tous les voyages" — the full listing page.
+   ============================================================================ */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: var(--text-display-sm);
+}
+
+.intro {
+  color: var(--text-muted);
+  /* A measure, not a width — the same reason as the home page's intro. */
+  max-width: 60ch;
+}
+
+/**
+ * Nothing published yet. Not a "0 voyage" counter above an empty list: a heading
+ * with nothing under it reads as a broken page, and the acceptance criterion is
+ * explicit that no empty block is rendered.
+ */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface);
+  /* `--control-border` and not `--border-subtle`, which its own declaration in
+     `tokens.css` marks `decorative only` at 1.37:1. This box is the entire
+     content of the page; its edge has to be perceivable. */
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+}
+
+.emptyBody {
+  color: var(--text-muted);
+  max-width: 55ch;
+}
+
+.emptyLink {
+  /* 44 px of target (WCAG 2.2, 2.5.8) in `rem`, so it grows with a reader's
+     larger default size. This is the page's only way out when it is empty. */
+  min-block-size: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  font-weight: var(--weight-medium);
+}

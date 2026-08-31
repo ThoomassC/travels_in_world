@@ -1,0 +1,50 @@
+/* =============================================================================
+   Main navigation — two entries, no JavaScript, no colour of its own.
+
+   Only tokens from `src/styles/tokens.css` are used, which is what keeps the
+   dark theme working without this file knowing that it exists.
+   ============================================================================ */
+
+.header {
+  /* Aligned on `main`'s own measure (`tokens.css`) so the nav's first letter
+     sits above the page's first letter rather than floating. `--space-5` is
+     `main`'s inline padding; the block padding is deliberately smaller than
+     `--section-space`, because a header is chrome and not a section. */
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+  padding: var(--space-4) var(--space-5) 0;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  /* 2.75rem = 44 px at the root size — WCAG 2.2 target size (minimum), in `rem`
+     so it grows with a reader's larger default size. The inline padding is what
+     makes the two entries distinguishable as targets rather than as words in a
+     sentence. */
+  min-block-size: 2.75rem;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-pill);
+  color: var(--text-accent);
+  font-weight: var(--weight-medium);
+  /* No underline here, and it is not a bare removal: these two are the only
+     links outside the page's prose, they are the sole content of a labelled
+     `<nav>`, and the pill below carries the hover state. WCAG 1.4.1 is about
+     conveying information by colour — a navigation landmark is structure, not
+     information inside a paragraph. */
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.link:hover {
+  background: var(--accent-quiet);
+}
