@@ -52,7 +52,13 @@
   bottom: 0;
   width: 2px;
   transform: translateX(-50%);
-  background: var(--border-subtle);
+  /* `--control-border` (3.22:1 light, 5.99:1 dark) and not `--border-subtle`,
+     which measures 1.34:1 and whose own declaration in `tokens.css` says
+     "decorative only". This rail is not decorative: it is the only thing that
+     says the blocks are one continuous itinerary and not nine separate cards,
+     which a low-vision reader loses first. It is also the token the marker
+     beside it already uses. */
+  background: var(--control-border);
 }
 
 .stay:last-child,

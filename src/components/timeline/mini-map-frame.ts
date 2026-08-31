@@ -86,10 +86,7 @@ function toFrame(x: number, y: number, width: number, height: number): MiniMapFr
  * rendering of "we could not place this trip"; a zero-width frame would divide
  * by zero in the marker placement and put every marker at `Infinity%`.
  */
-export function miniMapFrame(
-  points: readonly MiniMapPoint[],
-  world: MiniMapWorld
-): MiniMapFrame {
+export function miniMapFrame(points: readonly MiniMapPoint[], world: MiniMapWorld): MiniMapFrame {
   if (!(Number.isFinite(world.width) && Number.isFinite(world.height))) {
     throw new TypeError(
       `The world box must be two finite numbers; received ${world.width} × ${world.height}.`

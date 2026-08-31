@@ -56,7 +56,12 @@
   padding: 0;
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  /* `min(100%, …)` and not `14rem` alone: a track that cannot shrink below its
+     floor overflows the viewport once the reader raises the browser's default
+     font size — a setting distinct from page zoom, which this page already
+     passes. Measured at 320 px wide: 372 px of scrollWidth at a 24 px default,
+     496 px at 32 px. `trip-card.module.css` already carries this pattern. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
   gap: var(--space-4);
 }
 

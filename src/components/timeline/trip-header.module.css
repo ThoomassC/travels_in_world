@@ -29,7 +29,10 @@
 .facts {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  /* See the gallery in `page.module.css`: the floor has to be able to give way
+     when the reader's default font size grows, or the whole page scrolls
+     sideways. This grid was the worse of the two, at a 32 px default. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
   gap: var(--space-3) var(--space-5);
 }
 
@@ -94,7 +97,12 @@
   /* 44 px of height at the root size — WCAG 2.2 target size (minimum). */
   min-block-size: 2.75rem;
   padding-inline: var(--space-4);
-  border: 1px solid var(--accent-quiet-border);
+  /* `--accent` (3.27:1) and not `--accent-quiet-border` (1.66:1): these two links
+     are the page's only ways out, and with the quiet border the pill was
+     invisible in the light theme — they read as coloured text, 1.54:1 away from
+     the body text. Not a 1.4.11 failure (they sit in a labelled `<nav>` and
+     their text is at 4.66:1), but the affordance was carried by colour alone. */
+  border: 1px solid var(--accent);
   border-radius: var(--radius-pill);
   background: var(--accent-quiet);
   color: var(--text-accent);
