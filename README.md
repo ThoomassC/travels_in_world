@@ -252,6 +252,33 @@ nécessaire à la compréhension ; la distinction visité / non visité est port
 en `--text-accent` **et par son épaisseur**, parce qu'aucune valeur de remplissage ne dépasse
 3:1 en thème clair et qu'un canal non coloré est nécessaire.
 
+**L'équivalent textuel de la carte est un composant à part, pas un bloc masqué**
+(`src/components/map/visited-countries.tsx`, TIW-15) : sous la carte, la liste des pays
+visités avec le nombre de voyages de chacun, chaque pays étant un lien vers la section de ce
+pays dans `/voyages`. Trois choses à savoir avant d'y toucher :
+
+1. **Il relie, il ne duplique pas.** `/voyages` est déjà l'inventaire complet de « quels
+   voyages, où » (`h2` continent → `h3` pays → `h4` voyage) ; le refaire sous la carte
+   donnerait deux inventaires à tenir d'accord. Ce qui manquait était le **compte par pays**,
+   qui n'existait dans aucun canal, et le lien vers le groupe qu'il compte. Le fragment a une
+   seule définition, `countryAnchor` dans `src/i18n/paths.ts`, appelée par les deux côtés :
+   un fragment qui ne correspond à rien n'échoue pas, il dépose le lecteur en haut d'une page
+   de soixante voyages. `tests/components/map/country-anchor.test.tsx` compare les deux côtés.
+2. **La légende ne promet plus le monde quand le cadre est recadré.** `frameAround` plancher
+   un cadre à 30 % de la largeur du monde, donc avec **un** voyage publié la carte montrait un
+   continent sous une légende disant « Carte du monde : 1 voyage, 1 pays ». Deux clés
+   (`map.summary`, `map.summaryCropped`) et un test qui assère le libellé **contre le
+   `viewBox` rendu**, pas contre une capture.
+3. **Aucun cadre vide.** Sans géométrie, le `<svg>` était une boîte au rapport verrouillé
+   contenant du vide, sans une erreur ni une ligne de console. `WorldMap` ne rend alors pas la
+   boîte du tout : une phrase prend sa place, et la liste des pays reste à côté.
+
+L'énumération masquée des pays visités qui vivait dans le `<figcaption>` a été **retirée** :
+un `<figcaption>` est le **nom accessible** du `<figure>` (HTML-AAM), et quarante noms de pays
+dans un nom accessible n'est pas un libellé. La liste visible la remplace sur tous les plans —
+noms visibles, comptés, et cliquables. `docs/adr/0003-carte-svg-inerte-et-balises-html.md` en
+décrit encore l'ancienne version : à reprendre avec TIW-27.
+
 **Dépendances écartées** (délibérément, ne pas les rajouter sans ticket) : bibliothèque de
 carte côté client (Leaflet, MapLibre), gestionnaire d'état (Redux, Zustand), client HTTP ou
 React Query, bibliothèque de formulaires, Tailwind, bibliothèque d'icônes React
@@ -296,6 +323,30 @@ Pour s'en passer, `agentRules: false` dans `next.config.ts`.
   dédié (`E2E_PORT`, 3277 par défaut) avec `reuseExistingServer: false`. Les deux comptent :
   sur le port 3000 et avec la réutilisation, la suite s'accrochait au `next dev` du poste et
   passait au vert contre du HTML de développement, sans aucun build.
+- **`npm run test:e2e` lance Playwright deux fois, séquentiellement, et fait donc deux
+  builds.** `playwright.content.config.ts` d'abord (port 3278, le contenu de
+  `tests/fixtures/content/home-map` via `TIW_CONTENT_DIR`, les specs `*.populated.spec.ts`),
+  puis `playwright.config.ts` (port 3277, le `content/trips` du dépôt, tout le reste). Les
+  deux états sont réels et aucun ne couvre l'autre : le dépôt est vide jusqu'à TIW-24, donc
+  l'accueil n'y a aucune balise, aucun pays et aucun compte à vérifier — or l'équivalent
+  textuel de la carte (TIW-15) existe précisément pour donner le nombre de voyages par pays.
+  Les specs peuplées comptent ; celles du dépôt vérifient le bloc de repli. Deux serveurs
+  dans une seule config a été essayé puis écarté : deux `next build` concurrents dans un même
+  `.next` s'écrasent, et donner un `distDir` au second ajoute à la racine un répertoire de
+  build que `eslint .` parcourt — ESLint ne lit pas `.gitignore`. **L'ordre compte** : la
+  config peuplée passe en premier, donc le `.next` qui reste sur le disque est celui du
+  contenu réel, ce que `npm run test:build` attend.
+- **L'audit d'accessibilité est automatisé** (`tests/e2e/support/axe.ts`) : axe-core est
+  injecté dans la page servie et interrogé sur les tags WCAG 2.2 AA, dans les deux thèmes —
+  chaque couleur venant d'un jeton redéclaré sous `prefers-color-scheme: dark`, une faute de
+  contraste peut n'exister que dans l'un des deux. `axe-core` est une `devDependency`
+  explicite, promue depuis la dépendance transitive de `eslint-plugin-jsx-a11y` : aucun
+  téléchargement, deux lignes de `package-lock.json`, zéro octet côté client. Une seule
+  violation est tolérée, nommée et confinée — `target-size` sur les **balises** de la carte,
+  qui se recouvrent dès que deux voyages sont proches à l'échelle du rendu. Elle est
+  préexistante (mesurée à l'identique sur la branche de base), documentée dans
+  `docs/adr/0003-carte-svg-inerte-et-balises-html.md` et attribuée à TIW-14 ; l'exception ne
+  couvre que cette règle, et seulement tant que tous ses nœuds sont dans le `<figure>`.
 - `tests/setup.ts` neutralise le `localStorage` natif de Node 25, qui masque celui de jsdom.
   Ne pas le supprimer sans lire le commentaire. `tests/storage.test.ts` verrouille le
   contrat du stub (accès par propriété nommée, énumération, conversion des clés, absence de
