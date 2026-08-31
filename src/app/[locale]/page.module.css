@@ -1,0 +1,54 @@
+/* =============================================================================
+   Home page — the first screen: what this is, the map, and the start of the
+   latest-trips block.
+   ============================================================================ */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.title {
+  font-size: var(--text-display-md);
+}
+
+.intro {
+  color: var(--text-muted);
+  font-size: var(--text-md);
+  /* A measure, not a width: this is the one paragraph on the page that says what
+     the site is, and past ~70 characters a line loses its reader between the end
+     of one and the start of the next. */
+  max-width: 60ch;
+}
+
+/**
+ * The map is capped by the **viewport's height**, and that is the acceptance
+ * criterion rather than a taste: "the first screen carries a sentence, the map,
+ * AND the visible start of the latest-trips block — at least one thumbnail begun
+ * on mobile". A map that fills the fold produces, in the ticket's words, a
+ * beautiful mute screen.
+ *
+ * On a phone nothing here applies: the map's frame always has the projected
+ * world's ratio (≈1.92, forced by step 5 of `frameAround`), so at 320 px wide it
+ * is about 150 px tall and the block below it is already on screen. `min(100%, …)`
+ * is what makes that a no-op instead of a shrunken map.
+ *
+ * On a 1152 × 800 desktop the cap is what earns the room. 45 vh is 360 px of map,
+ * so 691 px wide — measured against ~92 px of `--section-space`, a ~48 px title,
+ * a two-line intro and the gaps, the "Derniers voyages" heading lands around
+ * 620 px and its first thumbnail is begun. Without the cap the map is 1152 × 600
+ * and the heading falls below the fold.
+ *
+ * `--world-aspect` is passed inline by the page because a number computed at
+ * build time has no other way into a CSS declaration without JavaScript — the
+ * same irreducible inline style `docs/adr/0003-carte-svg-inerte-et-balises-html.md`
+ * records for the marker layer, and with a gentler failure: under a future CSP
+ * with no `style-src 'unsafe-inline'` the custom property is undefined, the whole
+ * declaration is invalid, and the map is simply full width again.
+ */
+.mapFrame {
+  inline-size: 100%;
+  max-inline-size: min(100%, calc(45vh * var(--world-aspect)));
+  margin-inline: auto;
+}

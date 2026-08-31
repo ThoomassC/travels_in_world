@@ -186,6 +186,21 @@ describe("WorldMap", () => {
 
       expect(screen.getByRole("list")).toHaveAccessibleName(frMessages.map.markListLabel);
     });
+
+    it("carries the fragment the trip page links back to", () => {
+      /**
+       * The trip page links to `/fr/#voyage-<slug>`. Nothing on the home page
+       * carried that `id` — verified in the served HTML — so the fragment matched
+       * nothing and the reader landed at the top of the page.
+       *
+       * The spelling is asserted rather than derived, and that is the point: the
+       * prefix is duplicated by hand between the two sides, so this test is what
+       * makes a rename on either side visible.
+       */
+      const { container } = renderMap({ marks: [CENTRED_MARK] });
+
+      expect(container.querySelector(`#voyage-${CENTRED_MARK.slug}`)?.tagName).toBe("LI");
+    });
   });
 
   describe("with sixty published trips", () => {
@@ -227,6 +242,19 @@ describe("WorldMap", () => {
       const { container } = renderMap({ marks: SIXTY_MARKS });
 
       expect(viewBoxOf(container)).toBe("0 0 960 500");
+    });
+
+    it("gives every marker its own id, with no duplicate among sixty", () => {
+      // A duplicate `id` is invalid HTML that nothing reports: the browser
+      // silently scrolls to the first match, so a fragment would quietly point
+      // at the wrong trip. `mark.slug` is the façade's primary key, and this is
+      // what holds that assumption to sixty trips.
+      const { container } = renderMap({ marks: SIXTY_MARKS });
+
+      const ids = [...container.querySelectorAll("li[id]")].map((item) => item.id);
+
+      expect(ids).toEqual(SIXTY_MARKS.map((mark) => `voyage-${mark.slug}`));
+      expect(new Set(ids).size).toBe(SIXTY_MARKS.length);
     });
   });
 

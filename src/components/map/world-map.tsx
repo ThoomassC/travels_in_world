@@ -196,7 +196,35 @@ export function WorldMap({ countries, visited, marks, world }: WorldMapProps): R
               };
 
               return (
-                <li key={mark.slug} className={styles.mark} style={markStyle}>
+                /*
+                  `id="voyage-<slug>"` is the fragment the trip page already
+                  links back to. Before it existed, `/fr/#voyage-japon-2024` —
+                  verified in the served HTML — matched nothing and the reader
+                  landed at the top of the home page: a promise the URL made and
+                  the document did not keep.
+
+                  On the `<li>` and not on the `<a>`, so the browser's sequential
+                  navigation starting point lands on the marker rather than past
+                  it: after following the fragment, the next Tab reaches this
+                  trip's own link. Uniqueness comes from `mark.slug`, which is
+                  the content façade's primary key for a trip — one marker per
+                  trip, so no duplicate `id` is possible.
+
+                  This is the whole of what this component does about the
+                  fragment: it costs no JavaScript and it invents no URL, which
+                  is what keeps `docs/adr/0003-carte-svg-inerte-et-balises-html.md`
+                  intact. The `voyage-` prefix is duplicated by hand between here
+                  and whatever builds those links — `src/i18n/paths.ts` has no
+                  helper for a fragment today — so the test in
+                  `tests/components/map/world-map.test.tsx` is what pins the
+                  spelling on this side.
+                */
+                <li
+                  key={mark.slug}
+                  id={`voyage-${mark.slug}`}
+                  className={styles.mark}
+                  style={markStyle}
+                >
                   {/*
                     `mark.href` is rendered as-is, in a bare `<a>`. The locale
                     prefix is the page's job (`@/i18n/navigation`); this
