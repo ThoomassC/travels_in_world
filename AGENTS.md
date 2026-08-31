@@ -37,7 +37,7 @@ visionneuse photo. Tout autre `'use client'` se justifie en revue. `src/domain/*
 TypeScript pur — ni React, ni Next, ni `fs`, ni `d3`.
 
 `src/map/**` s'atteint par sa façade `@/map`, **seul** module du dossier à porter
-`import "server-only"` : le build casse si un composant client l'atteint. Les cinq modules
+`import "server-only"` : le build casse si un composant client l'atteint. Les quatre modules
 internes en sont nus, délibérément, pour rester chargeables par Vitest et par les scripts
 Node. C'est la règle ESLint `travels-in-world/map-entry-point` qui interdit à tout `src/**`
 hors `src/map/**` de les importer en profondeur — ainsi que `world-atlas`, `d3-*` et
@@ -45,6 +45,19 @@ hors `src/map/**` de les importer en profondeur — ainsi que `world-atlas`, `d3
 `import type` depuis la façade est effacé à la compilation et ne déclenche pas le guard :
 c'est la façon de partager un type de frontière sans importer de code. Voir
 `docs/adr/0002-facade-serveur-gardee.md`.
+
+`src/iso-3166.ts` est le seul module à la racine de `src/`, et il l'est depuis TIW-29. C'est
+la transcription des 249 codes ISO 3166-1 alpha-2 attribués, avec deux consommateurs dans deux
+couches qui ne peuvent pas s'atteindre : la jointure de `src/map/world.ts`, et le prédicat
+`isAssignedCountryCode` dont `src/content/validate.ts` a besoin pour refuser un code pays
+qu'aucune carte ne peut dessiner. Les trois autres routes ont été mesurées et écartées — la
+façade `@/map` échoue à la _résolution_ sous Node nu (`Cannot find package 'server-only'`),
+l'import profond `@/map/iso-3166` est refusé par `map-entry-point`, et une troisième copie des
+249 lignes ne se justifiait pas. `src/domain/**` continue de ne pas pouvoir l'atteindre —
+`domain-purity` refuse tout `@/*`, mesuré — ce qui est exactement ce qui garde
+`docs/adr/0001-domain-purity.md` intact : le domaine valide la _forme_ d'un code, ce module
+connaît le monde, et `src/content` est la couche qui refuse du contenu. L'en-tête du module
+porte les trois mesures.
 
 `src/content/**` **ne le porte pas**, délibérément : c'est du code Node exécutable, que
 `npm run validate:content`, `npm run geocode`, `npm run new-trip` et Vitest chargent sous Node
@@ -72,7 +85,11 @@ fusionner. Le bloc `content-facade` répète donc la frontière de la carte, `ma
 lève à l'intérieur de `src/map/**` — où `d3-geo`, `topojson-client` et `world-atlas` sont chez
 eux — et `i18n-navigation` relève les deux tout en levant la seule interdiction de navigation.
 Aucune de ces répétitions n'est de la redondance : supprimer l'une d'elles fait rougir
-`npm run test:lint`, et rien d'autre.
+`npm run test:lint`, et rien d'autre. Une nuance mesurée pendant TIW-27 : c'est vrai des
+**répétitions**, pas de `map-internals`, qui est une _exemption_ — le neutraliser casse
+aussi `npm run lint` sur quatre fichiers réels de `src/map/**`. Et attention au piège
+inverse, mesuré et documenté nulle part ailleurs : écrire `["error"]` seul dans un bloc
+plus tardif n'annule pas les options du bloc antérieur, il les **hérite**.
 
 Ce que les tests couvrent, et ce qu'ils ne couvrent pas : le seul exécuteur réel de
 `server-only` est le bundler de `next build`, qu'aucun test de ce dépôt n'exerce. Les tests
@@ -124,7 +141,11 @@ la vérité dans les deux sens, ce qui est la raison de la préciser plutôt que
 `.github/workflows/ci.yml` lance les quatre gardes sur chaque pull request et sur chaque
 poussée vers `main` et `develop`, et la protection de branche fait de la vérification
 `Vérifications` un préalable à toute fusion : une PR rouge n'est pas fusionnable, administrateur
-compris sur `main`. `vercel.json` lance en plus `validate:content` puis `test:build` dans le
+compris sur `main`. Le hook `prebuild` de `package.json` lance `validate:content` avant **tout**
+`npm run build`, ce que ni la CI — qui construit et valide dans deux jobs séparés — ni
+`vercel.json` ne couvraient : c'est ce qui empêche un contenu fautif d'atteindre le prérendu,
+où il échouait avec un message renvoyant à la validation qui venait de le déclarer sain
+(TIW-29). `vercel.json` lance en plus `validate:content` puis `test:build` dans le
 build de déploiement lui-même — pas par redondance, mais parce que le garde des brouillons
 dépend de `TIW_DRAFTS`, qui vit dans le tableau de bord Vercel et n'existe pas sur le runner
 GitHub : la machine qui construit le déploiement est la seule à pouvoir constater qu'un

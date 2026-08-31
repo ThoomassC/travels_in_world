@@ -174,6 +174,18 @@ describe("the guard actually bites", () => {
   it("still loads the modules behind the façade", async () => {
     await expect(import("@/map/world")).resolves.toHaveProperty("buildWorldGeometry");
     await expect(import("@/map/projection")).resolves.toHaveProperty("projectPoint");
-    await expect(import("@/map/iso-3166")).resolves.toHaveProperty("NUMERIC_BY_ALPHA2");
+    await expect(import("@/map/dataset")).resolves.toHaveProperty("loadWorldDataset");
+  });
+
+  /**
+   * The ISO 3166-1 table is no longer one of those modules, and its loadability is
+   * asserted here rather than only in `tests/iso-3166.test.ts` because it is the
+   * *reason* it left `src/map`: `npm run validate:content` is a plain Node script,
+   * and anything it needs must resolve outside a server context. Measured before
+   * TIW-29, on a script importing the façade instead:
+   * `ERR_MODULE_NOT_FOUND: Cannot find package 'server-only'`.
+   */
+  it("loads the ISO 3166-1 table, which the validator reaches without the façade", async () => {
+    await expect(import("@/iso-3166")).resolves.toHaveProperty("isAssignedCountryCode");
   });
 });

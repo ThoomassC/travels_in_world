@@ -173,8 +173,10 @@ puisque le défaut est un détail d'empaquetage.
 7 chunks à **111,1 Ko et 5 chunks** — soit **12,4 Ko**, bien plus que les 3,4 Ko
 annoncés par le ticket. La différence n'est pas une erreur de mesure : `BaseLink`
 importait aussi `useLocale` de `use-intl`, ce qui tirait le runtime intl client
-sur une route 404 qui n'en a aucun usage. Le budget de JavaScript du jalon repasse
-de 30 à 38 Ko de marge sur 150.
+sur une route 404 qui n'en a aucun usage. La marge du jalon sur les 150 Ko
+remonte à **30,1 Ko**, mesurée sur `/fr` — la route qui compte, parce que c'est
+celle que tout le monde ouvre. Les 38 Ko qu'une première rédaction annonçait
+étaient la marge de `/_not-found`, plus confortable et sans intérêt.
 
 Et surtout, `@/i18n/navigation` porte désormais son coût en tête de fichier. La
 prochaine personne à écrire `import { getPathname }` le lit avant de le mesurer.

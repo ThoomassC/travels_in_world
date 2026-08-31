@@ -54,7 +54,7 @@ endDate: 2024-04-16
 places:
   - slug: tokyo
     name: Tokyo # le nom tel qu'il s'affichera
-    countryCode: JP # ISO 3166-1 alpha-2, deux lettres majuscules
+    countryCode: JP # ISO 3166-1 alpha-2 : deux majuscules, et un pays qui existe
     coordinates: # écrit par « npm run geocode », jamais à la main
       lat: 35.6762
       lon: 139.6503
@@ -201,6 +201,15 @@ Elles ne sont pas décoratives : chacune correspond à une page cassée, ou cass
   étape.
 - **Les coordonnées ne sont ni absentes ni (0, 0)** : (0, 0) est la signature d'un
   géocodage raté, pas un endroit sur terre.
+- **`countryCode` désigne un pays qui existe**, et pas seulement deux lettres majuscules.
+  Un code de la bonne forme qu'aucun pays ne porte est refusé, parce que la carte n'a alors
+  aucune forme à lui associer. Le cas qui arrive vraiment est `XK` — le code que tout le
+  monde écrit pour le Kosovo, et que l'ISO 3166-1 n'attribue à personne : il est refusé
+  avec sa raison, parce que ce n'est pas une faute de frappe. Même chose pour `UK` (l'ISO
+  écrit le Royaume-Uni `GB`) et pour les codes retirés — `AN`, `CS`, `SU`, `YU`, `ZR`,
+  `TP` — chacun avec le code à écrire à la place. Avant TIW-29 la validation les laissait
+  tous passer et le build échouait ensuite au prérendu de `/fr`, avec un message qui
+  renvoyait à la validation.
 - **Chaque photo a un texte alternatif et ses deux dimensions**, et son fichier existe
   vraiment dans `public/`.
 - **Les slugs sont uniques**, dans un voyage comme dans toute la collection : un slug est

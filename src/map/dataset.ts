@@ -140,7 +140,7 @@ export const DATASET_MODULE = "world-atlas/countries-110m.json";
 const GeometrySkeletonSchema = z.looseObject({
   /**
    * Three digits as a *string*, which is how ISO 3166-1 numeric is written and
-   * how `iso-3166.ts` stores it. `"20"` or `20` would both be a real code in
+   * how `src/iso-3166.ts` stores it. `"20"` or `20` would both be a real code in
    * spirit and would silently join with nothing, so the shape is pinned rather
    * than coerced: this is the one field the whole join hangs on.
    */

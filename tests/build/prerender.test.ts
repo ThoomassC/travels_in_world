@@ -43,7 +43,10 @@ const KB = 1024;
  * measurement to leave room for real work and low enough to catch a mistake:
  * a client-side map library or an icon set would blow straight through them.
  */
-const HTML_BUDGET_BYTES = 100 * KB; // measured: 1.6 KB /fr, 1.1 KB /_not-found
+// measured after TIW-20 wired the map: 35.8 KB /fr — the projected paths, inline in
+// the document — 2.3 KB /fr/voyages, 1.1 KB /_not-found. The 1.6 KB this line used to
+// claim was measured before any page rendered the map, and stayed here for two tickets.
+const HTML_BUDGET_BYTES = 100 * KB;
 const INITIAL_JS_BUDGET_BYTES = 150 * KB; // measured: 119.9 KB /fr, 111.1 KB /_not-found
 
 beforeAll(() => {
