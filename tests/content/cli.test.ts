@@ -67,6 +67,32 @@ describe("the script is wired into the project", () => {
   it("runs before the test suite", () => {
     expect(script("pretest")).toContain("validate:content");
   });
+
+  /**
+   * The gate TIW-29 added, and the reason it is asserted on `package.json` rather
+   * than on a workflow file: `.github/workflows/ci.yml` runs `validate:content` in
+   * its `checks` job and `npm run build` in a *different* one, so faulty content
+   * still reached `next build` there — and a red prerender naming
+   * `src/map/world.ts` is not the message this script exists to print.
+   * `vercel.json` chains the two in its `buildCommand`, which covers deployment
+   * and nothing else: not `npm run build` locally, and not the two builds
+   * Playwright's `webServer` and the CI `build` job make.
+   *
+   * npm's `prebuild` hook covers every one of those at once, from the repository,
+   * where a test can read it. Both spellings are pinned because either one alone
+   * leaves a path open.
+   */
+  it("runs before every build, through npm's prebuild hook", () => {
+    expect(script("prebuild")).toContain("validate:content");
+  });
+
+  it("is still chained into the Vercel build command", () => {
+    const vercel = z
+      .object({ buildCommand: z.string() })
+      .parse(JSON.parse(readFileSync(path.join(REPO_ROOT, "vercel.json"), "utf8")));
+
+    expect(vercel.buildCommand).toContain("validate:content");
+  });
 });
 
 describe("on valid content", () => {
@@ -104,6 +130,33 @@ describe("on invalid content (acceptance criterion 7)", () => {
     expect(result.output).toContain("places[1].coordinates");
     expect(result.output).toContain("Kyoto");
     expect(result.output).toContain("npm run geocode japon-2024");
+  });
+
+  it("prints no ANSI escape when its output is captured", () => {
+    expect(result.output).not.toContain(ESCAPE);
+  });
+});
+
+/**
+ * The end-to-end half of TIW-29: this exact content used to exit 0 here and fail
+ * `next build` afterwards. What is checked is the whole line an author reads —
+ * path, line, column, field, and a way out — because that line is the deliverable.
+ */
+describe("on a country code no country bears", () => {
+  const result = validate(fixture("unassigned-country-code"));
+
+  it("fails with a non-zero exit code", () => {
+    expect(result.status).toBe(1);
+  });
+
+  it("names the file, the position, the field and the reason", () => {
+    expect(result.output).toContain(
+      "tests/fixtures/content/unassigned-country-code/trips/balkans-2025/trip.yaml:21:5"
+    );
+    expect(result.output).toContain("places[1].countryCode");
+    expect(result.output).toContain("Prizren");
+    expect(result.output).toContain("XK");
+    expect(result.output).toContain("Kosovo");
   });
 
   it("prints no ANSI escape when its output is captured", () => {

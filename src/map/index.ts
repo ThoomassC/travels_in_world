@@ -27,11 +27,14 @@ import "server-only";
  * `src/**`, so the rule does not apply there), which is what keeps the rounding
  * and the dataset reader testable in isolation.
  *
- * `NUMERIC_BY_ALPHA2` is not re-exported either, and that is not an omission: the
- * alpha-2 → numeric table is an implementation detail of the join, no consumer
- * has ever asked for it, and publishing it would invite application code to do
- * the join itself — which is the one thing criterion 2 exists to keep in one
- * place. `tests/map/iso-3166.test.ts` imports it from `@/map/iso-3166`.
+ * `NUMERIC_BY_ALPHA2` is not re-exported either, and since TIW-29 it is not even
+ * a module of this folder: the ISO 3166-1 transcription moved to `@/iso-3166`,
+ * because `src/content/validate.ts` needs the same 249 codes to refuse a country
+ * code no map can draw, and nothing behind this façade is reachable from a plain
+ * Node script — the guard below fails at *resolution* there. See that module's
+ * header for the three ways of sharing it that were measured, and for why the
+ * join stays here: what criterion 2 keeps in one place is the join, and the join
+ * needs the geometry, which never leaves this folder.
  *
  * **Known blind spot, documented rather than fixed**: `await import("@/map/world")`
  * is a call expression, not an import declaration, so no `no-restricted-imports`

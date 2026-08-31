@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { NUMERIC_BY_ALPHA2 } from "@/map/iso-3166";
+import { NUMERIC_BY_ALPHA2 } from "@/iso-3166";
 import { readDatasetGeometries } from "./support";
 
 /**
+ * The table's side of the *join*, which is why this suite stayed under
+ * `tests/map/**` when TIW-29 moved `src/map/iso-3166.ts` to `src/iso-3166.ts`:
+ * every assertion below compares the table to `world-atlas`, and none of it means
+ * anything outside the map. The module's own contract — the predicate
+ * `npm run validate:content` now refuses content on — is `tests/iso-3166.test.ts`.
+ *
  * `NUMERIC_BY_ALPHA2` is a hand-transcribed table of ~250 rows, and it is the
  * join key between the content a traveller writes (`country: JP`) and the shape
  * the map fills. A single mistyped digit has no symptom worth the name: the build

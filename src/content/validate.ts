@@ -1,5 +1,7 @@
 import path from "node:path";
+import { CountryCodeSchema } from "@/domain/geo";
 import { TripSchema } from "@/domain/schema";
+import { isAssignedCountryCode } from "@/iso-3166";
 import {
   createDirectoryCache,
   displayPath,
@@ -31,6 +33,9 @@ export type { ContentFinding, ContentValidation } from "./finding";
  *   twice across two files is invisible to it;
  * - **the disk**: a declared photo that matches no file is a broken page, and
  *   checking it means reaching for `fs`, which the domain must not do;
+ * - **the real world**: `CountryCodeSchema` validates the *shape* of a country
+ *   code and refuses to carry the ISO registry, so a well-formed code no country
+ *   bears reached the map and threw there — see {@link countryCodeFindings};
  * - **the wording**: the domain reports in paths and English sentences, and the
  *   deliverable of TIW-9 is a French line that names a file, a field and a
  *   command.
@@ -205,6 +210,7 @@ function findingsForTrip(
     ...duplicateSlugFindings(trip, file, declaredSlug, slugOwners),
     ...unsafeKeyFindings(trip, file),
     ...schemaFindings(trip, file, tripSlug),
+    ...countryCodeFindings(trip, file),
     ...assetFindings(trip, file, request, directories),
   ];
 
@@ -351,6 +357,191 @@ function schemaFindings(
     action: entry.action,
     ...(entry.command === undefined ? {} : { command: entry.command }),
   }));
+}
+
+/**
+ * Codes an author genuinely writes, and that ISO 3166-1 assigns to nobody.
+ *
+ * Every one of them would otherwise be answered with "no country bears this
+ * code", which is true and useless: none of these is a typo, so telling their
+ * author to check their spelling sends them looking for a mistake they did not
+ * make. `why` completes the sentence «le lieu porte le code X : …», and `action`
+ * replaces the generic advice — a code with a modern equivalent gets that
+ * equivalent, and a code with none says so.
+ *
+ * `XK` is the row this table exists for, and question 1 of TIW-29: it is what
+ * everyone writes for Kosovo, the EU institutions included. It is *not* ISO —
+ * Kosovo has no assigned alpha-2 — and `world-atlas` carries its shape with no id
+ * at all (see `src/map/dataset.ts`: `"Kosovo"` is one of the three geometries
+ * without one). So the refusal is real and permanent at this vintage, and it must
+ * read as "the map has nothing to attach this to", never as "you mistyped".
+ *
+ * `UK` is the second reason: the single likeliest slip on this field, refused
+ * today by a sentence that does not mention `GB`.
+ *
+ * The rest are codes ISO has withdrawn — a country that no longer exists, or
+ * never was one — which is the other way a well-formed code turns out to name
+ * nothing. Sorted alphabetically, like every other table in this repository, so a
+ * duplicate is visible by reading.
+ */
+const UNASSIGNED_CODE_NOTES = new Map<string, { readonly why: string; readonly action: string }>([
+  [
+    "AN",
+    {
+      why: "il désignait les Antilles néerlandaises, dissoutes en 2010, et l'ISO l'a retiré",
+      action: `écris le code du territoire concerné : ${quoted("CW")} pour Curaçao, ${quoted("SX")} pour Saint-Martin, ${quoted("BQ")} pour Bonaire, Saint-Eustache et Saba`,
+    },
+  ],
+  [
+    "CS",
+    {
+      why: "il désignait la Serbie-et-Monténégro, dissoute en 2006, et l'ISO l'a retiré",
+      action: `écris ${quoted("RS")} pour la Serbie ou ${quoted("ME")} pour le Monténégro`,
+    },
+  ],
+  [
+    "EL",
+    {
+      why: "c'est le code fiscal de la Grèce, pas son code ISO 3166-1 alpha-2",
+      action: `écris ${quoted("GR")}`,
+    },
+  ],
+  [
+    "EU",
+    {
+      why: "il désigne l'Union européenne, qui n'est pas un pays",
+      action: "écris le code du pays où se trouve le lieu",
+    },
+  ],
+  [
+    "SU",
+    {
+      why: "il désignait l'URSS, et l'ISO l'a retiré",
+      action: "écris le code de l'État auquel le lieu appartient aujourd'hui",
+    },
+  ],
+  [
+    "TP",
+    {
+      why: "il désignait le Timor oriental avant son indépendance, et l'ISO l'a retiré",
+      action: `écris ${quoted("TL")}`,
+    },
+  ],
+  [
+    "UK",
+    {
+      why: `l'ISO 3166-1 alpha-2 écrit le Royaume-Uni ${quoted("GB")} et n'attribue ${quoted("UK")} à personne`,
+      action: `écris ${quoted("GB")}`,
+    },
+  ],
+  [
+    "XK",
+    {
+      why: "l'usage le donne au Kosovo, mais l'ISO 3166-1 ne l'attribue à aucun pays",
+      action:
+        "aucun code ISO ne désigne le Kosovo : rattache le lieu à un pays que la carte sait dessiner, ou retire-le du voyage",
+    },
+  ],
+  [
+    "YU",
+    {
+      why: "il désignait la Yougoslavie, et l'ISO l'a retiré",
+      action: "écris le code de l'État auquel le lieu appartient aujourd'hui",
+    },
+  ],
+  [
+    "ZR",
+    {
+      why: "il désignait le Zaïre, devenu la République démocratique du Congo",
+      action: `écris ${quoted("CD")}`,
+    },
+  ],
+]);
+
+/**
+ * A country code of the right shape that ISO 3166-1 assigns to nobody — the fault
+ * this whole script was silent about until TIW-29, and the one it was most
+ * expected to catch.
+ *
+ * `CountryCodeSchema` checks `/^[A-Z]{2}$/` and deliberately stops there
+ * (`docs/adr/0001-domain-purity.md`: a registry in the domain would be a dated
+ * copy of an external list). `buildWorldGeometry` is what refuses the code, and it
+ * refuses it *during* `next build`, in the prerender of `/fr` — measured:
+ *
+ * ```
+ * $ TIW_CONTENT_DIR=… npm run validate:content
+ * 1 voyage validé dans …, aucun problème.
+ * $ TIW_CONTENT_DIR=… npm run build
+ * Error occurred prerendering page "/fr".
+ * Error: le code pays « XK » n'est pas un code ISO 3166-1 alpha-2 … puis relance
+ * « npm run validate:content ».
+ * ```
+ *
+ * The map's message was pointing at *this* command, which had just cleared the
+ * file. So the check belongs here, next to the two others no schema can make: the
+ * uniqueness of a slug across the whole collection, and the existence of a photo
+ * on disk. This is the layer allowed to know the real world.
+ *
+ * **The shape is checked first, and the order is load-bearing.** Only a value
+ * `CountryCodeSchema` accepts is examined here, so `jp`, `JPN`, an empty value and
+ * a missing key are left to the schema and its catalogue — which have a better
+ * sentence for each of them, including the casing slip. Without that gate the same
+ * field would carry two findings saying the same thing in two ways, and
+ * `deduplicate` cannot merge them: it keys on the field *and* the problem.
+ *
+ * Read from the raw document rather than from a parsed trip, for the reason
+ * {@link assetFindings} gives: a file with a schema error elsewhere still gets its
+ * country codes checked, so one run reports every problem.
+ */
+function countryCodeFindings(
+  trip: Extract<TripFile, { state: "parsed" }>,
+  file: string
+): readonly ContentFinding[] {
+  const places = valueAt(trip.value, ["places"]);
+  if (!Array.isArray(places)) {
+    return [];
+  }
+
+  const findings: ContentFinding[] = [];
+
+  places.forEach((_place, index) => {
+    const field: FieldPath = ["places", index, "countryCode"];
+    /**
+     * The shape gate, and the value comes out of it rather than being re-derived:
+     * `parsed.data` is the `string` the schema accepted, so nothing here has to
+     * assert a type the parse already established.
+     */
+    const parsed = CountryCodeSchema.safeParse(valueAt(trip.value, field));
+
+    if (!parsed.success || isAssignedCountryCode(parsed.data)) {
+      return;
+    }
+
+    const code = parsed.data;
+
+    const name = stringAt(trip.value, ["places", index, "name"]);
+    const label =
+      name === undefined
+        ? `le lieu ${describeField(["places", index])}`
+        : `la ville ${quoted(name)}`;
+    const note = UNASSIGNED_CODE_NOTES.get(code);
+
+    findings.push({
+      file,
+      field,
+      ...locationOf(trip, field),
+      problem:
+        note === undefined
+          ? `${label} porte le code pays ${quoted(code)}, que l'ISO 3166-1 alpha-2 n'attribue à aucun pays : la carte n'a donc aucune forme à lui associer`
+          : `${label} porte le code pays ${quoted(code)} : ${note.why}, et la carte n'a donc aucune forme à lui associer`,
+      action:
+        note === undefined
+          ? `écris les deux lettres majuscules que l'ISO 3166-1 alpha-2 attribue au pays (${quoted("JP")} pour le Japon), ou retire le lieu du voyage`
+          : note.action,
+    });
+  });
+
+  return findings;
 }
 
 /**

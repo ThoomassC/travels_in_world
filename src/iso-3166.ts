@@ -1,9 +1,9 @@
 /**
- * ISO 3166-1 alpha-2 → ISO 3166-1 numeric, for the 249 officially assigned
- * alpha-2 codes of the standard (the same set `Intl.DisplayNames` knows how to
- * name).
+ * The 249 officially assigned ISO 3166-1 alpha-2 codes, each with its ISO 3166-1
+ * numeric — the transcription of the standard, and this project's single answer
+ * to "does a country bear this code?".
  *
- * **Why this table exists at all.** `world-atlas` keys its geometries on the
+ * **Why the table exists at all.** `world-atlas` keys its geometries on the
  * *numeric* code, and the content keys its places on the *alpha-2* code. Nothing
  * else joins the two: the dataset's `properties.name` is a Natural Earth display
  * label — `"N. Cyprus"`, `"Dem. Rep. Congo"`, `"Bosnia and Herz."` — abbreviated
@@ -11,13 +11,53 @@
  * bug waiting for the first accented or abbreviated label, so criterion 2 of
  * TIW-12 forbids it outright.
  *
- * **Why it lives in `src/map` and not in `src/domain`.** `CountryCodeSchema` in
- * `src/domain/geo.ts` validates the *shape* of a code and deliberately not its
- * existence, and it says why: "the map renderer is where an unknown code has a
- * visible consequence, and it is the layer that owns the list of features it can
- * draw". This is that list. Putting it in the domain would also break the purity
- * boundary's whole point — the domain would then carry a dated copy of an
- * external registry.
+ * **Why it sits at the root of `src/`, and not in `src/map` where it was born nor
+ * in `src/domain`.** It has two consumers, in two layers that cannot reach each
+ * other, and TIW-29 is what made the second one appear:
+ *
+ * - `src/map/world.ts` needs the alpha-2 → numeric direction, to join the content
+ *   to the geometry;
+ * - `src/content/validate.ts` needs {@link isAssignedCountryCode}, because
+ *   `npm run validate:content` used to clear a trip declaring `XK` that
+ *   `next build` then refused mid-prerender — with a message sending the author
+ *   back to `validate:content`, which cleared it again.
+ *
+ * The three ways of serving both were measured rather than argued:
+ *
+ * - **through the `@/map` façade**: impossible. The façade carries
+ *   `import "server-only"` and the validator is a plain Node script. Measured, on
+ *   a script importing `@/map` under
+ *   `node --import ./scripts/runtime/register-typescript.mts`:
+ *   `ERR_MODULE_NOT_FOUND: Cannot find package 'server-only'`. It fails at
+ *   *resolution*, so no export of the façade can ever serve a script;
+ * - **as a deep import of `@/map/iso-3166`**: refused, by design. Measured with
+ *   ESLint on `src/content/validate.ts`: `'@/map/iso-3166' import is restricted
+ *   from being used by a pattern` (`travels-in-world/map-entry-point`). Widening
+ *   that rule for the validator opens the same door to every `src/**` module,
+ *   `'use client'` components included;
+ * - **as a second copy, with a test keeping the two in phase**: it works — the
+ *   repository already runs that pattern between this table and
+ *   `src/domain/continent.ts` — but a *third* transcription of 249 rows, when a
+ *   shared module costs one file, is not a trade worth making. `src/map/world.ts`
+ *   says the same of its own inverse table: "a table and its inverse maintained
+ *   side by side drift, and the drift is invisible".
+ *
+ * So the table left the layer that used to be its only consumer, and kept every
+ * one of its rows. Two consequences, both stated rather than discovered later:
+ *
+ * - **`src/domain/**` still cannot reach it**, which is what keeps
+ *   `docs/adr/0001-domain-purity.md` and `CountryCodeSchema`'s refusal to know the
+ *   list intact. Measured: a domain module importing `@/iso-3166` is refused by
+ *   `travels-in-world/domain-purity`, whose forbidden list carries `@/*`. The
+ *   domain validates the *shape* of a code; knowing the world is this module's
+ *   job, and refusing content is `src/content`'s;
+ * - **every other `src/**` module can now import it, where `@/map/iso-3166` was
+ *   refused from a page.** A real widening, and accepted: what TIW-12's criterion
+ *   2 protects is that nobody redoes the *join*, and the join needs the geometry —
+ *   which stays behind the façade, behind `server-only`, and behind the ESLint ban
+ *   on `world-atlas`, `d3-geo` and `topojson-client`. These numerics alone can
+ *   draw nothing. They weigh under 4 KB raw, so the 150 KB brotli ceiling of
+ *   `npm run test:build` is not at stake either.
  *
  * **Correctness.** A typo here does not fail: it tints the wrong country, or
  * quietly refuses a real one. Two independent checks were run against the table
@@ -299,3 +339,29 @@ const NUMERIC_BY_ALPHA2_RECORD = {
 export const NUMERIC_BY_ALPHA2: ReadonlyMap<string, string> = new Map(
   Object.entries(NUMERIC_BY_ALPHA2_RECORD)
 );
+
+/**
+ * Whether ISO 3166-1 assigns this alpha-2 code to a country.
+ *
+ * The question `CountryCodeSchema` deliberately declines to answer and
+ * `src/content/validate.ts` has to: a code of the right *shape* that the registry
+ * does not assign is content the map cannot draw, and `buildWorldGeometry` throws
+ * on it in the middle of a prerender.
+ *
+ * **Case-sensitive, deliberately**, and this is the one design decision of the
+ * function. ISO 3166-1 alpha-2 is written in capitals, `CountryCodeSchema` accepts
+ * `/^[A-Z]{2}$/` only, and the validator runs this *after* that shape check — so a
+ * lowercase code has already been reported, in the one message that can tell an
+ * author "you wrote `jp`, write `JP`". Upper-casing here would answer `true` for
+ * `"jp"` and quietly delete that distinction. `src/map/world.ts` draws the same
+ * line, in the other direction: it upper-cases only to *word* the failure.
+ *
+ * Reads through the `Map` and never by indexing the record, for the reason
+ * `src/domain/continent.ts` gives about its own table: the code arrives from
+ * parsed YAML, and `record["constructor"]` answers with a function where
+ * `map.get("constructor")` answers `undefined`. So `countryCode: constructor`
+ * would have been an assigned country.
+ */
+export function isAssignedCountryCode(code: string): boolean {
+  return NUMERIC_BY_ALPHA2.has(code);
+}

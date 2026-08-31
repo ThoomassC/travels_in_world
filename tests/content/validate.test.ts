@@ -97,6 +97,58 @@ describe("coordinates at (0, 0)", () => {
   });
 });
 
+/**
+ * The gap TIW-29 closes, and the reason it is a fixture rather than a throwaway
+ * trip: this content used to pass `validate:content` with "1 voyage validé,
+ * aucun problème" and fail `next build` mid-prerender, with a message pointing
+ * the author back at the command that had just cleared it.
+ *
+ * `CountryCodeSchema` validates the *shape* of a code and refuses to know the
+ * list of countries (`docs/adr/0001-domain-purity.md`), so `XK` is a perfectly
+ * valid code as far as the domain is concerned. The registry is the validator's
+ * business — the layer that already knows the disk and the whole collection.
+ */
+describe("a country code of the right shape that no country bears", () => {
+  const validation = validateContent(fixtureRoots("unassigned-country-code"));
+  const finding = single(validation);
+
+  it("fails the validation instead of clearing the trip", () => {
+    expect(validation).toMatchObject({ tripCount: 1, validCount: 0, failedCount: 1 });
+  });
+
+  it("names the field, in the form the author has to find in the file", () => {
+    expect(describeField(finding.field)).toBe("places[1].countryCode");
+  });
+
+  it("names the file, the line and the column the code is written on", () => {
+    expect(finding.file).toBe(
+      "tests/fixtures/content/unassigned-country-code/trips/balkans-2025/trip.yaml"
+    );
+    expect(finding.location).toEqual({ line: 21, column: 5 });
+  });
+
+  /**
+   * The whole point of question 1 of the ticket: an author who writes `XK` has
+   * not mistyped anything — it is the code everyone uses for Kosovo — so the
+   * message has to say why it is refused, and the reason is the map, not them.
+   */
+  it("says why XK in particular is refused, naming the place and the code", () => {
+    expect(finding.problem).toContain("Prizren");
+    expect(finding.problem).toContain("XK");
+    expect(finding.problem).toContain("Kosovo");
+    expect(finding.problem).toContain("ISO 3166-1");
+    expect(finding.problem).toContain("carte");
+  });
+
+  it("gives a way out rather than only a refusal", () => {
+    expect(finding.action).toMatch(/retire|rattache/);
+  });
+
+  it("never leaks the schema's own English message", () => {
+    expect(`${finding.problem} ${finding.action}`).not.toMatch(/Expected|Invalid|invalid_/);
+  });
+});
+
 describe("an endDate before the startDate (acceptance criterion 4)", () => {
   const validation = validateContent(fixtureRoots("end-date-before-start-date"));
   const finding = single(validation);
@@ -381,6 +433,57 @@ describe("the message catalogue", () => {
     expect(report).toContain("places[0].countryCode ::");
     expect(report).toContain("JPN");
     expect(report).toContain("ISO 3166");
+  });
+
+  /**
+   * The country-code family, in the three shapes an author meets it. The fixture
+   * above covers `XK` end to end; these pin the wording of the other two, and the
+   * third case is the one that would rot silently — two findings on one field say
+   * the same thing twice, and `deduplicate` cannot merge them because it keys on
+   * the field *and* the problem.
+   */
+  const placeWith = (code: string): string =>
+    [
+      "places:",
+      "  - slug: tokyo",
+      "    name: Tokyo",
+      `    countryCode: ${code}`,
+      "    coordinates:",
+      "      lat: 35.6762",
+      "      lon: 139.6503",
+    ].join("\n");
+
+  it("refuses a well-formed country code that no country bears", () => {
+    const report = problemOf(tripYaml({ places: placeWith("ZZ"), steps: steps(STAY_TOKYO) }));
+
+    expect(report).toContain("places[0].countryCode ::");
+    expect(report).toContain("Tokyo");
+    expect(report).toContain("ZZ");
+    expect(report).toContain("ISO 3166-1");
+    expect(report).toContain("carte");
+  });
+
+  it("answers UK with the code ISO actually assigns, rather than with a spelling lecture", () => {
+    const report = problemOf(tripYaml({ places: placeWith("UK"), steps: steps(STAY_TOKYO) }));
+
+    expect(report).toContain("places[0].countryCode ::");
+    expect(report).toContain("GB");
+    expect(report).not.toContain("majuscules");
+  });
+
+  it("says a withdrawn code was withdrawn, and what replaced it", () => {
+    const report = problemOf(tripYaml({ places: placeWith("ZR"), steps: steps(STAY_TOKYO) }));
+
+    expect(report).toContain("Zaïre");
+    expect(report).toContain("CD");
+  });
+
+  it("reports a malformed code once, and leaves it to the schema", () => {
+    const validation = validateSource(
+      tripYaml({ places: placeWith("JPN"), steps: steps(STAY_TOKYO) })
+    );
+
+    expect(fields(validation)).toEqual(["places[0].countryCode"]);
   });
 
   it("translates an unknown transport mode, listing the ones that exist", () => {

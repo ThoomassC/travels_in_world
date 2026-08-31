@@ -7,11 +7,11 @@ import type { CountryCode } from "./geo";
  * **Why this is in the domain, when two neighbours refused exactly that.**
  * `CountryCodeSchema` (`./geo`) declines to check that a code *exists*, saying a
  * registry in the domain would be "a copy of the ISO list […] and date it", and
- * `src/map/iso-3166.ts` puts its alpha-2 → numeric table in `src/map` because
- * that table is a join key for one vintage of the `world-atlas` dataset — it
- * belongs to the layer that owns the features it can draw. Neither argument
- * reaches this table, and the difference is worth stating because the next person
- * will read those two comments before this one:
+ * `src/iso-3166.ts` keeps its alpha-2 → numeric table out of the domain because
+ * that table is what *refuses* content — it is read by the map's join and by
+ * `src/content/validate.ts`, the two layers allowed to know the real world.
+ * Neither argument reaches this table, and the difference is worth stating
+ * because the next person will read those two comments before this one:
  *
  * - **it validates nothing.** {@link continentOf} is total: an unknown code
  *   answers `null` rather than throwing, and `buildCatalogue` has a group for
@@ -24,29 +24,35 @@ import type { CountryCode } from "./geo";
  * **What the reader must NOT conclude from the first point, because an earlier
  * version of this comment said it and it was false.** It claimed the listing
  * "renders an unknown code under its own heading" — a *rendered* outcome. It does
- * not, today: `buildWorldGeometry` (`src/map/world.ts`) throws on any code
- * outside the 249 of ISO 3166-1, and the home page calls it, so a trip declaring
- * one fails `next build` before any listing is produced. Measured with a trip
- * declaring `XK`, which `CountryCodeSchema` and `npm run validate:content` both
- * accept:
+ * not: `buildWorldGeometry` (`src/map/world.ts`) throws on any code outside the
+ * 249 of ISO 3166-1, and the home page calls it, so a trip declaring one never
+ * reaches a listing. What has changed since is *where* it is stopped. Measured
+ * with a trip declaring `XK`, before TIW-29:
  *
  * ```
- * Error occurred prerendering page "/fr".
- * Error: le code pays « XK » n'est pas un code ISO 3166-1 alpha-2 …
- * ⨯ Next.js build worker exited with code: 1
+ * $ npm run validate:content →  1 voyage validé …, aucun problème.   (exit 0)
+ * $ npm run build            →  Error occurred prerendering page "/fr".
+ *                               Error: le code pays « XK » n'est pas un code
+ *                               ISO 3166-1 alpha-2 …                 (exit 1)
  * ```
  *
- * The totality is kept all the same, and so is the listing's group: a pure
- * function owes its caller an answer for every input of its type, and the day
- * the map learns to tolerate a code it cannot draw, the listing must not be
- * what breaks instead. The real defect is upstream of both — a validator that
- * accepts what the build refuses — and it belongs to its own ticket.
+ * That defect — a validator clearing what the build refuses, with the build's own
+ * message sending the author back to the validator — was TIW-29's, and it is
+ * fixed: `src/content/validate.ts` now refuses such a code, naming the file, the
+ * line, the column and the field, and `prebuild` runs it before every
+ * `npm run build`. So the code is stopped one layer earlier, and `XK` is refused
+ * with a sentence that says *why* rather than accusing the author of a typo.
+ *
+ * The totality of {@link continentOf} is kept all the same, and so is the
+ * listing's group: a pure function owes its caller an answer for every input of
+ * its type, and the day the map learns to tolerate a code it cannot draw, the
+ * listing must not be what breaks instead.
  *
  * What stays true of the neighbours' worry is the *dating*, and the answer is a
  * test rather than a promise: `tests/domain/continent.test.ts` checks this table
- * against the 249 alpha-2 codes `src/map/iso-3166.ts` already carries, in both
- * directions. It lives in `tests/**` — outside `src/**`, so the façade rules do
- * not apply — and it goes red the day either list moves without the other.
+ * against the 249 alpha-2 codes `src/iso-3166.ts` carries, in both directions. It
+ * lives in `tests/**` — outside `src/**`, so `domain-purity` does not apply — and
+ * it goes red the day either list moves without the other.
  *
  * **The vocabulary is the UN M49 top-level regions**, not the seven-continent
  * model taught in French schools. One authority, so no boundary is drawn by
@@ -81,7 +87,7 @@ export type Continent = (typeof CONTINENTS)[number];
 const POLAR_TERRITORIES = ["AQ", "BV", "GS", "HM", "TF"] as const;
 
 /**
- * Sorted by alpha-2 inside each region, the way `src/map/iso-3166.ts` is sorted:
+ * Sorted by alpha-2 inside each region, the way `src/iso-3166.ts` is sorted:
  * a duplicated or missing code is then visible by reading, and the coverage test
  * catches whatever reading misses.
  *
@@ -94,15 +100,15 @@ const POLAR_TERRITORIES = ["AQ", "BV", "GS", "HM", "TF"] as const;
  * is filed with Southern Asia, its nearest neighbour being the Maldives.
  *
  * `XK` is here and is NOT one of the 249: Kosovo's code is user-assigned, not
- * officially allocated, so `src/map/iso-3166.ts` does not carry it and the map
- * cannot draw it.
+ * officially allocated, so `src/iso-3166.ts` does not carry it and the map cannot
+ * draw it.
  *
  * The row is a *continent* answer and nothing more. It does not make a trip to
- * Kosovo publishable: `buildWorldGeometry` throws on `XK` and the home page
- * calls it, so such a trip fails `next build` before it reaches any listing —
- * measured, and quoted at the top of this file. The row is here so that the day
- * the map tolerates an undrawable code, this table already has the answer
- * instead of being the next thing to fix.
+ * Kosovo publishable: since TIW-29, `npm run validate:content` refuses `XK` by
+ * name — with the file, the line and the reason — and `buildWorldGeometry` still
+ * throws on it behind that. The row is here so that the day the map tolerates an
+ * undrawable code, this table already has the answer instead of being the next
+ * thing to fix.
  */
 const CONTINENT_BY_COUNTRY_RECORD = {
   // --- Africa -------------------------------------------------------------
@@ -390,18 +396,18 @@ const CONTINENT_BY_COUNTRY: ReadonlyMap<string, Continent> = new Map(
  * **`null` rather than a throw or a default continent**, and this is the whole
  * reason the table is allowed to live in the domain. `CountryCodeSchema`
  * validates the *shape* of a code and not its existence, on purpose, so `"ZZ"`
- * is a perfectly valid trip as far as every other rule of this project is
- * concerned. Folding it into a continent would file a trip under a heading that
- * is simply false; `null` says "not placed", and `buildCatalogue` has a group
- * for exactly that.
+ * is a value this function can legitimately be handed — the layer that refuses it
+ * is `src/content/validate.ts`, not the domain. Folding it into a continent would
+ * file a trip under a heading that is simply false; `null` says "not placed", and
+ * `buildCatalogue` has a group for exactly that.
  *
  * A throw here would be wrong for a reason that is about this function and not
  * about the screen: a total function is the contract a pure domain owes its
  * callers, and there is more than one caller. What is **not** a reason — the
  * earlier wording of this paragraph said it was — is that throwing "would crash
- * the listing". The listing is unreachable for such a code today anyway: the map
- * throws on it first, at build time, and the note at the top of this file has
- * the measurement.
+ * the listing". The listing is unreachable for such a code anyway: the validator
+ * refuses it before the build, and the map throws on it behind that. The note at
+ * the top of this file has the measurement.
  *
  * Case-sensitive, deliberately: `CountryCodeSchema` accepts uppercase only, so a
  * lowercase code never came through it, and quietly upper-casing here would hide

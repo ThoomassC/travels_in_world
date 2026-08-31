@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NUMERIC_BY_ALPHA2 } from "@/map/iso-3166";
+import { NUMERIC_BY_ALPHA2 } from "@/iso-3166";
 import {
   CODES_OUTSIDE_ISO_3166,
   CONTINENTS,
@@ -12,14 +12,19 @@ import {
  * The coverage guard `src/domain/continent.ts` promises in its header, and the
  * only thing that keeps a country registry in the domain honest.
  *
- * **It imports `@/map/iso-3166` on purpose**, which no file under `src/**` may
- * do — `travels-in-world/map-entry-point` forbids the deep specifier, and
- * `domain-purity` forbids the domain any `@/` import at all. Neither rule matches
- * `tests/**`, and that is the point: the two lists have to be compared *somewhere*
- * without either module importing the other. `src/map/iso-3166.ts` already
- * documents that its own 249 keys were checked twice against the dataset and
+ * **It imports `@/iso-3166` on purpose**, which `src/domain/**` may not do:
+ * `domain-purity` forbids the domain any `@/` import at all, and that ban is what
+ * keeps a *validating* registry out of the domain. The rule does not match
+ * `tests/**`, and that is the point — the two lists have to be compared
+ * *somewhere* without either module importing the other. `src/iso-3166.ts` already
+ * documents that its own 249 keys were checked twice, against the dataset and
  * against ICU, so comparing to it is comparing to something that was itself
  * verified.
+ *
+ * The specifier changed with TIW-29: the table used to be `@/map/iso-3166`, which
+ * no `src/**` file could reach at all. It moved out of the map so that
+ * `src/content/validate.ts` could refuse a country code no map can draw — see
+ * that module's header for the three routes that were measured.
  *
  * What goes red, and what it means:
  *
@@ -98,10 +103,10 @@ describe("continentOf", () => {
     ["GL", "americas"],
     // Mexico is Central America, which M49 folds into the single Americas region.
     ["MX", "americas"],
-    // Kosovo's code is user-assigned, so `src/map/iso-3166.ts` does not carry it
-    // and this table does. That is a continent answer and not a publishable
-    // trip: `buildWorldGeometry` throws on `XK`, so a trip declaring it fails
-    // `next build` — measured, and quoted in `src/domain/continent.ts`.
+    // Kosovo's code is user-assigned, so `src/iso-3166.ts` does not carry it and
+    // this table does. That is a continent answer and not a publishable trip:
+    // since TIW-29 `npm run validate:content` refuses `XK` by name, and
+    // `buildWorldGeometry` still throws on it behind that.
     ["XK", "europe"],
   ])("places %s in %s", (code, continent) => {
     expect(continentOf(code)).toBe(continent);
@@ -119,13 +124,14 @@ describe("continentOf", () => {
   it("answers null for a code it has never heard of, rather than throwing", () => {
     /**
      * `CountryCodeSchema` validates the shape of a code and deliberately not its
-     * existence, so `npm run validate:content` accepts a `trip.yaml` declaring
-     * `ZZ`. Totality is what a pure function owes its callers for every input of
-     * its type, and that is what is asserted.
+     * existence, so `ZZ` is a value this function can be handed. Totality is what
+     * a pure function owes its callers for every input of its type, and that is
+     * what is asserted — not that such a trip is publishable: since TIW-29,
+     * `npm run validate:content` refuses `ZZ` outright.
      *
      * The earlier comment added "a throw here would take the whole listing down
-     * for one typo", which is not what happens: the map throws on such a code
-     * first, at build time, so there is no listing to take down. See
+     * for one typo", which is not what happens: the validator refuses the code
+     * before the build, and the map throws behind that. See
      * `src/domain/continent.ts` for the measurement.
      */
     expect(continentOf("ZZ")).toBeNull();
