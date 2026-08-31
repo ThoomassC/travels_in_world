@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Travels in World">
+  <style>
+    <![CDATA[
+    /*
+      THE FAVICON — the "welded comet" cut, hand-written on purpose.
+
+      READ THIS BEFORE EDITING: everything documented here lives in a CSS comment and
+      not in an XML one, and that is not a preference. An XML comment may not contain
+      two consecutive hyphens, so a sentence mentioning --logo-ink makes this file
+      malformed — and the failure is silent in the worst way. Inline in a page, HTML's
+      lenient parser renders the mark anyway; fetched as a favicon or through an
+      <img>, the browser parses it as XML, hits a fatal error and shows nothing. The
+      build stays green, the unit tests stay green, and the site has no icon.
+      Measured on this branch: nine <img src="/icon.svg"> in Chromium, all with
+      naturalWidth 0, from one hyphen pair in a comment.
+      `tests/components/site/brand-art.test.ts` now parses this file as XML and
+      refuses that.
+
+      AND THAT IS WHY THIS BLOCK SITS IN A CDATA SECTION. In HTML, <style> is a raw
+      text element and its content is never parsed as markup; in XML it is not, so a
+      bare "<" anywhere in this comment — the <img> two paragraphs up, for instance —
+      is read as the start of a tag and the file dies with "unexpected close tag".
+      Measured too: removing the hyphens fixed the first error and uncovered this one.
+
+      Then this very paragraph broke the file a third time, by spelling the CDATA
+      terminator out in full: a "]" "]" ">" run anywhere in here closes the section
+      early and libxml2 answers "Sequence not allowed in content". Worse, jsdom's
+      DOMParser accepted that document while xmllint and Chromium refused it — so the
+      guard in brand-art.test.ts counts the terminators in the raw text instead of
+      trusting a parser. Never write that sequence in this file.
+
+      WHY A FILE AND NOT A GENERATED ROUTE. TIW-21 measured what an opengraph-image
+      route does in this project: `ƒ` without generateStaticParams, and *with* it a
+      build column printing `●` while writing no file to disk at all, so
+      `npm run test:build` cannot weigh it either. A committed file is bytes the CDN
+      serves, which is what invariant 1 is about.
+
+      WHY THE GEOMETRY IS DUPLICATED from src/components/site/brand-art.ts. A browser
+      fetches a favicon as its own document: it can be neither a React component nor a
+      shared constant. So the path data exists twice, and the copy going stale is
+      exactly the break nothing would report. The drift test reads this file off the
+      disk and compares the `d` attribute with BRAND_COMET_PATH, character for
+      character.
+
+      WHY THE TRAJECTORY IS ABSENT HERE, which is the design decision rather than a
+      simplification. Ink against accent measures 1.99:1 in light and 1.35:1 in dark on
+      this palette, so an accented detail *inside* the mark cannot be seen; keeping the
+      trajectory would mean a detached dotted rule, and at 16 px its dots and the gaps
+      between them are sub-pixel. The header lock-up carries the trajectory at a size
+      where its voids are real. Here the comet stands alone: ONE connected mass, no
+      internal void, nothing whose reading depends on a one-pixel gap.
+
+      Measured against the eight tab-bar greys of Chrome, Firefox and Safari, light and
+      dark: 10.31:1 at worst, 15.55:1 at best. All AA.
+
+      NO BACKGROUND PLATE, deliberately. A plate would guarantee the same appearance on
+      every tab bar and cost the third of the box that makes the silhouette readable at
+      16 px. The trade goes the other way for apple-icon.png, which iOS composites onto
+      an unknown wallpaper and which therefore does carry the plate.
+    */
+
+    /*
+      The theme contract of src/styles/tokens.css, transcribed: light in :root, dark
+      behind the media query, same structure and the same two values. A favicon is
+      fetched in its own document, so it cannot inherit the page's custom properties —
+      the media query here IS the theme switch, and :root matches this svg element.
+
+      No unconditioned literal: the light value is the light theme's own declaration,
+      in exactly the place tokens.css puts it.
+    */
+    :root {
+      --logo-ink: #0c2731;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --logo-ink: #eef7fa;
+      }
+    }
+
+    .comet {
+      fill: var(--logo-ink);
+    }
+    ]]>
+  </style>
+  <path class="comet" d="M5 43 Q16.26 32.41 34.67 28.83 A12 12 0 1 0 18.57 13.05 Q8.21 24.52 5 43 Z" />
+</svg>
