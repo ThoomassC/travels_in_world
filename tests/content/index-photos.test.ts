@@ -1,4 +1,14 @@
-import { appendFileSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  chmodSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { Buffer } from "node:buffer";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import sharp from "sharp";
 import {
@@ -491,5 +501,132 @@ describe("trips the command cannot work on", () => {
     expect(outcome.state).toBe("file-changed");
     expect(workspace.read()).toContain("# une note ajoutée pendant la commande");
     expect(workspace.photos()[0]?.width).toBeUndefined();
+  });
+});
+
+/**
+ * The outcomes a run can reach that the cases above do not: a trip file that is a
+ * symlink out of the collection, one that cannot be written, one that is not
+ * UTF-8, and a photo whose YAML the writer will not guess at.
+ *
+ * They are gathered here because they share a property that makes them worth the
+ * trouble: each is a **refusal**, and a refusal is exactly the code path nobody
+ * exercises by hand. `geocode`'s suite covers its own equivalents one by one, and
+ * the two commands write the same file through the same module.
+ */
+describe("the refusals a run can reach", () => {
+  const TWO_IMAGES = {
+    "/photos/japon-2024/tokyo.jpg": { width: 1600, height: 1067 },
+    "/photos/japon-2024/kyoto.jpg": { width: 1200, height: 900, seed: 7 },
+  } as const;
+
+  /**
+   * Following a symlink is deliberate — a trip kept in a notes folder or a synced
+   * drive is a legitimate setup — but announcing the link's path while writing
+   * somewhere else is how a summary becomes a lie the author cannot catch. git
+   * versions a symlink like any other entry, so a clone recreates it with its
+   * target.
+   */
+  it("says where the bytes really went when trip.yaml links out of the collection", async () => {
+    workspace = await photoWorkspace({ yaml: TWO_PHOTOS, images: TWO_IMAGES });
+    const outside = path.join(workspace.root, "ailleurs.yaml");
+    renameSync(workspace.tripFile, outside);
+    symlinkSync(outside, workspace.tripFile);
+
+    const { outcome } = await run(workspace);
+
+    expect(outcome).toMatchObject({ state: "done", written: true });
+    expect(outcome.state === "done" && outcome.writtenTo).toContain("ailleurs.yaml");
+    // And the bytes are really there, not merely announced.
+    expect(readFileSync(outside, "utf8")).toContain("width: 1600");
+  });
+
+  it("does not mention a target for the ordinary case", async () => {
+    workspace = await photoWorkspace({ yaml: TWO_PHOTOS, images: TWO_IMAGES });
+
+    const { outcome } = await run(workspace);
+
+    expect(outcome.state === "done" && outcome.writtenTo).toBeUndefined();
+  });
+
+  /**
+   * A `trip.yaml` in latin-1: `readFileSync(…, "utf8")` turns byte 0xE9 into
+   * U+FFFD, so the text this run computed its edit from is **not** the file, and
+   * writing it back would overwrite the author's own bytes with replacement
+   * characters. Measured on `geocode` before the guard existed: exit 0, « fichier
+   * réécrit », `validate:content` still green, and the accent gone for good.
+   */
+  it("writes nothing to a trip file that is not UTF-8", async () => {
+    workspace = await photoWorkspace({ yaml: TWO_PHOTOS, images: TWO_IMAGES });
+    /**
+     * The whole file re-encoded in latin-1, not a stray byte appended: an
+     * appended 0xE9 is *malformed YAML*, which the run refuses one branch
+     * earlier and for a different reason. What has to be reached here is a file
+     * that parses perfectly and whose bytes do not survive a UTF-8 decode —
+     * `title: Japon, café` where the `é` is the single byte 0xE9, which is what
+     * an editor set to latin-1 actually produces.
+     */
+    const latin1 = Buffer.from(
+      workspace.read().replace("Japon, printemps 2024", "Japon, café"),
+      "latin1"
+    );
+    writeFileSync(workspace.tripFile, latin1);
+    const before = readFileSync(workspace.tripFile);
+    // The premise: it is a file YAML reads without complaint.
+    expect(before.includes(0xe9)).toBe(true);
+
+    const { outcome } = await run(workspace);
+
+    expect(outcome).toMatchObject({ state: "file-not-utf8", indexed: 2 });
+    expect(readFileSync(workspace.tripFile).equals(before)).toBe(true);
+  });
+
+  it("reports a trip file it cannot write, and leaves it intact", async () => {
+    workspace = await photoWorkspace({ yaml: TWO_PHOTOS, images: TWO_IMAGES });
+    const before = readFileSync(workspace.tripFile);
+    // The *directory* read-only, not the file: the write goes through a temporary
+    // sibling and a rename, so a read-only file is not what stops it.
+    chmodSync(path.dirname(workspace.tripFile), 0o500);
+
+    try {
+      const { outcome } = await run(workspace);
+
+      expect(outcome).toMatchObject({ state: "write-failed", indexed: 2 });
+      expect(readFileSync(workspace.tripFile).equals(before)).toBe(true);
+    } finally {
+      // Restored whatever happened, or the cleanup cannot remove the directory.
+      chmodSync(path.dirname(workspace.tripFile), 0o700);
+    }
+  });
+
+  /**
+   * A photo whose `width:` holds a mapping. `writePhotoFields` refuses it rather
+   * than guessing, and the run has to drop **that** photo and write the rest —
+   * the defect `geocode` measured, where one entry in an unhandled shape threw
+   * away every measurement and gave *every* entry a failure line quoting the one
+   * that was wrong.
+   */
+  it("drops the photo whose YAML it will not guess at, and writes the others", async () => {
+    const yaml = tripWithPhotos(
+      [
+        "photos:",
+        unindexedPhoto("/photos/japon-2024/tokyo.jpg", "Une ruelle de Shinjuku"),
+        unindexedPhoto("/photos/japon-2024/kyoto.jpg", "Le chemin des philosophes", [
+          "width:",
+          "  px: 1200",
+        ]),
+      ].join("\n")
+    );
+    workspace = await photoWorkspace({ yaml, images: TWO_IMAGES });
+
+    const { outcome, events } = await run(workspace);
+
+    expect(outcome).toMatchObject({ state: "done", indexed: 1, failed: 1, written: true });
+    expect(workspace.photos()[0]).toMatchObject({ width: 1600 });
+    // The failure names photos[1] and nothing else.
+    const failures = events.filter((event) => event.kind === "failed");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]?.photo.index).toBe(1);
+    expect(failures[0]?.kind === "failed" && failures[0].reason.state).toBe("unsupported-yaml");
   });
 });
