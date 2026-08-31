@@ -165,6 +165,15 @@ export default async function TripPage({ params }: TripPageProps) {
         ];
   });
 
+  /**
+   * The gallery's photos: every declared photo except the cover, which the header
+   * has already shown. Derived once, here, so the section's emptiness test and
+   * its contents cannot disagree — a trip whose only photo *is* its cover has an
+   * empty gallery, and the section is omitted rather than left holding a repeat.
+   */
+  const cover = coverOf(trip);
+  const galleryPhotos = trip.photos.filter((photo) => photo.src !== cover?.src);
+
   return (
     <main className={styles.page}>
       {/*
@@ -181,7 +190,7 @@ export default async function TripPage({ params }: TripPageProps) {
           countryNames={world.visited.map((country) => country.name)}
           cityNames={cities.map((place) => place.name)}
           readingMinutes={estimateReadingMinutes(tripWordCount(trip))}
-          cover={coverOf(trip)}
+          cover={cover}
           worldMapHref={worldMapHref(locale, trip.slug)}
           allTripsHref={allTripsHref(locale)}
         />
@@ -194,6 +203,7 @@ export default async function TripPage({ params }: TripPageProps) {
             countries={world.countries}
             visited={world.visited}
             marks={marks}
+            stopNumbers={stopNumbers}
             world={{ width: world.width, height: world.height }}
           />
         </section>
@@ -217,14 +227,27 @@ export default async function TripPage({ params }: TripPageProps) {
          * rather than shown empty: "no photos yet" on a finished trip promises
          * something nobody has undertaken to deliver. See the ticket report on
          * what TIW-17 owns here.
+         *
+         * **The cover is excluded, and it was not.** `TripSchema` requires
+         * `coverPhotoSrc` to be one of `photos[]`, so iterating the array whole
+         * rendered that image twice — measured in the served HTML: the same `src`
+         * appeared at the top and again in the gallery, and a screen reader
+         * announced the same `alt` twice with nothing to say the two were one
+         * photo. With the reference trip, which declares a single photo *as* its
+         * cover, the section held nothing but the image already shown above.
+         *
+         * Excluded rather than given `alt=""` in the header: the cover is an
+         * editorial choice about layout, and the reader who meets it there has
+         * met the photo. Repeating it under a "Photos" heading says the trip has
+         * one more than it does.
          */}
-        {trip.photos.length > 0 ? (
+        {galleryPhotos.length > 0 ? (
           <section className={styles.section} aria-labelledby="photos-du-voyage">
             <h2 className={styles.sectionHeading} id="photos-du-voyage">
               {t("photosHeading")}
             </h2>
             <ul className={styles.gallery} role="list">
-              {trip.photos.map((photo) => (
+              {galleryPhotos.map((photo) => (
                 <li key={photo.src} className={styles.galleryItem}>
                   {/* A plain `<img>` for the same reason as the cover: this page
                       ships no JavaScript, and `next/image` is a client
