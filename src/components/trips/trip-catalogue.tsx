@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
 import type { Continent } from "@/domain/continent";
+import { countryAnchor } from "@/i18n/paths";
 import type { Locale } from "@/i18n/routing";
 import { buildCatalogue } from "./catalogue";
 import type { TripEntry } from "./entry";
@@ -76,7 +77,25 @@ export function TripCatalogue({ trips, locale }: TripCatalogueProps): ReactEleme
 
           <div className={styles.countries}>
             {group.countries.map((country) => (
-              <section key={country.countryCode} className={styles.country}>
+              /*
+                `id` is the landing point of the map's textual equivalent
+                (TIW-15): a country under the map links to the group of trips
+                that country holds, which is this section. The spelling comes
+                from `countryAnchor` rather than being written here, so the two
+                sides cannot drift — a fragment that matches nothing does not
+                fail, it silently leaves the reader at the top of the page.
+
+                `tabIndex={-1}` for the same reason `<main>` carries it: without
+                it Safari moves the scroll position and not the focus, so the
+                next Tab resumes from the top of the document instead of from
+                the country the reader asked for.
+              */
+              <section
+                key={country.countryCode}
+                id={countryAnchor(country.countryCode)}
+                tabIndex={-1}
+                className={styles.country}
+              >
                 <h3 className={styles.countryHeading}>{country.countryName}</h3>
 
                 {/*

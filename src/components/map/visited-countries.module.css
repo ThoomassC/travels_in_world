@@ -1,0 +1,117 @@
+/* =============================================================================
+   Visited countries — the map's textual equivalent.
+
+   No colour is declared here: every value comes from `src/styles/tokens.css`,
+   which is what keeps the dark theme working without this file knowing that it
+   exists. Measured on the tokens used below (composed, both themes):
+
+     --text-accent on --site-background     5.30:1 light / 12.40:1 dark
+     --text-muted  on --site-background     5.85:1 light / 13.70:1 dark
+     --control-border on --site-background  3.22:1 light /  5.99:1 dark
+
+   The first two are text (4.5:1 needed at this size), the third is the pill's
+   border, which is a boundary of a user interface component (1.4.11, 3:1).
+   ============================================================================ */
+
+.countries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/**
+ * `h2`, at the same level as "Derniers voyages" below it, because it is a
+ * sibling chapter of the page and not a footnote to the map. The size follows
+ * the type scale rather than the browser's `h2` default, which `tokens.css`
+ * leaves at 1.5em.
+ */
+.heading {
+  font-size: var(--text-lg);
+}
+
+/**
+ * A wrapping row of pills rather than one country per line.
+ *
+ * Forty countries down the page would push "Derniers voyages" below the fold,
+ * and the acceptance criterion of the home page is that the first screen carries
+ * the sentence, the map AND the start of the latest-trips block. Wrapped, the
+ * same forty fit in a few lines and stay scannable — which is what the ticket
+ * asks of them: "les visiteurs pressés qui veulent scanner".
+ */
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/**
+ * The whole row is the target, name and count together.
+ *
+ * `min-block-size: 2.75rem` — 44 px at the root size — for the same reason the
+ * map's markers carry it: WCAG 2.2 target size. Level AA only asks 24 px of
+ * 2.5.8, and these are not exempt as "inline text links" because they are laid
+ * out as blocks; matching the markers beside them costs nothing and keeps one
+ * number in the file. In `rem` so it grows with a reader's larger default size.
+ *
+ * `text-decoration: none` is paid for: the pill's border and its own background
+ * make it read as a control rather than as running text, so the underline is not
+ * the only thing separating it from its surroundings (WCAG 1.4.1 concerns the
+ * use of *colour*, and neither channel here is colour).
+ */
+.link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-block-size: 2.75rem;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-accent);
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.link:hover {
+  background: var(--accent-quiet);
+  border-color: var(--accent-quiet-border);
+}
+
+/**
+ * Baseline alignment above puts the two spans on one line; this is what keeps the
+ * pill 44 px tall when its content is shorter. `align-items: center` would do it
+ * too, and would misalign a country name against its count at two font sizes.
+ */
+.name {
+  font-weight: var(--weight-medium);
+}
+
+/**
+ * The count, quieter than the name but still text: `--text-muted` measures
+ * 5.85:1 on the page background in the light theme and 13.70:1 in the dark one.
+ * `--text-sm` and not `--text-xs`, which at 12 px would be the one thing on this
+ * page a reader has to lean in for.
+ */
+.trips {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.empty {
+  color: var(--text-muted);
+  max-width: 60ch;
+}
+
+/**
+ * The only link of the empty state, so it is a plain link and not a pill: there
+ * is nothing beside it to be consistent with, and a lone pill reads as a button
+ * that does something other than navigate.
+ */
+.allTrips {
+  align-self: flex-start;
+}

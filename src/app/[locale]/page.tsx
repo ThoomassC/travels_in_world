@@ -6,12 +6,12 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 // caught by the `"**/map/*"` half of the geometry façade's guard, which compares
 // strings and cannot tell `src/components/map` from a relative spelling of
 // `src/map`. See the header of `src/components/map/index.ts`.
-import { WorldMap, type TripMark } from "@/components/map";
+import { VisitedCountries, WorldMap, type TripMark } from "@/components/map";
 import { LatestTrips } from "@/components/trips/latest-trips";
 import { listTripSummaries } from "@/content/trips";
 import { buildWorldGeometry, projectPoint } from "@/map";
 import { localePathname } from "@/i18n/pathname";
-import { tripPath } from "@/i18n/paths";
+import { tripPath, tripsCountryPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import { MAIN_CONTENT_ID } from "./main-content";
 import styles from "./page.module.css";
@@ -127,6 +127,28 @@ export default async function HomePage({ params }: HomePageProps) {
             world={{ width: world.width, height: world.height }}
           />
         </div>
+
+        {/*
+          The map's textual equivalent (TIW-15), and it sits *outside*
+          `.mapFrame` on purpose. That wrapper caps the map at `45vh × aspect` —
+          about 691 px on a 1152 px desktop — so a list rendered inside it would
+          be a centred column two thirds of the page wide, with its `h2` out of
+          line with the "Derniers voyages" `h2` right below. The reading order is
+          what the acceptance criterion asks for ("sous la carte"), and DOM order
+          is what gives it.
+
+          `world.visited` is passed to both, and that is the point: the
+          `<figcaption>`'s "N pays" and the rows of this list are two renderings
+          of one array, so they cannot disagree. The counts come from the trips'
+          own `countryCodes` — every country of a trip, not just the one its
+          marker names, which is the relation the map had in no channel.
+        */}
+        <VisitedCountries
+          visited={world.visited}
+          tripCountryCodes={trips.map((trip) => trip.countryCodes)}
+          countryHref={(code) => localePathname({ href: tripsCountryPath(code), locale })}
+          allTripsHref={localePathname({ href: tripsPath(), locale })}
+        />
       </section>
 
       <LatestTrips trips={trips} locale={locale} />

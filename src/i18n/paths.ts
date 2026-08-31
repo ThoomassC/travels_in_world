@@ -47,3 +47,40 @@ export function tripPath(slug: string): string {
 export function tripsPath(): string {
   return `/${TRIP_SEGMENT}`;
 }
+
+/**
+ * The `id` of one country's section inside the full listing — the other half of
+ * {@link tripsCountryPath}, and the reason both live here rather than each on its
+ * own side.
+ *
+ * The map's textual equivalent (TIW-15) links a country to the group of trips
+ * that country holds, and that group is a `<section>` of `/voyages` rendered by
+ * `TripCatalogue`. A fragment is part of a URL, so it falls under this module's
+ * rule: one definition for an address someone may already have in their history.
+ *
+ * The alternative — spelling `pays-${code}` on both sides — is the mistake
+ * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` records for `voyage-<slug>`,
+ * where the two spellings are hand-duplicated and held together by a test alone.
+ * A fragment that matches nothing does not fail: the browser silently leaves the
+ * reader at the top of a page of sixty trips, which is a promise the link made
+ * and the document did not keep.
+ *
+ * Lowercased because a fragment is compared byte for byte by every browser while
+ * ISO 3166-1 alpha-2 is uppercase by schema, and a lowercase URL is what the rest
+ * of this site's addresses look like.
+ */
+export function countryAnchor(code: string): string {
+  return `pays-${code.toLowerCase()}`;
+}
+
+/**
+ * The full listing, addressed at the country the reader asked about.
+ *
+ * Not a separate route, deliberately: `/voyages` is prerendered once and already
+ * groups by country, so a per-country page would be a second rendering of the
+ * same content — and this ticket's whole posture is to *link* the map to that
+ * inventory rather than duplicate it.
+ */
+export function tripsCountryPath(code: string): string {
+  return `${tripsPath()}#${countryAnchor(code)}`;
+}

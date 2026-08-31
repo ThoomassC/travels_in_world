@@ -36,7 +36,12 @@
   },
   "map": {
     "summary": "Carte du monde : {trips, plural, =0 {aucun voyage publié} one {# voyage} other {# voyages}}, {countries, plural, =0 {aucun pays} one {# pays} other {# pays}}",
-    "visitedCountries": "Pays visités : {countries}.",
+    "summaryCropped": "Carte du monde, recadrée sur les pays visités : {trips, plural, =0 {aucun voyage publié} one {# voyage} other {# voyages}}, {countries, plural, =0 {aucun pays} one {# pays} other {# pays}}",
+    "unavailable": "La carte n’a pas pu être dessinée. Les pays visités restent listés ci-dessous.",
+    "countriesHeading": "Les pays visités",
+    "countryTrips": "{count, plural, =0 {aucun voyage} one {# voyage} other {# voyages}}",
+    "countriesEmpty": "Aucun pays sur la carte pour l’instant : le premier récit publié y posera sa balise.",
+    "allTrips": "Voir tous les voyages, groupés par continent puis par pays",
     "markListLabel": "Voyages sur la carte, du plus récent au plus ancien",
     "markLabel": "{title}, {place}"
   },
