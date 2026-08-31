@@ -18,6 +18,7 @@
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 const regionNames = new Map<string, Intl.DisplayNames>();
 const collators = new Map<string, Intl.Collator>();
+const listFormatters = new Map<string, Intl.ListFormat>();
 
 /**
  * **`timeZone: "UTC"`, and it is the whole correctness of this module.**
@@ -59,6 +60,24 @@ function regionNamesFor(locale: string): Intl.DisplayNames {
   return names;
 }
 
+/**
+ * `type: "conjunction"` and `style: "long"` — the same two options
+ * `src/components/map/world-map.tsx` passes for the map's list of visited
+ * countries, so the two views of the same fact are formatted by the same rule
+ * rather than by two nearby choices.
+ */
+function listFormatterFor(locale: string): Intl.ListFormat {
+  const existing = listFormatters.get(locale);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const formatter = new Intl.ListFormat(locale, { style: "long", type: "conjunction" });
+  listFormatters.set(locale, formatter);
+
+  return formatter;
+}
+
 /** The locale's own alphabetical order — never `String#localeCompare`, whose result depends on ambient locale data. */
 export function collatorFor(locale: string): Intl.Collator {
   const existing = collators.get(locale);
@@ -86,9 +105,15 @@ function utcInstant(day: string): Date | null {
  *
  * `formatRange` rather than two formatted dates joined by a dash: which parts a
  * range repeats and which it shares is a property of the language, exactly like
- * the separator `Intl.ListFormat` supplies below. Writing
- * `` `${from} – ${to}` `` renders "12 avril 2024 – 26 avril 2024" and no French
- * reader writes that.
+ * the separator {@link countryListOf} gets from `Intl.ListFormat` at the bottom
+ * of this file. Writing `` `${from} – ${to}` `` renders
+ * "12 avril 2024 – 26 avril 2024" and no French reader writes that.
+ *
+ * The previous wording of this paragraph pointed at "the separator
+ * `Intl.ListFormat` supplies below" when nothing in this module used
+ * `Intl.ListFormat` at all — the card was joining country names with a
+ * hard-coded `", "`. The reference is named now, so it goes stale as a broken
+ * `{@link}` rather than as a sentence that is quietly false.
  *
  * **No `<time>` element wraps the result, deliberately.** `<time>` carries one
  * machine-readable instant in its `datetime` attribute and HTML has no spelling
@@ -143,4 +168,29 @@ export function countryNamesOf(locale: string, codes: readonly string[]): readon
   const collator = collatorFor(locale);
 
   return codes.map((code) => countryNameOf(locale, code)).sort(collator.compare);
+}
+
+/**
+ * The same names as one phrase a reader can read out — "Bolivie et Pérou", not
+ * "Bolivie, Pérou".
+ *
+ * **This exists because two views of the same two countries did not agree.**
+ * Measured on the same trip: the card in the listing printed "Bolivie, Pérou"
+ * from a hard-coded `codes.join(", ")` while the map's caption printed
+ * "Bolivie, Chili, Japon, Maroc et Pérou" from `Intl.ListFormat`, and the trip
+ * page printed "Bolivie et Pérou". Two spellings of one fact on one site is not
+ * a matter of taste: the last separator of a list is a property of the language,
+ * and French does not repeat the comma before the final item.
+ *
+ * **The locale is a parameter, never the ambient one.** `Intl.ListFormat` with
+ * no locale reads the runtime's default, which at build time is the machine's
+ * and not the page's — the rule `collatorFor` above and `src/map/world.ts` both
+ * state, and the reason nothing in this module has a one-argument form.
+ *
+ * The empty list answers `""`, which is what `Intl.ListFormat` does with an
+ * empty array; the card never calls this with one, because a countries line with
+ * nothing in it is a blank bullet rather than a fact.
+ */
+export function countryListOf(locale: string, codes: readonly string[]): string {
+  return listFormatterFor(locale).format(countryNamesOf(locale, codes));
 }

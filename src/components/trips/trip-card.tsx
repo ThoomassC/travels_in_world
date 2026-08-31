@@ -4,7 +4,7 @@ import { localePathname } from "@/i18n/pathname";
 import { tripPath } from "@/i18n/paths";
 import type { Locale } from "@/i18n/routing";
 import type { TripEntry } from "./entry";
-import { countryNamesOf, formatDateRange } from "./format";
+import { countryListOf, formatDateRange } from "./format";
 import styles from "./trip-card.module.css";
 
 /**
@@ -46,7 +46,14 @@ export function TripCard({ trip, locale, headingLevel }: TripCardProps): ReactEl
   const t = useTranslations("trips");
   const Heading = headingLevel === 3 ? "h3" : "h4";
   const href = localePathname({ href: tripPath(trip.slug), locale });
-  const countries = countryNamesOf(locale, trip.countryCodes);
+  /**
+   * `countryListOf` and never `join(", ")`: the last separator of a list is a
+   * property of the language, and the same two countries were printing
+   * "Bolivie, Pérou" here while the map's caption and the trip page both printed
+   * "Bolivie et Pérou". The locale is passed explicitly, as everywhere in
+   * `./format`.
+   */
+  const countryList = countryListOf(locale, trip.countryCodes);
 
   return (
     <article className={styles.card}>
@@ -110,7 +117,12 @@ export function TripCard({ trip, locale, headingLevel }: TripCardProps): ReactEl
           strips the role there, and jsdom cannot see it.
         */}
         <ul className={styles.meta} role="list">
-          {countries.length > 0 ? <li>{countries.join(", ")}</li> : null}
+          {/*
+            Tested on `countryCodes` and not on the formatted string: an empty
+            list formats to `""`, and `"" ? … : null` would work by accident
+            while reading as a test of the wrong thing.
+          */}
+          {trip.countryCodes.length > 0 ? <li>{countryList}</li> : null}
           <li>{formatDateRange(locale, trip.startDate, trip.endDate)}</li>
           <li>{t("cardDuration", { days: trip.duration.days })}</li>
         </ul>

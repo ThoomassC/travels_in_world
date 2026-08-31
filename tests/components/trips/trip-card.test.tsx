@@ -74,9 +74,12 @@ describe("TripCard", () => {
     const facts = screen.getAllByRole("listitem");
 
     expect(facts).toHaveLength(3);
-    // Localised and ordered for a French reader — not the code order the domain
-    // hands over.
-    expect(facts[0]).toHaveTextContent("Japon, Thaïlande");
+    // Localised, ordered for a French reader — not the code order the domain
+    // hands over — and joined by `Intl.ListFormat`, so the card spells a pair of
+    // countries the way the map's caption and the trip page spell it. The
+    // hard-coded `", "` this replaces printed "Japon, Thaïlande" while every
+    // other view of the same fact printed "et".
+    expect(facts[0]).toHaveTextContent("Japon et Thaïlande");
     expect(facts[1]?.textContent?.replace(/[   ]/g, " ")).toBe("12–26 avril 2024");
     expect(facts[2]).toHaveTextContent("15 jours");
   });

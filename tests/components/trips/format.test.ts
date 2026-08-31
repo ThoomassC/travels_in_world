@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   collatorFor,
+  countryListOf,
   countryNameOf,
   countryNamesOf,
   formatDateRange,
@@ -130,6 +131,59 @@ describe("countryNamesOf", () => {
     countryNamesOf("fr", codes);
 
     expect(codes).toEqual(["JP", "FR"]);
+  });
+});
+
+describe("countryListOf", () => {
+  /**
+   * What this pins is a *site-wide* agreement, not a string. The card used to
+   * join country names with a hard-coded `", "` while the map's caption and the
+   * trip page both went through `Intl.ListFormat`, so the very same two
+   * countries read "Bolivie, Pérou" in the listing and "Bolivie et Pérou"
+   * everywhere else. The assertion below is the two-item case precisely because
+   * that is the only one where a comma and a conjunction differ.
+   */
+  it("joins two countries with the language's conjunction, not with a comma", () => {
+    expect(countryListOf("fr", ["BO", "PE"])).toBe("Bolivie et Pérou");
+  });
+
+  it("keeps the comma between all but the last two", () => {
+    expect(countryListOf("fr", ["JP", "TH", "PE"])).toBe("Japon, Pérou et Thaïlande");
+  });
+
+  it("prints a single country as itself, with no separator at all", () => {
+    expect(countryListOf("fr", ["JP"])).toBe("Japon");
+  });
+
+  it("answers an empty string for no country", () => {
+    // The card tests `countryCodes.length` and never renders this, but a
+    // formatter that threw on an empty array would make that a coupling rather
+    // than a choice.
+    expect(countryListOf("fr", [])).toBe("");
+  });
+
+  it("orders the names the way the reader reads them, like countryNamesOf", () => {
+    // `["CH", "ES"]` is the domain's by-code order, and it reads "Suisse et
+    // Espagne" if the list is formatted before it is sorted.
+    expect(countryListOf("fr", ["CH", "ES"])).toBe("Espagne et Suisse");
+  });
+
+  it("does not mutate the array it was given", () => {
+    const codes = ["JP", "FR"];
+
+    countryListOf("fr", codes);
+
+    expect(codes).toEqual(["JP", "FR"]);
+  });
+
+  it("takes the locale as an argument and never from the ambient runtime", () => {
+    /**
+     * The rule `src/map/world.ts` and `collatorFor` both state. An
+     * `Intl.ListFormat` built with no locale reads the machine's default, which
+     * at build time is the builder's and not the page's — a defect that shows up
+     * only on someone else's laptop.
+     */
+    expect(countryListOf("en", ["BO", "PE"])).toBe("Bolivia and Peru");
   });
 });
 
