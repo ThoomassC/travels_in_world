@@ -82,7 +82,8 @@
   "notFound": {
     "title": "Page introuvable",
     "description": "Cette adresse ne correspond à aucune page du carnet.",
-    "backHome": "Retour à l’accueil"
+    "backHome": "Retour à l’accueil",
+    "backTrips": "Parcourir tous les voyages"
   },
   "withdrawn": {
     "metaTitle": "Ce récit n’est plus en ligne",
