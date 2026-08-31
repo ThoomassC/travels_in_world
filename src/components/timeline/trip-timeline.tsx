@@ -78,11 +78,9 @@ function MoveBody({ step, locale }: { step: TimelineMove; locale: string }): Rea
       </p>
       <p className={styles.transport}>
         <TransportIcon mode={step.mode} className={styles.icon} />
-        {/* "Transport : " read aloud before the mode, so a screen reader hears a
-            labelled value rather than a bare noun floating after a date. Hidden
-            visually because the icon already carries that meaning for anyone who
-            can see it. */}
         {/*
+          « Transport : Avion » read aloud before the pill, so a screen reader
+          hears a labelled value rather than a bare noun floating after a date.
           The whole sentence is one message, and the visible pill is the one that
           steps out of the accessibility tree.
 
