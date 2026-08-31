@@ -1,0 +1,210 @@
+/* =============================================================================
+   The timeline itself.
+
+   The vertical rule joining the steps is drawn with a border on the list items,
+   not with a pseudo-element spanning the list: a border stops exactly where the
+   last item stops, so no tail hangs past the final step whatever the content
+   height turns out to be.
+
+   Only tokens from `src/styles/tokens.css`.
+   ============================================================================ */
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+/**
+ * Each step is a row: a fixed marker column, then the text.
+ *
+ * `--marker-size` and `--rule-offset` are local to this file and derived from
+ * the spacing scale rather than typed as pixels, so the rule stays centred under
+ * the markers when the reader's root font size changes.
+ */
+.stay,
+.move {
+  --marker-size: var(--space-6);
+  --rule-offset: calc(var(--marker-size) / 2);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--marker-size) 1fr;
+  gap: var(--space-4);
+  padding-bottom: var(--space-6);
+}
+
+/**
+ * The connecting rule. Drawn on the item rather than behind the list so it ends
+ * with the last step; `:last-child` then removes the dangling tail.
+ *
+ * `left` is set from the same custom property as the marker's width, which is
+ * what keeps the line under the centre of the badges instead of beside them.
+ */
+.stay::before,
+.move::before {
+  content: "";
+  position: absolute;
+  left: var(--rule-offset);
+  top: var(--marker-size);
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--border-subtle);
+}
+
+.stay:last-child,
+.move:last-child {
+  padding-bottom: 0;
+}
+
+.stay:last-child::before,
+.move:last-child::before {
+  display: none;
+}
+
+.marker {
+  display: grid;
+  place-items: center;
+  inline-size: var(--marker-size);
+  block-size: var(--marker-size);
+  border-radius: var(--radius-pill);
+  /* Opaque, so the rule passes behind the marker rather than through it. */
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+}
+
+/**
+ * A stay's number is the same number its marker wears on the mini-map. That is
+ * the whole point of passing `stopNumbers` in rather than counting here: one
+ * derivation shared by the two components cannot disagree with itself, and the
+ * reader can move between the map and the timeline by matching a digit.
+ */
+.badge {
+  color: var(--text-accent);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.markerIcon {
+  color: var(--text-accent);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* The marker column is fixed, so this one must be allowed to shrink; without
+     it a long place name would widen the grid and scroll the page sideways. */
+  min-width: 0;
+  /* Optically centres the first line of the heading against the marker. */
+  padding-top: var(--space-1);
+}
+
+.heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  /* The anchor target: without this the heading lands under nothing in
+     particular, but a future sticky header would hide it. Reserved now, in one
+     place, rather than debugged later. */
+  scroll-margin-block-start: var(--space-5);
+}
+
+.headingText {
+  /* Long single-word place names break rather than widening the grid. */
+  overflow-wrap: anywhere;
+}
+
+/**
+ * The permalink. Always present, never hover-only: a control that appears on
+ * hover does not exist on a touch screen, and "copy the link to this step" is
+ * exactly the thing a reader on a phone wants to do.
+ *
+ * Muted until interacted with, so twenty of them do not compete with the
+ * headings they belong to.
+ */
+.anchor {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 44 px at the root size — WCAG 2.2 target size (minimum). */
+  min-inline-size: 2.75rem;
+  min-block-size: 2.75rem;
+  /* Pulled back out of the flow it just claimed, so a 44 px target does not put
+     44 px of air between the heading and the line under it. */
+  margin-block: -0.85rem;
+  color: var(--text-muted);
+  font-size: var(--text-md);
+  font-weight: var(--weight-regular);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+
+.anchor:hover,
+.anchor:focus-visible {
+  color: var(--text-accent);
+  text-decoration: underline;
+}
+
+/* The heading that owns the fragment currently in the URL. `:target` is the one
+   piece of state a static page gets for free — no JavaScript involved. */
+.heading:target,
+.stay:target,
+.move:target {
+  scroll-margin-block-start: var(--space-5);
+}
+
+.heading:target .headingText {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 0.25em;
+}
+
+.meta {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.transport {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--accent-quiet-border);
+  border-radius: var(--radius-pill);
+  background: var(--accent-quiet);
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+}
+
+.icon {
+  /* Stops the glyph shrinking when the label beside it wraps. */
+  flex: none;
+  color: var(--text-accent);
+}
+
+.transportLabel {
+  font-weight: var(--weight-semibold);
+}
+
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
