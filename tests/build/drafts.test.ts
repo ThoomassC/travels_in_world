@@ -117,6 +117,39 @@ function prerenderedRoutes(): readonly string[] {
 }
 
 /**
+ * The manifest entry of the trip detail route, found by its dynamic segment
+ * rather than by a hard-coded path so a route rename fails loudly here instead of
+ * silently emptying the assertion below.
+ */
+function tripRouteEntry(): Record<string, unknown> {
+  const manifest: unknown = JSON.parse(
+    readFileSync(path.join(NEXT_DIR, "prerender-manifest.json"), "utf8")
+  );
+
+  const dynamicRoutes =
+    typeof manifest === "object" && manifest !== null
+      ? Reflect.get(manifest, "dynamicRoutes")
+      : undefined;
+
+  if (typeof dynamicRoutes !== "object" || dynamicRoutes === null) {
+    throw new Error(
+      "prerender-manifest.json carries no `dynamicRoutes` map. Either the build did not run or the manifest changed shape — in both cases the assertion below would pass by reading nothing."
+    );
+  }
+
+  const key = Object.keys(dynamicRoutes).find((route) => route.endsWith("/[slug]"));
+  if (key === undefined) {
+    throw new Error(
+      `No dynamic route ending in /[slug] in the manifest, so the trip detail route was not found. Routes: ${Object.keys(dynamicRoutes).join(", ")}. If the route was renamed, rename it here too — do not delete this case.`
+    );
+  }
+
+  const entry = Reflect.get(dynamicRoutes, key);
+
+  return typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+}
+
+/**
  * The slugs that appear as a **path segment** of a prerendered route.
  *
  * Segment-wise, and not `route.includes(slug)`, for two reasons that pull in
@@ -177,6 +210,40 @@ describe("a draft trip is absent from the build output", () => {
     // Not a substring match: a published trip whose slug merely contains a
     // draft's must not be reported, and the other way round.
     expect(leakedSlugs(["japon-2024"], routes)).toEqual([]);
+  });
+
+  /**
+   * **`dynamicParams = false` on the trip route, read off the artefact.**
+   *
+   * This is the other half of the draft frontier, and until now no test held it:
+   * `grep -rn "dynamicParams" tests/` answered nothing, so the line could be
+   * deleted with the whole suite green. The sweep above cannot see it either — it
+   * looks for a draft slug as a route *segment*, and the dynamic key
+   * `/[locale]/voyages/[slug]` contains no slug at all.
+   *
+   * Why the flag is load-bearing rather than a performance setting, measured
+   * during the TIW-11 audit: without it, a slug absent from
+   * `generateStaticParams` is **rendered on demand**. The draft's `trip.yaml` is
+   * traced into the server function's bundle, `process.env.TIW_DRAFTS` survives as
+   * a *runtime* read, and the publish/hide decision is taken per request — the
+   * URL answered 200 with the draft, and removing the variable did not unpublish
+   * at once because the ISR cache served it one more time.
+   *
+   * What the manifest says, and it is a clean two-state signal:
+   *
+   *   with    `dynamicParams = false` -> { fallback: false }
+   *   without it                      -> { fallback: null, compute: "blocking" }
+   *
+   * So `fallback === false` is the artefact-level spelling of the flag, and the
+   * absence of `compute` is the artefact-level spelling of "no per-request
+   * function". Both are asserted: the two together cannot be satisfied by a
+   * manifest that merely changed shape.
+   */
+  it("keeps the trip route closed to slugs it did not prerender", () => {
+    const entry = tripRouteEntry();
+
+    expect(entry.fallback).toBe(false);
+    expect(entry).not.toHaveProperty("compute");
   });
 
   /**
