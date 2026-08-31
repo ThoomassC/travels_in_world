@@ -85,7 +85,11 @@ fusionner. Le bloc `content-facade` répète donc la frontière de la carte, `ma
 lève à l'intérieur de `src/map/**` — où `d3-geo`, `topojson-client` et `world-atlas` sont chez
 eux — et `i18n-navigation` relève les deux tout en levant la seule interdiction de navigation.
 Aucune de ces répétitions n'est de la redondance : supprimer l'une d'elles fait rougir
-`npm run test:lint`, et rien d'autre.
+`npm run test:lint`, et rien d'autre. Une nuance mesurée pendant TIW-27 : c'est vrai des
+**répétitions**, pas de `map-internals`, qui est une _exemption_ — le neutraliser casse
+aussi `npm run lint` sur quatre fichiers réels de `src/map/**`. Et attention au piège
+inverse, mesuré et documenté nulle part ailleurs : écrire `["error"]` seul dans un bloc
+plus tardif n'annule pas les options du bloc antérieur, il les **hérite**.
 
 Ce que les tests couvrent, et ce qu'ils ne couvrent pas : le seul exécuteur réel de
 `server-only` est le bundler de `next build`, qu'aucun test de ce dépôt n'exerce. Les tests

@@ -2,7 +2,8 @@
 
 Carnet de voyages personnel : une carte du monde en SVG rendue côté serveur et, pour chaque
 voyage, une page en frise chronologique d'étapes. Le contenu vit en fichiers versionnés
-(YAML + MDX) — il n'y a pas de base de données. Déploiement sur Vercel.
+(YAML aujourd'hui ; le texte des étapes n'existe pas encore dans le schéma, voir la note
+de TIW-16) — il n'y a pas de base de données. Déploiement sur Vercel.
 
 ## Prérequis
 
@@ -144,7 +145,8 @@ pages (3/3)`, et le HTML servi est identique — seul `.next/server/app/fr.html`
 `.next/prerender-manifest.json` et exige `/fr` et `/_not-found`. Elle exige un build avant
 elle et ne le fait pas à votre place (branchée en CI par TIW-22). Le même fichier porte le
 budget de charge utile, désormais appliqué aux **deux** routes prérendues et non à `/fr`
-seule : 1,5 Ko brotli de HTML pour un plafond de 100 Ko, et pour un plafond de 150 Ko de JS
+seule : 35,8 Ko brotli de HTML sur `/fr` — les tracés du planisphère, en ligne dans le
+document — et 1,1 Ko sur `/_not-found`, pour un plafond de 100 Ko ; et pour un plafond de 150 Ko de JS
 initial, 119,9 Ko sur `/fr` (6 chunks) et 111,1 Ko sur `/_not-found` (5 chunks) — chunk
 `noModule` exclu, c'est le bundle de compatibilité que jamais aucun navigateur moderne
 n'exécute et il vaut 35 Ko à lui seul.
