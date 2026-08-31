@@ -280,12 +280,22 @@ leurs tickets, pas de celui-ci.
 ## Conséquences
 
 **Ce qu'on gagne.** Les modules internes restent chargeables par du Node nu :
-`tests/map/**` importe `@/map/world`, `@/map/projection` et `@/map/iso-3166`
-statiquement, sans mock et sans bundler, et `scripts/**` pourra réutiliser le
-dossier le jour où une commande aura besoin d'une projection. Le guard n'a qu'un
-endroit où vivre, donc une seule chance de se contredire, et
-`tests/map/server-boundary.test.ts` assert les deux moitiés : la façade le porte,
-et aucun autre module ne le porte.
+`tests/map/**` importe `@/map/world` et `@/map/projection` statiquement, sans mock
+et sans bundler, et `scripts/**` pourra réutiliser le dossier le jour où une
+commande aura besoin d'une projection.
+
+> **Correction (TIW-29).** Cette phrase citait aussi `@/map/iso-3166`. Le module a
+> été déplacé en `src/iso-3166.ts` par TIW-29, après mesure des trois voies : la
+> table des 249 codes ISO devait servir **aussi** au validateur de contenu, qui
+> est un script Node nu, et un export de cette façade ne peut jamais le servir —
+> `server-only` échoue à la **résolution**, pas à l'exécution
+> (`ERR_MODULE_NOT_FOUND`). Le dossier `src/map/` compte donc quatre modules
+> internes et non cinq. L'élargissement est assumé : la table est désormais
+> lisible depuis tout `src/**`, alors que `@/map/iso-3166` était refusé depuis une
+> page. Le guard n'a qu'un
+> endroit où vivre, donc une seule chance de se contredire, et
+> `tests/map/server-boundary.test.ts` assert les deux moitiés : la façade le porte,
+> et aucun autre module ne le porte.
 
 **Ce qu'on paie**, et il faut le lire en entier :
 
@@ -307,12 +317,17 @@ et aucun autre module ne le porte.
   C'est le mode d'échec de l'invariant 1 déplacé du prérendu vers la façade.
   **Corollaire opératoire : tant qu'une façade n'a pas un consommateur réel dans
   `src/app/**`, la tenir pour non vérifiée.**
-- **La position des blocs n'est défendue que par `test:lint`, que rien ne
-  déclenche.** Il n'existe aucun fichier de CI dans ce dépôt, sur aucune branche.
-  `test:lint` et `test:build` vivent hors de `npm run test` parce qu'elles exigent
-  une étape préalable, et personne ne les lance à ma place. TIW-22 est le ticket
-  qui branchera l'intégration continue ; jusque-là, la garde de cette ADR est une
-  commande qu'un humain doit taper.
+- **La position des blocs n'est défendue que par `test:lint`.** `test:lint` et
+  `test:build` vivent hors de `npm run test` parce qu'elles exigent une étape
+  préalable.
+
+  > **Correction (TIW-27).** Ce point disait « que rien ne déclenche » et « il
+  > n'existe aucun fichier de CI dans ce dépôt, sur aucune branche ». TIW-22 a
+  > livré `.github/workflows/ci.yml`, qui lance les quatre gardes sur chaque pull
+  > request et sur chaque poussée vers `main` et `develop`, et la protection de
+  > branche fait de la vérification `Vérifications` un préalable à toute fusion.
+  > La garde de cette ADR n'est plus une commande qu'un humain doit taper.
+
 - **`test:lint` linte une liste figée de chemins.** Les fixtures nomment
   `src/app/[locale]/page.tsx`, `src/i18n/request.ts`, `src/content/loader.ts` et
   quelques autres, en dur. Un nouveau dossier top-level — `src/widgets/**`,
