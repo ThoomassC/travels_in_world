@@ -22,12 +22,15 @@ import styles from "./trip-mini-map.module.css";
  * 3. Fixing either would mean editing `src/components/map/**`, which this ticket
  *    does not own.
  *
- * **A separate, duller obstacle, recorded because it is a repository defect
- * rather than a design choice:** `@/components/map/world-map` cannot be imported
- * from anywhere today. The ESLint pattern sealing the map geometry façade is
- * `["@/map/*", "**\/map/*"]`, and `**\/map/*` matches `@/components/map/frame`
- * exactly as it matches `@/map/world`. Nothing had imported the map component
- * yet, so nobody had hit it. It is reported rather than patched here.
+ * **A separate, duller obstacle, since settled:** `@/components/map/world-map`
+ * could not be imported from anywhere. `**\/map/*` — the pattern sealing the map
+ * geometry façade — matches it exactly as it matches `@/map/world`, because
+ * `no-restricted-imports` compares specifier strings and never resolves a path.
+ * Nothing had imported the map component yet, so nobody had hit it. TIW-20 did,
+ * on the first page to render the map, and answered with
+ * `src/components/map/index.ts` — the specifier a consumer may write. Reaching
+ * the world map from here is therefore possible now, and the three reasons above
+ * are why this component still exists rather than reusing it.
  *
  * Zero bytes of JavaScript, like the world map, and by the same construction:
  * the `<svg>` is inert — `aria-hidden`, no `tabindex`, no `:hover`,

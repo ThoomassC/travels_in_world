@@ -12,9 +12,11 @@ import { timelineSteps } from "@/components/timeline/steps";
 import { tripWordCount } from "@/components/timeline/reading";
 import { estimateReadingMinutes, visitedPlaces } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
+import { tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
 import { buildWorldGeometry, projectPoint } from "@/map";
+import { MAIN_CONTENT_ID } from "../../main-content";
 import styles from "./page.module.css";
 
 /**
@@ -77,8 +79,19 @@ function worldMapHref(locale: Locale, tripSlug: string, placeSlug?: string): str
   return localePathname({ href: `/#voyage-${fragment}`, locale });
 }
 
+/**
+ * The listing, and not the home page.
+ *
+ * It pointed at `/` until TIW-20 landed, because `tripsPath()` did not exist yet
+ * — which made the page's two ways out lead to the same place while one of them
+ * was labelled "Tous les voyages". Two reviews caught it independently: a link
+ * whose text names a page that exists and whose href goes elsewhere is a 2.4.4
+ * failure, and after the merge it would have been a 3.2.4 one as well — the same
+ * label pointing at two destinations on one site, since the site navigation uses
+ * `tripsPath()` for it.
+ */
 function allTripsHref(locale: Locale): string {
-  return localePathname({ href: "/", locale });
+  return localePathname({ href: tripsPath(), locale });
 }
 
 /** The declared photo behind `coverPhotoSrc`. `TripSchema` already refuses a
@@ -175,7 +188,13 @@ export default async function TripPage({ params }: TripPageProps) {
   const galleryPhotos = trip.photos.filter((photo) => photo.src !== cover?.src);
 
   return (
-    <main className={styles.page}>
+    /*
+      `id` and `tabIndex={-1}`: the skip link TIW-20 put in the layout targets
+      `#contenu` on every route, so a page without the id sends it nowhere. The
+      negative tabindex is what makes Safari actually move focus rather than only
+      scroll — and it keeps `<main>` out of the tab order.
+    */
+    <main id={MAIN_CONTENT_ID} tabIndex={-1} className={styles.page}>
       {/*
        * `<article>`: this page is a self-contained composition that would still
        * make sense syndicated out of the site — which is the criterion the whole

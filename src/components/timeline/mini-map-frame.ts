@@ -10,12 +10,15 @@
  * mean one number serving two requirements — the shape of bug that gets
  * "fixed" in one direction and silently breaks the other caller.
  *
- * There is a second, duller reason, and it is worth writing down because it is a
- * repository-level defect rather than a design choice: `src/components/map/*`
- * cannot currently be imported from anywhere at all. The ESLint pattern that
- * seals the map geometry façade is `["@/map/*", "**\/map/*"]`, and `**\/map/*`
- * matches `@/components/map/frame` just as readily as `@/map/world`. Nothing had
- * imported the map component yet, so nobody had hit it. See the ticket report.
+ * There was a second, duller reason, and it has since been settled: `**\/map/*`
+ * — the pattern that seals the map geometry façade — matches
+ * `@/components/map/frame` just as readily as `@/map/world`, because
+ * `no-restricted-imports` compares specifier strings without resolving a path.
+ * Nothing had imported the map component yet, so nobody had hit it. TIW-20 hit it
+ * on the first page that rendered the map and answered with
+ * `src/components/map/index.ts`, the specifier a consumer may write. So this
+ * module could reach the world map's `frame.ts` today — and still does not, for
+ * the first reason above, which is about the numbers and not about the lint.
  *
  * **The one invariant that cannot bend** is shared with the world map all the
  * same: the frame's aspect ratio must equal the world box's, exactly. The
