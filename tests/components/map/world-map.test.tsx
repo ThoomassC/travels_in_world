@@ -302,10 +302,23 @@ describe("WorldMap", () => {
    */
   describe("the counter", () => {
     const cases: readonly { trips: number; countries: number; expected: string }[] = [
+      // 0 and 60 trips both frame the whole world — the first for having no
+      // extent at all, the second for spanning it — so both keep "du monde".
       { trips: 0, countries: 0, expected: "Carte du monde : aucun voyage publié, aucun pays" },
-      { trips: 1, countries: 1, expected: "Carte du monde : 1 voyage, 1 pays" },
-      { trips: 2, countries: 2, expected: "Carte du monde : 2 voyages, 2 pays" },
       { trips: 60, countries: 23, expected: "Carte du monde : 60 voyages, 23 pays" },
+      // 1 and 2 trips are cropped by `frameAround`, hence the other wording.
+      // Kept in this table rather than moved out, because the plural rules are
+      // what this block is about and they must hold in both messages.
+      {
+        trips: 1,
+        countries: 1,
+        expected: "Carte du monde, recadrée sur les voyages publiés : 1 voyage, 1 pays",
+      },
+      {
+        trips: 2,
+        countries: 2,
+        expected: "Carte du monde, recadrée sur les voyages publiés : 2 voyages, 2 pays",
+      },
     ];
 
     for (const { trips, countries, expected } of cases) {
@@ -320,5 +333,97 @@ describe("WorldMap", () => {
         expect(screen.getByText(expected)).toBeVisible();
       });
     }
+  });
+
+  /**
+   * The caption must not promise a world it is not showing, and the case that
+   * makes this concrete is the state production reaches the day after the first
+   * récit: one published trip.
+   *
+   * `frameAround` floors that trip's point-sized extent at 30 % of the world's
+   * width, so the drawing shows about a continent — and the caption read "Carte
+   * du monde : 1 voyage, 1 pays". A label read aloud, describing a picture it did
+   * not match. These two tests assert the *relation* between the `viewBox` and
+   * the wording rather than either alone, so a change to the framing floor cannot
+   * make the caption lie again without failing here.
+   */
+  describe("the caption against the framing", () => {
+    const captionOf = (container: HTMLElement): string =>
+      container.querySelector("figcaption")?.textContent ?? "";
+
+    it("says the world only when the frame really is the world", () => {
+      const { container } = renderMap({ marks: [] });
+
+      expect(viewBoxOf(container)).toBe("0 0 960 500");
+      expect(captionOf(container)).toContain("Carte du monde :");
+      expect(captionOf(container)).not.toContain("recadrée");
+    });
+
+    it("says it is cropped as soon as the frame is narrower than the world", () => {
+      const { container } = renderMap({
+        marks: [CENTRED_MARK],
+        visited: [country("JP", "Japon")],
+      });
+
+      // The 30 % legibility floor, normalised to the world's ratio.
+      expect(viewBoxOf(container)).toBe("336 175 288 150");
+      expect(captionOf(container)).toBe(
+        "Carte du monde, recadrée sur les voyages publiés : 1 voyage, 1 pays"
+      );
+    });
+
+    it("stops piling country names into the figure's accessible name", () => {
+      /**
+       * A `<figcaption>` *is* the `<figure>`'s accessible name (HTML-AAM), and
+       * until TIW-15 it also carried a visually hidden enumeration of every
+       * visited country. That was the right call while nothing else named them;
+       * `VisitedCountries` now names them visibly, counted and linked, so forty
+       * country names in a *label* is all that removal leaves behind.
+       *
+       * Asserted on the caption's own text rather than through
+       * `toHaveAccessibleName`, because jsdom's name computation for `figure` is
+       * not the browser's — the end-to-end suite is where the real accessible
+       * name is checked.
+       */
+      const visited = [country("JP", "Japon"), country("IS", "Islande")];
+      const { container } = renderMap({ marks: [CENTRED_MARK], visited });
+
+      expect(captionOf(container)).not.toContain("Japon");
+      expect(captionOf(container)).not.toContain("Islande");
+      expect(captionOf(container)).toContain("2 pays");
+    });
+  });
+
+  /**
+   * "Never an empty frame" is an acceptance criterion of TIW-15, and the state
+   * that breaks it is not a thrown error: an empty `countries` array is a
+   * perfectly valid value that renders a ratio-locked, bordered rectangle of
+   * nothing with a counter underneath. Nothing in the console, nothing in the
+   * build.
+   */
+  describe("with no geometry to draw", () => {
+    it("renders a sentence instead of an empty box", () => {
+      const { container } = renderMap({ countries: [], visited: [], marks: [] });
+
+      expect(container.querySelector("svg")).toBeNull();
+      expect(screen.getByText(frMessages.map.unavailable)).toBeVisible();
+    });
+
+    it("keeps the figure and its caption, so the count is still stated", () => {
+      renderMap({ countries: [], visited: [], marks: [] });
+
+      expect(screen.getByRole("figure")).toBeInTheDocument();
+      expect(screen.getByText("Carte du monde : aucun voyage publié, aucun pays")).toBeVisible();
+    });
+
+    it("drops the markers with the drawing rather than piling them in a corner", () => {
+      // The markers are positioned in percentages of the canvas that no longer
+      // exists. Rendering them anyway would stack sixty 44 px targets at the
+      // top-left of the figure, overlapping the caption.
+      renderMap({ countries: [], visited: [], marks: SIXTY_MARKS });
+
+      expect(screen.queryAllByRole("link")).toHaveLength(0);
+      expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    });
   });
 });

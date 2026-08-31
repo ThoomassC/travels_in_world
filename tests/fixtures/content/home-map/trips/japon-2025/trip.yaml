@@ -1,0 +1,14 @@
+slug: japon-2025
+title: Japon, retour à Osaka
+startDate: 2025-03-02
+endDate: 2025-03-08
+places:
+  - slug: osaka
+    name: Osaka
+    countryCode: JP
+    coordinates: { lat: 34.6937, lon: 135.5023 }
+steps:
+  - kind: stay
+    placeSlug: osaka
+    startDate: 2025-03-02
+    endDate: 2025-03-08

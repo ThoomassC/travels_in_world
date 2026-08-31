@@ -1,0 +1,29 @@
+# The trip that makes the audit's gap concrete: it crosses two countries, so it
+# tints two and its marker names one.
+slug: perou-bolivie-2023
+title: Pérou et Bolivie, hiver 2023
+startDate: 2023-07-04
+endDate: 2023-07-20
+places:
+  - slug: cusco
+    name: Cusco
+    countryCode: PE
+    coordinates: { lat: -13.5319, lon: -71.9675 }
+  - slug: la-paz
+    name: La Paz
+    countryCode: BO
+    coordinates: { lat: -16.4897, lon: -68.1193 }
+steps:
+  - kind: stay
+    placeSlug: cusco
+    startDate: 2023-07-04
+    endDate: 2023-07-12
+  - kind: move
+    fromSlug: cusco
+    toSlug: la-paz
+    mode: bus
+    date: 2023-07-12
+  - kind: stay
+    placeSlug: la-paz
+    startDate: 2023-07-12
+    endDate: 2023-07-20
