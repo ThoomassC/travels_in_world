@@ -88,7 +88,7 @@ describe("countryNameOf", () => {
   });
 
   it("names Kosovo, whose code the map cannot draw", () => {
-    // `XK` is user-assigned, so it is absent from `src/map/iso-3166.ts` — but ICU
+    // `XK` is user-assigned, so it is absent from `src/iso-3166.ts` — but ICU
     // knows it, and this function has a name for it. Not a screen: a trip
     // declaring `XK` fails `next build` in `buildWorldGeometry` before any card
     // is rendered (measured; see `src/domain/continent.ts`).

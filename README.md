@@ -34,7 +34,7 @@ npx next dev --hostname 0.0.0.0   # expose brouillons compris à tout le sous-r�
 | Script                     | Rôle                                                                      |
 | -------------------------- | ------------------------------------------------------------------------- |
 | `npm run dev`              | Serveur de développement, sur `127.0.0.1` seulement                       |
-| `npm run build`            | Build de production                                                       |
+| `npm run build`            | Build de production — `prebuild` y lance `validate:content` d'abord       |
 | `npm run start`            | Sert le build de production                                               |
 | `npm run lint`             | ESLint (flat config)                                                      |
 | `npm run format`           | Prettier en écriture                                                      |
@@ -43,7 +43,7 @@ npx next dev --hostname 0.0.0.0   # expose brouillons compris à tout le sous-r�
 | `npm run test:watch`       | Vitest en veille                                                          |
 | `npm run test:build`       | Garde de prérendu + budget de bundle — **exige un `npm run build` avant** |
 | `npm run test:e2e`         | Playwright — build + start sur un port dédié, puis `tests/e2e`            |
-| `npm run validate:content` | Valide `content/trips/` — tourne aussi en `pretest`                       |
+| `npm run validate:content` | Valide `content/trips/` — tourne aussi en `pretest` et en `prebuild`      |
 | `npm run new-trip <slug>`  | Crée `content/trips/<slug>/trip.yaml`, squelette commenté                 |
 | `npm run geocode <slug>`   | Résout et écrit les coordonnées des villes du voyage                      |
 | `npm run index-photos`     | **Non implémenté** — échoue volontairement, voir TIW-17                   |
@@ -186,14 +186,24 @@ qu'une seconde locale est déclarée, et son commentaire liste ce qu'il faut tra
 **Validation du contenu.** Les voyages sont des `content/trips/<slug>/trip.yaml` écrits à
 la main ; `content/README.md` en donne la structure. `npm run validate:content` les valide
 avec le **même `TripSchema`** que les pages (une règle métier a un seul endroit où vivre) et
-y ajoute les trois contrôles que le schéma ne peut pas faire : l'unicité d'un slug dans
-**toute** la collection, l'existence réelle des photos sur le disque, et la traduction des
-erreurs en messages actionnables. Le message est le livrable : chaque ligne porte le chemin
+y ajoute les contrôles que le schéma ne peut pas faire : l'unicité d'un slug dans **toute**
+la collection, l'existence réelle des photos sur le disque, l'existence réelle du pays
+qu'un `countryCode` désigne, et la traduction des erreurs en messages actionnables. Le message est le livrable : chaque ligne porte le chemin
 du fichier relatif à la racine, la ligne et la colonne, le champ en écriture lisible
 (`steps[2].fromSlug`) et **la commande exacte** à lancer quand il en existe une. Aucune
-couleur ANSI quand la sortie n'est pas un terminal. La commande est branchée en `pretest`,
-donc un contenu fautif ne peut pas traverser la suite : elle sort en code 1, jamais en
-silence.
+couleur ANSI quand la sortie n'est pas un terminal. La commande est branchée en `pretest`
+**et en `prebuild`**, donc un contenu fautif ne traverse ni la suite ni un build : elle sort
+en code 1, jamais en silence.
+
+`prebuild` est arrivé avec TIW-29, et il ferme un chemin que `vercel.json` ne couvrait pas.
+`CountryCodeSchema` valide la _forme_ d'un code pays et refuse de connaître la liste des
+pays (`docs/adr/0001-domain-purity.md`) ; `buildWorldGeometry` lève sur tout code hors des
+249 de l'ISO 3166-1. Un voyage déclarant `XK` — le code d'usage du Kosovo — passait donc la
+validation (« 1 voyage validé, aucun problème ») et faisait échouer `npm run build` au
+prérendu de `/fr`, avec un message qui renvoyait à `validate:content` : l'auteur tournait en
+rond. La vérification vit maintenant dans le validateur, et le hook npm garantit qu'aucun
+`npm run build` ne s'exécute sans elle — la CI lançant le build et la validation dans deux
+jobs séparés, `vercel.json` seul ne suffisait pas.
 
 Deux dossiers de contenu sont paramétrables (`--content`, `--public`, ou `TIW_CONTENT_DIR`
 et `TIW_PUBLIC_DIR`), ce qui est ce qui permet de tester la validation contre les fixtures
@@ -336,9 +346,11 @@ par une fusion, et qu'une fusion est refusée quand le pipeline est rouge.
 ## Déploiement
 
 Vercel. Les en-têtes de sécurité et le cache long des assets sont dans `vercel.json`, qui
-porte aussi `buildCommand: "npm run validate:content && npm run build"` : le build de
-déploiement refuse un contenu que les pages ne sauraient pas charger, y compris s'il est
-arrivé sur `main` sans passer par une pull request. Le reste de la suite n'y est pas — un
+porte aussi `buildCommand: "npm run validate:content && npm run build && npm run test:build"` :
+le build de déploiement refuse un contenu que les pages ne sauraient pas charger, y compris
+s'il est arrivé sur `main` sans passer par une pull request. Depuis TIW-29 le hook `prebuild`
+de `package.json` le refuserait de toute façon ; les deux sont gardés, l'un couvrant le
+déploiement et l'autre tout autre appel de `npm run build`. Le reste de la suite n'y est pas — un
 build de déploiement doit construire, et le budget de bundle comme le prérendu sont des
 propriétés du code que la pull request a déjà mesurées.
 

@@ -261,6 +261,24 @@ function localisedName(
  * tried, and when *that* resolves the message says the one thing they need. This
  * is the same distinction `src/content/validate.ts` draws between a missing file
  * and a miscased one.
+ *
+ * **Both messages used to end on «relance `npm run validate:content`», and that
+ * was the defect TIW-29 fixed.** Measured, on a trip declaring `XK`:
+ *
+ * ```
+ * $ npm run validate:content   →  1 voyage validé …, aucun problème.   (exit 0)
+ * $ npm run build              →  Error: le code pays « XK » … relance
+ *                                 « npm run validate:content ».        (exit 1)
+ * ```
+ *
+ * The author was sent in a circle by a message that named the wrong tool. The fix
+ * is upstream — `src/content/validate.ts` now refuses such a code, with the file,
+ * the line, the column and the field — and `package.json` runs it before every
+ * `npm run build` through `prebuild`. So this text stops advertising a command as
+ * the place to look and says what reaching it means instead: the gate was
+ * bypassed. It is kept, and kept precise, because it is the last line of defence
+ * for a `next build` run without its `prebuild` — `npx next build`, or a call from
+ * inside another tool.
  */
 function unknownCodeProblem(code: string): string {
   const upperCased = code.toUpperCase();
@@ -269,14 +287,30 @@ function unknownCodeProblem(code: string): string {
     return (
       `le code pays ${quoteCode(code)} n'est pas reconnu parce qu'il n'est pas en majuscules : ` +
       `écris-le ${quoteCode(upperCased)}. La norme ISO 3166-1 alpha-2 est en capitales, et ` +
-      `« countryCode » est comparé caractère pour caractère.`
+      `« countryCode » est comparé caractère pour caractère. ${bypassNote()}`
     );
   }
 
   return (
-    `le code pays ${quoteCode(code)} n'est pas un code ISO 3166-1 alpha-2 : aucun pays ne le porte, ` +
-    `et la carte n'a donc aucune forme à lui associer. ` +
-    `Corrige le champ « countryCode » du lieu concerné dans content/, puis relance « npm run validate:content ».`
+    `le code pays ${quoteCode(code)} n'est attribué à aucun pays par l'ISO 3166-1 alpha-2 : ` +
+    `la carte n'a donc aucune forme à lui associer. ` +
+    `Corrige le champ « countryCode » du lieu concerné dans content/. ${bypassNote()}`
+  );
+}
+
+/**
+ * Why this message is a surprise, and where the same fault is named properly.
+ *
+ * Not «relance la commande» but «la commande a été contournée»: since TIW-29
+ * `npm run validate:content` refuses both faults above, naming the file, the line
+ * and the field, and `prebuild` runs it before any `npm run build`. A reader of
+ * this line is therefore looking at a build that skipped it.
+ */
+function bypassNote(): string {
+  return (
+    `« npm run validate:content » nomme ce défaut avec son fichier, sa ligne et son champ, et ` +
+    `il tourne avant tout « npm run build » (script « prebuild ») : si tu lis ce message, ` +
+    `c'est que le build a été lancé sans lui.`
   );
 }
 
