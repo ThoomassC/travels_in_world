@@ -32,8 +32,55 @@
   border-block-end: 1px solid var(--border-subtle);
 }
 
+/**
+ * `overflow-wrap` is not typography here — it is what keeps the page from
+ * scrolling sideways.
+ *
+ * Measured on `/fr/voyages` at a 320 px viewport with the browser's default font
+ * size raised to 32 px: `scrollWidth 328 / clientWidth 320`. "Amériques" at
+ * `--text-xl` (1.75 × 32 px = 56 px) has no break opportunity an ordinary wrap
+ * can use, so the single word pushes the document wider than the viewport and
+ * every line of the page gains a horizontal scroll — WCAG 1.4.4 / reflow.
+ *
+ * Worth stating because the two are constantly confused: raising the default
+ * font size is a **different** setting from zoom, and the page already passes
+ * zoom. Zoom scales the viewport along with the text, so 320 px stays 320 CSS
+ * pixels of content; a larger default font size grows the text inside an
+ * unchanged viewport. A reader with low vision is far more likely to have set
+ * the second.
+ *
+ * **`min-width: 0` is half the fix, and `overflow-wrap` alone does nothing
+ * here.** Measured, all four at 320 px / 32 px on `/fr/voyages`:
+ *
+ * | declaration                        | scrollWidth / clientWidth |
+ * | ---------------------------------- | ------------------------- |
+ * | as shipped (neither)               | 328 / 320                 |
+ * | `overflow-wrap: break-word` alone  | 328 / 320                 |
+ * | `min-width: 0` alone               | 328 / 320                 |
+ * | both                               | 320 / 320                 |
+ *
+ * The heading is a flex item of `.continentHeader`, and a flex item's automatic
+ * minimum size is its **min-content** width — 280 px for "Amériques" at 56 px,
+ * against the 224 px `main`'s padding leaves at this viewport. `break-word`
+ * deliberately does not enter that computation (CSS Text 3: only the wrap
+ * opportunities `anywhere` introduces are counted in an intrinsic size), so the
+ * box was never narrow enough for the break it authorises to be needed.
+ * `min-width: 0` lets the item shrink; `overflow-wrap` is what then breaks the
+ * word instead of letting it spill.
+ *
+ * `break-word` and not `anywhere`: `anywhere` also shrinks the heading's
+ * min-content contribution, which would let the flex line keep the count beside
+ * a broken heading at widths where the two should simply wrap. `break-word`
+ * breaks only a word that has no other way to fit, so every heading that
+ * already fits is laid out exactly as before — verified at 320 px and 1152 px
+ * with the default 16 px root size, where both pages measure 320/320 and
+ * 1152/1152.
+ */
 .continentHeading {
+  /* Both declarations are one fix; see the note above before removing either. */
+  min-width: 0;
   font-size: var(--text-xl);
+  overflow-wrap: break-word;
 }
 
 .count {
