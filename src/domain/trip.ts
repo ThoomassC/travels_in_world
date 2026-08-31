@@ -92,6 +92,102 @@ export function visitedCountryCodes(trip: {
 }
 
 /**
+ * The places a trip crosses, in the order it crosses them, each named once.
+ *
+ * **Step order, and never `places[]` order.** `places[]` is a declaration block:
+ * its order is whatever the author happened to type, and `TripSchema` places no
+ * meaning on it at all. The header calls this list "les villes traversées", so
+ * the only order that is not a lie is the order the steps travel.
+ *
+ * A move contributes its departure *and* its arrival, in that order — which is
+ * what makes a layover, a place passed through and never slept in, appear here
+ * at all. `referencedPlaceSlugs` already answers in that order, so this function
+ * adds the de-duplication and the lookup and nothing else.
+ *
+ * **A revisited place is named once, at its first crossing.** "Tokyo, Kyoto,
+ * Tokyo" reads as a defect in a header promising the cities of a trip. Nothing
+ * is lost by collapsing it: the two stays remain separate steps in the timeline,
+ * where the distinction is the point, and the anchor scheme keys on the date as
+ * well as the slug so they keep separate, stable, copyable identities there.
+ *
+ * Throws rather than skipping an unknown slug, the same reasoning as
+ * {@link firstArrivalOf}: `TripSchema` refuses a step referencing an undeclared
+ * place, so reaching that branch means the value never went through the schema,
+ * and silently dropping the place would shrink a list the reader is told is
+ * complete.
+ */
+export function visitedPlaces(trip: {
+  readonly places: readonly Place[];
+  readonly steps: readonly Step[];
+}): readonly Place[] {
+  const bySlug = new Map(trip.places.map((place) => [place.slug, place]));
+  const seen = new Set<string>();
+  const ordered: Place[] = [];
+
+  for (const step of trip.steps) {
+    for (const slug of referencedPlaceSlugs(step)) {
+      if (seen.has(slug)) {
+        continue;
+      }
+      seen.add(slug);
+
+      const place = bySlug.get(slug);
+      if (place === undefined) {
+        throw notFromTheSchema(`a step references "${slug}", which is absent from places[]`);
+      }
+      ordered.push(place);
+    }
+  }
+
+  return ordered;
+}
+
+/**
+ * The reading rate the estimate is built on, exported because a test asserts it:
+ * the table of expected minutes is written against this number, and a silent
+ * change of the rate would leave every row passing while meaning something else.
+ *
+ * 200 words per minute is the conventional figure for adult silent reading of
+ * non-technical prose. It is a convention, not a measurement of this site's
+ * readers, and the estimate is presented to the reader as one.
+ */
+export const WORDS_PER_MINUTE = 200;
+
+/** Never zero: "0 min de lecture" reads as broken, not as brief. */
+const MINIMUM_READING_MINUTES = 1;
+
+/**
+ * Minutes of reading for a word count, rounded **up** and never below one.
+ *
+ * Rounding up is the direction that cannot disappoint: a page announcing "1 min"
+ * for 350 words has under-promised by most of a minute, and the figure exists to
+ * let a reader decide whether to start now.
+ *
+ * **On the input this receives today.** The word count is whatever the page can
+ * actually count, and the current content model gives it very little: no step in
+ * `TripSchema` carries prose — `StaySchema` is `{ kind, placeSlug, startDate,
+ * endDate }` and nothing else — so every published trip lands on the one-minute
+ * floor until a prose field exists. That is a starved input, not a wrong
+ * function, and the distinction is deliberate: this stays a plain
+ * words-to-minutes conversion, so the day steps carry text the only thing that
+ * changes is what the caller counts.
+ *
+ * Throws on anything that is not a whole, finite, non-negative count. A word
+ * count comes from a `.length`, so a negative or a fraction is a caller that has
+ * gone wrong upstream, and answering "1 min" would hide it behind a plausible
+ * number.
+ */
+export function estimateReadingMinutes(words: number): number {
+  if (!Number.isInteger(words) || words < 0) {
+    throw new TypeError(
+      `estimateReadingMinutes expects a whole, non-negative word count; received ${words}.`
+    );
+  }
+
+  return Math.max(MINIMUM_READING_MINUTES, Math.ceil(words / WORDS_PER_MINUTE));
+}
+
+/**
  * An invariant `TripSchema` guarantees was violated, which means the value never
  * went through it. Named rather than papered over with a `!` or a made-up place:
  * a derivation that invents a coordinate puts a marker somewhere on the map and
