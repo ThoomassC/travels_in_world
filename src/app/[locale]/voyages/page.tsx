@@ -6,6 +6,7 @@ import { TripCatalogue } from "@/components/trips/trip-catalogue";
 import { listTripSummaries } from "@/content/trips";
 import { localePathname } from "@/i18n/pathname";
 import { routing } from "@/i18n/routing";
+import { MAIN_CONTENT_ID } from "../main-content";
 import styles from "./page.module.css";
 
 type LocaleParams = { locale: string };
@@ -81,7 +82,13 @@ export default async function AllTripsPage({ params }: { params: Promise<LocaleP
   const t = await getTranslations("trips");
 
   return (
-    <main>
+    /*
+      The landing point of the layout's skip link — the same `id` and the same
+      `tabIndex={-1}` as the home page, from the same constant. See
+      `../layout.tsx` for why the attribute is needed and why the `id` cannot
+      live in the layout.
+    */
+    <main id={MAIN_CONTENT_ID} tabIndex={-1}>
       <header className={styles.header}>
         <h1 className={styles.title}>{t("allHeading")}</h1>
         {/*

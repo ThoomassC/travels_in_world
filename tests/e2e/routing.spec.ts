@@ -35,6 +35,56 @@ test("the French home page carries the sentence, the map and an honest empty blo
   ).toHaveCount(0);
 });
 
+/**
+ * The skip link, end to end, because none of its three parts can be asserted
+ * under jsdom: the hiding is `clip-path` (a computed style jsdom does not lay
+ * out), the reveal is `:focus-visible`, and the landing needs a browser that
+ * really moves the focus.
+ *
+ * What is pinned is not the ring or the pixels — those are for a human eye — but
+ * the two facts that break silently: the link is the first tab stop, and
+ * `<main>` still carries the `id` it points at. The link lives in the layout and
+ * each page renders its own `<main>`, so a page can ship without the target and
+ * nothing else on the site would say so.
+ */
+test("the first tab stop is a skip link, and it lands the focus on main", async ({ page }) => {
+  await page.goto("/fr");
+
+  const skip = page.getByRole("link", { name: frMessages.trips.skipToContent });
+
+  // Out of the visual layout until focused: a 1 px box, the `clip-path` pattern
+  // this repository uses to keep text in the accessibility tree. `toBeVisible()`
+  // cannot tell the difference — a 1 px box counts as visible.
+  const atRest = await skip.boundingBox();
+  expect(atRest?.width).toBeLessThanOrEqual(1);
+
+  await page.keyboard.press("Tab");
+  await expect(skip).toBeFocused();
+
+  // Focused, it is a real 44 px target — WCAG 2.2 target size (minimum).
+  const focused = await skip.boundingBox();
+  expect(focused?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(focused?.width ?? 0).toBeGreaterThan(44);
+
+  await page.keyboard.press("Enter");
+
+  // `tabIndex={-1}` on `<main>` is what makes this true here and in Safari:
+  // without it the scroll position moves and the focus does not, so the next Tab
+  // resumes from the top of the document and the reader has skipped nothing.
+  await expect(page.locator("main")).toBeFocused();
+});
+
+test("the full listing carries the skip link's target too", async ({ page }) => {
+  // The same assertion on the second route: the `id` belongs to the page, so it
+  // is exactly the kind of thing that ships on one page and not on the next.
+  await page.goto("/fr/voyages");
+
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+
+  await expect(page.locator("main")).toBeFocused();
+});
+
 test("the main navigation reaches the full listing, at the same level as the map", async ({
   page,
 }) => {

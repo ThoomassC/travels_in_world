@@ -13,6 +13,7 @@ import { buildWorldGeometry, projectPoint } from "@/map";
 import { localePathname } from "@/i18n/pathname";
 import { tripPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
+import { MAIN_CONTENT_ID } from "./main-content";
 import styles from "./page.module.css";
 
 type HomePageProps = {
@@ -106,7 +107,14 @@ export default async function HomePage({ params }: HomePageProps) {
   };
 
   return (
-    <main>
+    /*
+      The landing point of the layout's skip link. `tabIndex={-1}` is what makes
+      Safari move the focus and not merely the scroll position — without it the
+      next Tab continues from the top of the page and the reader has skipped
+      nothing. The `id` comes from `./main-content` because the link lives in the
+      layout and the `<main>` lives here, one per document.
+    */
+    <main id={MAIN_CONTENT_ID} tabIndex={-1}>
       <section className={styles.hero}>
         <h1 className={styles.title}>{t("title")}</h1>
         <p className={styles.intro}>{t("intro")}</p>

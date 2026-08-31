@@ -12,6 +12,7 @@
     "emptyBody": "Aucun voyage n’est encore publié. La carte ci-dessus se remplira balise par balise, dès le premier récit."
   },
   "trips": {
+    "skipToContent": "Aller au contenu",
     "navLabel": "Navigation principale",
     "navMap": "Carte",
     "navAll": "Tous les voyages",

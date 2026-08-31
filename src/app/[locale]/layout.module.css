@@ -1,0 +1,76 @@
+/* =============================================================================
+   The locale layout's own chrome: today, the skip link and nothing else.
+
+   Only tokens from `src/styles/tokens.css`, like every other module here, which
+   is what keeps the dark theme working without this file knowing it exists.
+   ============================================================================ */
+
+/**
+ * The skip link — hidden until it has focus, then a real visible target.
+ *
+ * **Why it is worth these lines.** 2.4.1 is already satisfied by this site's
+ * heading structure and its landmarks, so this is not a conformance fix. What it
+ * buys, measured in a real browser: it takes the reader past the navigation on
+ * every route and puts the browser's sequential navigation starting point on
+ * `<main>`. It does not skip the map's markers — those are inside `<main>`,
+ * because on the home page the map is the content. `src/app/[locale]/layout.tsx`
+ * records the full tab order that was measured.
+ *
+ * The hiding is the pattern `src/components/map/world-map.module.css` records at
+ * length: `clip-path` with a 1 px box, never `display: none` nor
+ * `visibility: hidden`, both of which would take the link out of the
+ * accessibility tree and out of the tab order — which is the whole of what this
+ * element is for.
+ *
+ * `:focus-visible` and not `:focus`. `:focus` would also fire when the link is
+ * reached by a pointer, and the one thing this element must never do is appear
+ * over the page for a reader who is using a mouse.
+ */
+.skip {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/**
+ * `position: fixed` rather than `static`: the link is the first thing in the
+ * document, so laying it back into the flow on focus would push the whole page
+ * down by its own height at the exact moment the reader is looking at it.
+ *
+ * No `outline` and no `box-shadow` here — the double ring of the global
+ * `:focus-visible` in `tokens.css` is inherited, and this rule deliberately does
+ * not touch either property.
+ *
+ * `min-block-size: 2.75rem` = 44 px at the root size, the WCAG 2.2 target size
+ * (minimum), in `rem` so it grows with a reader's larger default font size. Same
+ * value and same reason as `.link` in `site-nav.module.css`.
+ */
+.skip:focus-visible {
+  position: fixed;
+  inset-block-start: var(--space-3);
+  inset-inline-start: var(--space-3);
+  /* Above the map's marker layer, which is the only positioned content on the
+     first screen. */
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  inline-size: auto;
+  block-size: auto;
+  min-block-size: 2.75rem;
+  margin: 0;
+  padding-inline: var(--space-4);
+  overflow: visible;
+  clip-path: none;
+  white-space: nowrap;
+  background: var(--surface);
+  border-radius: var(--radius-pill);
+  color: var(--text-accent);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
