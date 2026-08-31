@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { E2E_SLUG_HISTORY } from "./tests/e2e/slug-history.fixture";
 
 /**
  * A dedicated port, deliberately NOT 3000.
@@ -40,5 +41,18 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 180_000,
     stdout: "pipe",
+    /**
+     * The renamed and withdrawn addresses TIW-21's spec asserts on, injected into
+     * the **build** as well as the server — a redirect from the register is compiled
+     * into `next.config.ts`'s output and a withdrawn slug is prerendered, so both
+     * are build-time facts.
+     *
+     * The committed register in `src/i18n/slug-history.ts` is empty, and correctly
+     * so while no trip is published; without this the 301 spec would have no address
+     * to request and would pass by asserting nothing. The reasoning at length, and
+     * why the variable cannot publish anything in production, is in
+     * `./tests/e2e/slug-history.fixture.ts` and in `readSlugHistory`.
+     */
+    env: { TIW_SLUG_HISTORY: E2E_SLUG_HISTORY },
   },
 });
