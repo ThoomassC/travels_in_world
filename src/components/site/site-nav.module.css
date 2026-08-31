@@ -1,18 +1,37 @@
 /* =============================================================================
-   Main navigation — two entries, no JavaScript, no colour of its own.
+   Site header — the brand lock-up and two nav entries, no JavaScript, no colour
+   of its own.
 
    Only tokens from `src/styles/tokens.css` are used, which is what keeps the
    dark theme working without this file knowing that it exists.
    ============================================================================ */
 
 .header {
-  /* Aligned on `main`'s own measure (`tokens.css`) so the nav's first letter
+  /* Aligned on `main`'s own measure (`tokens.css`) so the header's first letter
      sits above the page's first letter rather than floating. `--space-5` is
      `main`'s inline padding; the block padding is deliberately smaller than
      `--section-space`, because a header is chrome and not a section. */
   max-width: var(--content-max-width);
   margin-inline: auto;
   padding: var(--space-4) var(--space-5) 0;
+  /**
+   * Two groups on one line, pushed apart — and `wrap`, because they do not fit on
+   * one line at every width. Measured in Chromium at 320 px, the narrowest layout
+   * `tokens.css` supports: the lock-up is ~205 px and the two nav pills ~245 px,
+   * so somewhere under 500 px the nav drops to a second line. That is the right
+   * failure — the brand keeps the first line, nothing is clipped and nothing
+   * scrolls sideways.
+   *
+   * The row gap is deliberately smaller than the column gap. Wrapped, the two
+   * become two rows of the same thing — the chrome — and should read as one
+   * block; side by side they are two different things and need more air between
+   * them than there is inside either.
+   */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-5);
 }
 
 .list {

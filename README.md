@@ -286,6 +286,48 @@ global, `src/styles/tokens.css`, qui porte les jetons ; le style par composant s
 Modules à côté du composant. La palette est volontairement identique à celle du portfolio :
 toute modification de couleur doit y être répercutée.
 
+**La marque est provisoire, et remplaçable sans toucher au code.** Le logotype est une
+comète en `--logo-ink` — une seule masse connexe — accompagnée d'une trajectoire en
+pointillé en `--logo-accent`, et du nom composé dans la pile de polices du site. C'est une
+marque **typographique**, assumée comme telle : il n'y a ni police propre, ni dessin de
+lettres. Cinq fichiers, et une seule source de vérité :
+
+| Fichier                                     | Ce qu'il porte                                       |
+| ------------------------------------------- | ---------------------------------------------------- |
+| `src/components/site/brand-art.ts`          | **la géométrie** — chemins, boîtes, transformations  |
+| `src/app/icon.svg`                          | le favicon, thème embarqué (copie du chemin, gardée) |
+| `src/app/apple-icon.png`                    | 180 × 180, opaque, sur la plaque `--logo-bg`         |
+| `public/opengraph-default.png`              | 1200 × 630, l'image de partage par défaut du site    |
+| `src/components/site/site-brand.module.css` | les tailles et les états du verrouillage d'en-tête   |
+
+Pour substituer un dessin définitif : remplacer les chaînes de `brand-art.ts`, recopier le
+même `d` dans `icon.svg`, régénérer les deux PNG. Aucun composant, aucun test et aucune
+feuille de style n'a besoin d'être modifié. **Ce qui casse si les proportions changent** : le
+`viewBox` du verrouillage décide de la largeur de la marque pour une hauteur de `2rem` (la
+boîte est plus large que haute, c'est ce qui l'empêche de dominer le nom) ; la plaque de
+l'icône Apple porte la seule couleur en dur du lot, parce qu'un PNG ne suit aucun thème ; et
+l'image de partage **doit** rester en 1200 × 630, sans quoi `og:image:width` /
+`og:image:height` mentent et la carte se réagence après le chargement.
+`tests/build/brand.test.ts` refuse ce dernier cas en lisant l'en-tête du PNG.
+
+Deux contraintes de dessin sont mesurées et ne se contournent pas. **Encre contre accent ne
+vaut que 1,99:1 en clair et 1,35:1 en sombre** : aucune forme ne peut donc reposer sur cette
+frontière, et c'est pourquoi la comète et la trajectoire sont deux objets séparés par du fond
+nu — chacun se lit contre la page (encre 10,54:1 clair et 16,73:1 sombre, accent 5,30:1 et
+12,40:1) et jamais contre l'autre. **Le favicon abandonne la trajectoire** : à 16 px ses
+points et leurs vides passent sous le pixel, alors que la masse de la comète tient (10,31:1
+au pire sur les huit gris de barres d'onglets de Chrome, Firefox et Safari, tous thèmes
+confondus).
+
+Enfin, `src/app/icon.svg` est un document **XML**, pas du HTML, et il a cassé trois fois
+avant d'être juste — chaque fois en silence, parce qu'un SVG en ligne dans une page se répare
+tout seul alors que le même fichier chargé comme favicon meurt sans un mot. Ses règles :
+jamais deux tirets consécutifs dans un commentaire XML, la feuille de style dans une section
+`CDATA` (sinon le moindre `<` d'un commentaire CSS termine le fichier), et jamais la séquence
+qui referme cette section ailleurs qu'à la fin. `tests/components/site/brand-art.test.ts`
+compte les délimiteurs dans les octets, parce que le `DOMParser` de jsdom a accepté un
+fichier que `xmllint` et Chromium refusaient.
+
 **La carte du monde.** Un `<svg>` **entièrement inerte** — `aria-hidden`, sans `tabindex`,
 sans `:hover`, `pointer-events: none` — surmonté d'un calque HTML de `<a>` positionnés en
 pourcentages. Zéro octet de JavaScript : le zoom et le panneau de survol sont TIW-14, qui

@@ -6,8 +6,8 @@ import { routing } from "@/i18n/routing";
  * What a page hands a link unfurler. The interesting assertions here are the ones a
  * rendered page cannot make: that the canonical is the page's OWN url (the layout's
  * is the home page's, so a page that inherits it asks to be de-indexed in its
- * favour), and that a page with no image asks for the small card instead of the
- * large one.
+ * favour), and that a page with no picture of its own falls back to the site's
+ * brand image rather than to no card at all.
  */
 
 const page = {
@@ -87,24 +87,60 @@ describe("the Open Graph block", () => {
     expect(shareMetadata({ ...page, image }).openGraph).toMatchObject({ images: [image] });
   });
 
-  it("omits the images field entirely when there is none", () => {
-    // `images: []` would emit nothing either, but `undefined` is what keeps Next
-    // from writing an empty `og:image` — verified against the built HTML.
-    expect(shareMetadata(page).openGraph?.images).toBeUndefined();
+  it("falls back to the site's own image when the page has none", () => {
+    /**
+     * TIW-23 replaced "no image" with "the brand". Until then a page without a
+     * photograph emitted no `og:image` at all and unfurled as a bare line of text
+     * in a conversation; this case used to assert `images` was `undefined`.
+     *
+     * The order is the part that matters, and the case above is what pins it: a
+     * trip's cover photograph wins, and this only fills the gap. A committed PNG
+     * rather than the SVG that already exists, because every platform refuses the
+     * SVG — the reasoning is in `src/app/share.ts`.
+     */
+    expect(shareMetadata(page).openGraph).toMatchObject({
+      images: [{ url: "/opengraph-default.png", width: 1200, height: 630 }],
+    });
+  });
+
+  it("gives the fallback the site name as its alt text", () => {
+    /**
+     * The image *is* the site name set in type, so the site name is a literally
+     * accurate alternative — and it arrives through `page.siteName`, which is
+     * already a message from the catalogue. That is what lets this builder gain a
+     * default image without gaining a reader-facing literal.
+     */
+    expect(shareMetadata(page).openGraph).toMatchObject({
+      images: [{ alt: "Travels in World" }],
+    });
+  });
+
+  it("keeps the fallback relative, for `metadataBase` to resolve", () => {
+    // A platform fetching the card runs on another host, so a relative `og:image`
+    // is not fetchable — and the resolution belongs to Next, once. The absolute
+    // result is asserted against the built HTML in `tests/build/brand.test.ts`.
+    const images = shareMetadata(page).openGraph?.images as readonly { url: string }[];
+
+    expect(images[0]?.url.startsWith("/")).toBe(true);
   });
 });
 
 describe("the Twitter card", () => {
-  it("asks for the large card only when there is an image to make large", () => {
+  it("always asks for the large card, because there is always an image", () => {
     /**
-     * `summary_large_image` without an image is what produces the wide grey
-     * rectangle with a title crammed into a corner. A trip with no photograph yet
-     * gets the small card, which is honest.
+     * This case used to assert the opposite for a page with no image, and the
+     * reason was sound: `summary_large_image` without an image is what produces
+     * the wide grey rectangle with a title crammed into a corner.
+     *
+     * Since TIW-23 there is no such page — a trip without a photograph gets the
+     * brand — so the small card would now understate every one of them. The
+     * `summary` branch was deleted rather than left as dead code; what keeps this
+     * honest is the fallback asserted above, not this assertion.
      */
     expect(shareMetadata({ ...page, image }).twitter).toMatchObject({
       card: "summary_large_image",
     });
-    expect(shareMetadata(page).twitter).toMatchObject({ card: "summary" });
+    expect(shareMetadata(page).twitter).toMatchObject({ card: "summary_large_image" });
   });
 
   it("names no account", () => {
