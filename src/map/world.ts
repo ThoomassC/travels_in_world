@@ -1,11 +1,11 @@
 import type { CountryCode } from "@/domain/geo";
+import { NUMERIC_BY_ALPHA2 } from "@/iso-3166";
 import {
   DATASET_MODULE,
   DATASET_RESOLUTION,
   loadWorldDataset,
   RICHER_DATASET_MODULE,
 } from "./dataset";
-import { NUMERIC_BY_ALPHA2 } from "./iso-3166";
 import { WORLD_VIEW_BOX } from "./projection";
 
 /**

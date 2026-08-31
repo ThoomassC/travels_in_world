@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NUMERIC_BY_ALPHA2 } from "@/map/iso-3166";
+import { NUMERIC_BY_ALPHA2 } from "@/iso-3166";
 import {
   CODES_OUTSIDE_ISO_3166,
   CONTINENTS,
