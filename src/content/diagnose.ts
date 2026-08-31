@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { isPlainDate } from "@/domain/geo";
+import { DERIVATIVE_LADDER, isDerivativeName } from "@/domain/photo";
 import { TRANSPORT_MODES } from "@/domain/schema";
 import { stringAt, valueAt } from "./collection";
 import { describeField, fieldShape, quoted, quotedList, runCommand } from "./finding";
@@ -202,6 +203,10 @@ const SLUG_SHAPES = new Set([
   "steps[].placeSlug",
   "steps[].fromSlug",
   "steps[].toSlug",
+  // The *leaf* failure only — a `placeSlug` that is not a slug at all. The
+  // cross-field rule, a well-formed slug no place bears, is caught earlier by
+  // `diagnosePhotoPlace`, which can list the places that are declared.
+  "photos[].placeSlug",
   "tags[]",
 ]);
 
@@ -299,6 +304,80 @@ function diagnosePhotoDimension(
     // dimension, and a sentence read twice in a row stops being read.
     action: runCommand(indexPhotos),
     command: indexPhotos,
+  };
+}
+
+/**
+ * The preloading placeholder, absent or malformed.
+ *
+ * Same command as the dimensions, and deliberately the same terse action: one run
+ * of `index-photos` writes all three, so three self-explaining sentences would be
+ * the same repair said three times.
+ *
+ * The malformed branch does **not** quote the value, unlike almost every other
+ * message here. It is a base64 blob of up to 512 characters, and printing it
+ * fills the terminal with noise nobody can act on — this is not a field anyone
+ * types, so showing what was written tells the author nothing.
+ */
+function diagnosePhotoPlaceholder(context: DiagnosisContext, field: FieldPath): Diagnosis {
+  const index = indexAt(field, 1);
+  const indexPhotos = `npm run index-photos ${context.tripSlug}`;
+
+  return {
+    rule: "photo-placeholder",
+    field,
+    problem: isAbsent(context, field)
+      ? `${photoLabel(context, index)} est déclarée sans vignette de préchargement`
+      : `${photoLabel(context, index)} porte une vignette de préchargement que le contenu refuse : ce doit être une image WebP en base64, écrite par la commande`,
+    action: runCommand(indexPhotos),
+    command: indexPhotos,
+  };
+}
+
+/**
+ * A photo attached to a place the trip does not declare.
+ *
+ * The declared slugs are listed in the action, which is the difference between a
+ * refusal and a repair: this is almost always a typo or a place that was renamed,
+ * and the right answer is one of two or three words already in the file.
+ *
+ * **No command is offered, and that is the point.** `index-photos` writes
+ * dimensions and placeholders and has no opinion whatsoever about which place a
+ * photo belongs to. Naming it here would send the author to a command that
+ * changes nothing and then reports success.
+ */
+function diagnosePhotoPlace(context: DiagnosisContext, field: FieldPath): Diagnosis {
+  const index = indexAt(field, 1);
+  const declared = declaredPlaceSlugs(context);
+
+  return {
+    rule: "photo-place-unknown",
+    field,
+    problem: `${photoLabel(context, index)} est rattachée au lieu ${writtenOr(context, field, "vide")}, absent de places[]`,
+    action:
+      declared.length === 0
+        ? `déclare ce lieu dans places[], ou retire la clé ${quoted("placeSlug")}`
+        : `écris l'un des lieux déclarés (${quotedList(declared)}), ou retire la clé ${quoted("placeSlug")}`,
+  };
+}
+
+/**
+ * A source that has the shape of the pipeline's own output.
+ *
+ * The action is **rename**, and it must never be "run the command": running
+ * `index-photos` on a trip declaring `tokyo-480.jpg` is precisely what would
+ * overwrite that file with the 480 px derivative of `tokyo.jpg`. This is the one
+ * photo finding whose repair the author has to make by hand, so it carries no
+ * `command` at all.
+ */
+function diagnosePhotoDerivativeName(context: DiagnosisContext, field: FieldPath): Diagnosis {
+  const index = indexAt(field, 1);
+
+  return {
+    rule: "photo-src-reserved",
+    field,
+    problem: `${photoLabel(context, index)} porte un nom que la commande d'indexation écrit elle-même : un tiret suivi d'une des largeurs ${DERIVATIVE_LADDER.join(", ")}`,
+    action: `renomme le fichier sur le disque et dans photos[] — sinon ${quoted("npm run index-photos")} l'écraserait avec la vignette qu'il produit`,
   };
 }
 
@@ -405,6 +484,19 @@ function diagnoseKnownShape(
 
   if (shape === "photos[].width" || shape === "photos[].height") {
     return diagnosePhotoDimension(shape, context, field);
+  }
+
+  if (shape === "photos[].blurDataUrl") {
+    return diagnosePhotoPlaceholder(context, field);
+  }
+
+  /**
+   * `custom` only: the cross-field rule reports here. A `placeSlug` that is not a
+   * slug at all is a leaf failure, and {@link SLUG_SHAPES} has the better
+   * sentence for it — the spelling rule, not the list of declared places.
+   */
+  if (shape === "photos[].placeSlug" && custom) {
+    return diagnosePhotoPlace(context, field);
   }
 
   if (DATE_SHAPES.has(shape)) {
@@ -627,6 +719,22 @@ function diagnoseKnownShape(
 
   if (shape === "photos[].src") {
     if (custom) {
+      /**
+       * Two `custom` rules land on this one field: the duplicate-source rule in
+       * `checkTrip`, and the reserved-name refinement on `src` itself. Zod
+       * reports both as `custom` with no distinguishing code, so the document
+       * decides — a value that *is* a derivative name can only be the second.
+       *
+       * Order matters and it is this way round: a trip declaring
+       * `tokyo-480.jpg` twice fails both rules, and "rename it" is the finding
+       * that has to be read first, since removing the duplicate would leave the
+       * name the command is about to overwrite.
+       */
+      const source = stringAt(context.document, field);
+      if (source !== undefined && isDerivativeName(source)) {
+        return diagnosePhotoDerivativeName(context, field);
+      }
+
       return {
         rule: "duplicate-photo",
         field,

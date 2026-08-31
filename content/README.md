@@ -79,8 +79,12 @@ steps: # dans l'ordre chronologique
 photos: # facultatif
   - src: /photos/japon-2024/tokyo.jpg
     alt: Une ruelle de Shinjuku sous la pluie # obligatoire : c'est ce qu'annonce un lecteur d'écran
+    placeSlug: tokyo # facultatif : la photo apparaît alors dans l'étape de ce lieu
+    # Les trois clés ci-dessous sont écrites par « npm run index-photos », jamais
+    # à la main — comme « coordinates » l'est par « npm run geocode ».
     width: 1600
     height: 1067
+    blurDataUrl: data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAABQAQCdASoQAAsAAwBSJaQABHQAAORAAAA=
 coverPhotoSrc: /photos/japon-2024/tokyo.jpg # facultatif, doit figurer dans photos[]
 
 budget: # facultatif

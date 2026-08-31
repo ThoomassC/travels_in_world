@@ -7,6 +7,7 @@ import {
   SlugSchema,
 } from "./geo";
 import type { PlainDate, Slug } from "./geo";
+import { BLUR_DATA_URL_MAX_LENGTH, BLUR_DATA_URL_PATTERN, isDerivativeName } from "./photo";
 
 /**
  * The content schemas. Everything in `src/content/**` is hand-written YAML, so
@@ -105,7 +106,23 @@ export const BudgetSchema = z.strictObject({
 });
 
 export const PhotoSchema = z.strictObject({
-  src: z.string().min(1),
+  /**
+   * The original file, as a site-absolute URL path.
+   *
+   * Refused when it has the shape the pipeline gives its **own** output:
+   * `tokyo-480.jpg` is precisely where `npm run index-photos` writes the 480 px
+   * derivative of `tokyo.jpg`, so whichever is written last wins and the loser is
+   * either the author's original or a page serving a JPEG under an `.avif` name.
+   * The predicate matches the ladder's real widths and nothing else, so a date —
+   * `2024-04-12.jpg`, the likeliest photo name there is — stays accepted.
+   */
+  src: z
+    .string()
+    .min(1)
+    .refine((src) => !isDerivativeName(src), {
+      message:
+        "A photo source may not end in a hyphen followed by one of the derivative widths: that is the name `npm run index-photos` writes its own output to.",
+    }),
   // Required and non-blank: an unlabelled gallery is unusable with a screen
   // reader, and the only moment anyone writes the alt text is the moment the
   // build refuses to go on without it. The empty string is the decorative-image
@@ -115,6 +132,43 @@ export const PhotoSchema = z.strictObject({
   // guaranteed layout shift.
   width: z.int().min(1),
   height: z.int().min(1),
+  /**
+   * The preloading placeholder: a tiny WebP as a `data:` URI.
+   *
+   * **Required, like the dimensions, and for the same reason.** The three fields
+   * are written together by one run of `npm run index-photos`, so an optional one
+   * means a photo indexed before the field existed renders with no placeholder
+   * while nothing anywhere says so. `content/README.md` documents it the way it
+   * documents `coordinates` — machine-written, never typed by hand.
+   *
+   * **The shape is pinned, not just the presence**, because this value is
+   * interpolated into an inline `style` attribute in the document:
+   * `data:image/svg+xml` can carry script, and a raw `"` closes the attribute. So
+   * the pattern admits base64-encoded WebP and nothing else. The length cap is
+   * the other half — 200 photos on one page at 512 characters is ~100 KB of HTML,
+   * the entire document budget spent on placeholders.
+   */
+  blurDataUrl: z
+    .string()
+    .max(BLUR_DATA_URL_MAX_LENGTH)
+    .regex(
+      BLUR_DATA_URL_PATTERN,
+      'Expected a base64 WebP data URI, as written by `npm run index-photos` — "data:image/webp;base64,…".'
+    ),
+  /**
+   * The place this photo was taken in, when it is worth saying.
+   *
+   * Optional on purpose: a photo with no place is the ordinary case and belongs
+   * to the trip's gallery. One that names a place appears inside that place's
+   * step in the timeline instead, which is where a reader following the itinerary
+   * expects to meet it.
+   *
+   * Declared here rather than as a `photos:` list on each step, so that every
+   * photo of a trip stays in the one array `index-photos` scans, `coverPhotoSrc`
+   * points into, and the duplicate-source rule below reads. See {@link checkTrip}
+   * for the other half: a slug no declared place bears is refused.
+   */
+  placeSlug: SlugSchema.optional(),
 });
 
 /**
@@ -242,6 +296,29 @@ function checkTrip(trip: TripFields, ctx: TripIssues): void {
       });
     }
     declaredSlugs.add(place.slug);
+  });
+
+  /**
+   * A photo attached to a place the trip does not declare.
+   *
+   * The same class of fault as a step pointing at an undeclared place, and it has
+   * to be caught here for the same reason: `PhotoSchema` is handed one photo and
+   * cannot see `places[]`. Left unchecked it is *silent* rather than loud — the
+   * page groups the gallery by place, so the photo is filtered out of the gallery,
+   * appears in no step, and the trip renders green with one photo fewer than the
+   * author wrote. A dangling step at least throws in the renderer.
+   *
+   * Reported on `photos[i].placeSlug` and not on `places`: the slug is the thing
+   * to fix, and it is the field an author can find.
+   */
+  trip.photos.forEach((photo, index) => {
+    if (photo.placeSlug !== undefined && !declaredSlugs.has(photo.placeSlug)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["photos", index, "placeSlug"],
+        message: `The photo is attached to the place "${photo.placeSlug}", which is absent from places[].`,
+      });
+    }
   });
 
   // A step points at a place by slug, so a renamed place leaves a dangling
