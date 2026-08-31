@@ -365,7 +365,13 @@ describe("every command line the project publishes carries the `--` npm needs", 
     });
   }
 
-  for (const name of ["validate:content", "geocode", "new-trip"] as const) {
+  /**
+   * All four, since TIW-17: `index-photos` joined the list the moment it stopped
+   * being `scripts/not-implemented.mjs`. Leaving it out is exactly how the nine
+   * unexecutable lines this guard was written for got published in the first
+   * place — a command whose `--help` nothing reads.
+   */
+  for (const name of ["validate:content", "geocode", "new-trip", "index-photos"] as const) {
     it(`the help of ${name} shows no invocation npm would strip`, () => {
       const help = run(`${script(name)} --help`);
 

@@ -122,7 +122,20 @@ export type IndexPhotosEvent =
       readonly bytes: number;
     }
   /** The photo's three fields are about to be written into the file. */
-  | { readonly kind: "indexed"; readonly photo: PhotoRef; readonly facts: ImageFacts }
+  | {
+      readonly kind: "indexed";
+      readonly photo: PhotoRef;
+      readonly facts: ImageFacts;
+      /**
+       * How long the placeholder came out, in characters.
+       *
+       * Carried rather than left to the report, which first printed the *cap*
+       * (« 512 caractères au plus ») — a constant, in a line whose whole job is to
+       * say what was measured. The real number is the one that tells an author his
+       * placeholders are ~130 characters and that the cap is not near.
+       */
+      readonly placeholderLength: number;
+    }
   /** Measured, and already correct in the file: nothing to write. */
   | { readonly kind: "unchanged"; readonly photo: PhotoRef }
   | { readonly kind: "failed"; readonly photo: PhotoRef; readonly reason: PhotoFailure };
@@ -634,7 +647,12 @@ async function indexParsedTrip(
       continue;
     }
 
-    emit({ kind: "indexed", photo, facts: work.facts });
+    emit({
+      kind: "indexed",
+      photo,
+      facts: work.facts,
+      placeholderLength: work.blurDataUrl.length,
+    });
     edits.push({
       photoIndex: index,
       width: work.facts.width,
