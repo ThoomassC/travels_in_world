@@ -204,12 +204,40 @@
  * markers. So the title is the link, the overlay above makes the whole card
  * clickable, and this is the visible affordance that says what the card does.
  * `aria-hidden` in the markup keeps it from repeating that promise out loud.
+ *
+ * **`--control-border` and not `--accent-quiet-border`, and the four measured
+ * numbers are the whole argument.** Contrast of the border against the surface
+ * the pill actually sits on (`--surface`, the card's own background):
+ *
+ * | token                   | light   | dark    |
+ * | ----------------------- | ------- | ------- |
+ * | `--accent-quiet-border` | 1.79:1  | 4.29:1  |
+ * | `--accent`              | 4.00:1  | 3.31:1  |
+ * | `--control-border`      | 3.93:1  | 5.26:1  |
+ *
+ * (Against `--site-background` behind the card the light column reads 1.66,
+ * 3.27 and 3.22 — the same ranking, since the two backgrounds are neighbours.)
+ *
+ * This is **not** a 1.4.11 failure: the pill is `aria-hidden` decoration whose
+ * own text sits at 6.48:1, so nothing here is a control needing a visible
+ * boundary. It is simply that at 1.79:1 the pill was practically invisible to a
+ * low-contrast eye, which costs the card the one thing this element exists for —
+ * saying that it is readable.
+ *
+ * `--control-border` rather than `--accent`, which was the other candidate: it
+ * is the only one of the two that improves **both** themes (`--accent` would
+ * take the dark theme down from 4.29 to 3.31), and it is the token whose
+ * declaration in `tokens.css` is annotated `>= 3:1, WCAG 1.4.11` — the
+ * repository's "a border you can see" token, which is exactly the job. What it
+ * gives up is the teal family, and the pill keeps it where it matters: the text
+ * is `--text-accent`, and `.card:hover .cta` below brings the accent back to the
+ * border on hover.
  */
 .cta {
   margin-block-start: auto;
   align-self: flex-start;
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--accent-quiet-border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-pill);
   color: var(--text-accent);
   font-size: var(--text-sm);
