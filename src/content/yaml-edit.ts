@@ -28,13 +28,25 @@ import { quoted, quotedList } from "./finding";
  * the offsets it reports. Everything outside those offsets is byte-identical by
  * construction, which is a stronger promise than any round-trip can make.
  *
- * **The seam TIW-17 has to widen, not copy.** `npm run index-photos` will write
- * `width`/`height` under `photos[i]`: the same four shapes (key absent, block,
- * flow, empty) at another path with other keys. The three things to generalise
- * are the **path** (`places[i]`), the **key name** (`"coordinates"`) and the
- * **axis list with its formatter** (`AXES` / {@link formatCoordinate}) —
- * everything else here is shape-handling that is already independent of them.
- * Copying this module means re-living both corruption bugs documented below.
+ * **The seam TIW-17 widened, rather than copied.** `npm run index-photos` writes
+ * `width`, `height` and `blurDataUrl` under `photos[i]`, which is the same
+ * problem at another path with other keys — and copying this module would have
+ * meant re-living both corruption bugs documented below, in a second place.
+ *
+ * What the two writers share is {@link editSequenceEntries}: find the entry in a
+ * top-level sequence, collect its splices, apply them from the end of the file
+ * backwards, re-parse, and read the values back **at the index they were asked
+ * for**. What they do not share is the shape of what they write, and that is the
+ * real difference between them rather than a parameter:
+ *
+ * - {@link writeCoordinates} creates a **nested mapping** under a key that may
+ *   not exist yet — four shapes to handle (key absent, block, flow, empty);
+ * - {@link writePhotoFields} writes **scalars directly on the entry** — three
+ *   shapes (key absent, key with a value, key left empty), and it refuses a
+ *   mapping or a list where a number belongs.
+ *
+ * The two corruption bugs are shape bugs, so each writer meets them in its own
+ * form. Both are documented at the branch that pays for them, in both writers.
  */
 
 export type CoordinateEdit = {
@@ -56,20 +68,54 @@ export type YamlEditResult =
    * neutralised **here**. A caller that stops escaping must not be able to turn
    * a hostile key name back into a live escape sequence.
    *
-   * `placeIndex` is present whenever the refusal is about **one** place, which
-   * is what lets the caller drop that place and write the rest: one city in an
-   * unhandled shape used to throw away every coordinate the run had resolved.
-   * It is absent for a refusal about the document as a whole, where no subset
-   * would fare better.
+   * `entryIndex` is present whenever the refusal is about **one** entry of the
+   * sequence, which is what lets the caller drop that entry and write the rest:
+   * one city in an unhandled shape used to throw away every coordinate the run
+   * had resolved. It is absent for a refusal about the document as a whole, where
+   * no subset would fare better.
+   *
+   * Named for the entry and not for the place, because both writers report
+   * through it — `places[i]` for the coordinates, `photos[i]` for the photo
+   * fields. Each caller translates it back into its own vocabulary.
    */
   | {
       readonly state: "unsupported";
       readonly reason: string;
-      readonly placeIndex?: number;
+      readonly entryIndex?: number;
     };
 
-/** A byte range of the source, and the text that replaces it. */
-type Splice = { readonly start: number; readonly end: number; readonly text: string };
+/**
+ * A byte range of the source, and the text that replaces it.
+ *
+ * `rank` breaks a tie between two splices at the **same** offset, in document
+ * order: rank 0 is the text that must end up first in the file, rank 1 next.
+ *
+ * It exists because a tie is reachable and silently produces garbage. Measured on
+ * a photo whose last key was left empty:
+ *
+ *     width: # à mesurer
+ *     height:
+ *
+ * `height:`'s null value and the end of the photo's own block are the same offset,
+ * so filling `height` and appending `blurDataUrl` both splice there. Splices are
+ * applied from the end of the file backwards, and at one offset the *last* applied
+ * ends up leftmost — so without a tie-break the appended key landed **between**
+ * `height:` and its value:
+ *
+ *     height:
+ *     blurDataUrl: data:…
+ *      1067
+ *
+ * which is `All mapping items must start at the same column`. Hence sorting on
+ * `rank` descending as well: the higher rank is applied first and ends up on the
+ * right, which is document order.
+ */
+type Splice = {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+  readonly rank?: number;
+};
 
 /**
  * How many decimals the file ever holds. About a centimetre at the equator — far
@@ -471,15 +517,52 @@ function splicesForPlace(
   };
 }
 
+/* =========================================================== the shared driver ==
+
+   Everything below the line is what the two writers have in common: locating an
+   entry in a top-level sequence, applying its splices, and proving the result is
+   the document it was plus the values that were asked for.
+   ============================================================================ */
+
 /**
- * The source text with the given coordinates written into it, and nothing else
- * changed.
+ * The splices that write one entry, or the reason it will not be written.
  *
- * The document is re-parsed here rather than handed in: it makes this module
- * testable from a string alone, and re-reading one 60-line file costs nothing
- * next to the network call that produced the coordinates.
+ * A refusal from here is always about **one** entry, which is what lets
+ * {@link editSequenceEntries} report it with an `entryIndex` and lets the caller
+ * drop that entry and write the rest.
  */
-export function writeCoordinates(source: string, edits: readonly CoordinateEdit[]): YamlEditResult {
+type EntryWriter<TEdit> = (
+  source: string,
+  entry: YAMLMap<unknown, unknown>,
+  edit: TEdit
+) => readonly Splice[] | { readonly reason: string };
+
+type SequenceEdit<TEdit> = {
+  readonly source: string;
+  /** The top-level key holding the sequence: `"places"`, `"photos"`. */
+  readonly collection: string;
+  /** The noun a refusal uses for one of its entries: `"un lieu"`, `"une photo"`. */
+  readonly entryNoun: string;
+  readonly edits: readonly TEdit[];
+  readonly indexOf: (edit: TEdit) => number;
+  readonly writer: EntryWriter<TEdit>;
+  /**
+   * A refusal decided **before** any splice is computed — the place for a check
+   * on the values themselves rather than on the file's shape. See the rounded
+   * `(0, 0)` guard in {@link writeCoordinates} for why that ordering matters.
+   */
+  readonly precheck?: (edit: TEdit) => string | undefined;
+  /**
+   * Reads the values back out of the re-parsed document, at the index they were
+   * asked for, and names what is wrong. Guards this module's offset arithmetic
+   * and nothing else.
+   */
+  readonly verify: (rewritten: unknown, edit: TEdit) => string | undefined;
+};
+
+function editSequenceEntries<TEdit>(request: SequenceEdit<TEdit>): YamlEditResult {
+  const { source, collection, entryNoun, edits, indexOf, writer, precheck, verify } = request;
+
   if (edits.length === 0) {
     return { state: "edited", text: source };
   }
@@ -491,51 +574,33 @@ export function writeCoordinates(source: string, edits: readonly CoordinateEdit[
     return { state: "unsupported", reason: first?.message ?? "le fichier YAML ne se relit pas" };
   }
 
-  const places: unknown = document.get("places", true);
-  if (!isSeq(places)) {
-    return { state: "unsupported", reason: "la clé « places » n'est pas une liste" };
+  const sequence: unknown = document.get(collection, true);
+  if (!isSeq(sequence)) {
+    return { state: "unsupported", reason: `la clé « ${collection} » n'est pas une liste` };
   }
 
   const splices: Splice[] = [];
 
   for (const edit of edits) {
-    /**
-     * The pair **as it will be written**, checked against the schema that will
-     * judge the file afterwards.
-     *
-     * The file only ever holds {@link COORDINATE_DECIMALS} decimals, so the
-     * domain's opinion of the numbers the service returned is not the same
-     * question as its opinion of the numbers this module is about to write:
-     * `lat: 1e-8, lon: -1e-8` is not (0, 0) and rounds to it. Writing that made
-     * `validate:content` refuse the file and send the author back to the very
-     * command that had produced it — a loop with no way out. The read-back
-     * guard below cannot see it, since it compares against the rounded value
-     * too, so the check has to happen here, before anything is committed.
-     */
-    const rounded = {
-      lat: Number(formatCoordinate(edit.lat)),
-      lon: Number(formatCoordinate(edit.lon)),
-    };
-    if (!CoordinatesSchema.safeParse(rounded).success) {
+    const entryIndex = indexOf(edit);
+
+    const refused = precheck?.(edit);
+    if (refused !== undefined) {
+      return { state: "unsupported", entryIndex, reason: refused };
+    }
+
+    const entry: unknown = sequence.items[entryIndex];
+    if (!isMap(entry)) {
       return {
         state: "unsupported",
-        placeIndex: edit.placeIndex,
-        reason: `arrondies à ${COORDINATE_DECIMALS} décimales, les coordonnées proposées donnent (${formatCoordinate(edit.lat)}, ${formatCoordinate(edit.lon)}), que le contenu refuse → choisis un autre candidat`,
+        entryIndex,
+        reason: `cet indice ne désigne pas ${entryNoun} décrit${entryNoun.startsWith("une") ? "e" : ""} par des clés`,
       };
     }
 
-    const place: unknown = places.items[edit.placeIndex];
-    if (!isMap(place)) {
-      return {
-        state: "unsupported",
-        placeIndex: edit.placeIndex,
-        reason: "cet indice ne désigne pas un lieu décrit par des clés",
-      };
-    }
-
-    const produced = splicesForPlace(source, place, edit);
+    const produced = writer(source, entry, edit);
     if ("reason" in produced) {
-      return { state: "unsupported", placeIndex: edit.placeIndex, reason: produced.reason };
+      return { state: "unsupported", entryIndex, reason: produced.reason };
     }
     splices.push(...produced);
   }
@@ -543,19 +608,21 @@ export function writeCoordinates(source: string, edits: readonly CoordinateEdit[
   /**
    * Applied from the end of the file backwards, so that no splice shifts the
    * offsets of the ones still to come. Sorted rather than assumed in order: the
-   * caller numbers places, not bytes.
+   * caller numbers entries, not bytes.
    */
-  const ordered = [...splices].sort((left, right) => right.start - left.start);
+  const ordered = [...splices].sort(
+    (left, right) => right.start - left.start || (right.rank ?? 0) - (left.rank ?? 0)
+  );
   let text = source;
   for (const splice of ordered) {
     text = `${text.slice(0, splice.start)}${splice.text}${text.slice(splice.end)}`;
   }
 
   /**
-   * The result has to be the same document plus the coordinates. A splice is
-   * computed from offsets, and an offset arithmetic bug would write plausible
-   * nonsense — so the output is parsed back before it is handed to a caller that
-   * is about to overwrite a file with it.
+   * The result has to be the same document plus the values. A splice is computed
+   * from offsets, and an offset arithmetic bug would write plausible nonsense —
+   * so the output is parsed back before it is handed to a caller that is about to
+   * overwrite a file with it.
    */
   const verification = parseDocument(text);
   if (verification.errors.length > 0) {
@@ -568,38 +635,325 @@ export function writeCoordinates(source: string, edits: readonly CoordinateEdit[
   }
 
   /**
-   * Parsing only proves the result is *a* document, not that it is the right
-   * one: a splice landing one line early writes the block under the *previous*
-   * place, which re-reads cleanly and is wrong. So the numbers are read back at
-   * the index they were asked for, along the same path a finding names — the one
+   * Parsing only proves the result is *a* document, not that it is the right one:
+   * a splice landing one line early writes onto the *previous* entry, which
+   * re-reads cleanly and is wrong. So the values are read back at the index they
+   * were asked for, along the same path a finding names — the one
    * `validate:content` will walk.
-   *
-   * Compared against `Number(formatCoordinate(…))` rather than against the edit
-   * itself, because the file only ever holds {@link COORDINATE_DECIMALS}
-   * decimals: an eighth would make this guard fail on a correct write. And
-   * deliberately *not* compared via `CoordinatesSchema.parse` — this guards this
-   * module's offset arithmetic and nothing else. Whether the numbers themselves
-   * are acceptable is decided on the rounded pair, above, before any splice is
-   * computed; asking it here would report a bad candidate as a bug in the writer.
    */
   const rewritten: unknown = verification.toJS();
 
   for (const edit of edits) {
-    const expected = axesOf(edit);
-    const wrong = AXES.filter((axis) => {
-      const written = valueAt(rewritten, ["places", edit.placeIndex, "coordinates", axis]);
-
-      return typeof written !== "number" || written !== Number(formatCoordinate(expected[axis]));
-    });
-
-    if (wrong.length > 0) {
+    const wrong = verify(rewritten, edit);
+    if (wrong !== undefined) {
       return {
         state: "unsupported",
-        placeIndex: edit.placeIndex,
-        reason: `la réécriture n'a pas relu ${wrong.join(" et ")} — défaut de la réécriture, pas du contenu ; le fichier n'a pas été touché`,
+        entryIndex: indexOf(edit),
+        reason: `la réécriture n'a pas relu ${wrong} — défaut de la réécriture, pas du contenu ; le fichier n'a pas été touché`,
       };
     }
   }
 
   return { state: "edited", text };
+}
+
+/* ================================================================ coordinates ==*/
+
+/**
+ * The source text with the given coordinates written into it, and nothing else
+ * changed.
+ *
+ * The document is re-parsed inside the driver rather than handed in: it makes
+ * this module testable from a string alone, and re-reading one 60-line file costs
+ * nothing next to the network call that produced the coordinates.
+ */
+export function writeCoordinates(source: string, edits: readonly CoordinateEdit[]): YamlEditResult {
+  return editSequenceEntries<CoordinateEdit>({
+    source,
+    collection: "places",
+    entryNoun: "un lieu",
+    edits,
+    indexOf: (edit) => edit.placeIndex,
+    writer: (text, place, edit) => splicesForPlace(text, place, edit),
+    /**
+     * The pair **as it will be written**, checked against the schema that will
+     * judge the file afterwards.
+     *
+     * The file only ever holds {@link COORDINATE_DECIMALS} decimals, so the
+     * domain's opinion of the numbers the service returned is not the same
+     * question as its opinion of the numbers this module is about to write:
+     * `lat: 1e-8, lon: -1e-8` is not (0, 0) and rounds to it. Writing that made
+     * `validate:content` refuse the file and send the author back to the very
+     * command that had produced it — a loop with no way out. The read-back guard
+     * cannot see it, since it compares against the rounded value too, so the
+     * check has to happen here, before anything is committed.
+     */
+    precheck: (edit) => {
+      const rounded = {
+        lat: Number(formatCoordinate(edit.lat)),
+        lon: Number(formatCoordinate(edit.lon)),
+      };
+
+      return CoordinatesSchema.safeParse(rounded).success
+        ? undefined
+        : `arrondies à ${COORDINATE_DECIMALS} décimales, les coordonnées proposées donnent (${formatCoordinate(edit.lat)}, ${formatCoordinate(edit.lon)}), que le contenu refuse → choisis un autre candidat`;
+    },
+    /**
+     * Compared against `Number(formatCoordinate(…))` rather than against the edit
+     * itself, because the file only ever holds {@link COORDINATE_DECIMALS}
+     * decimals: an eighth would make this guard fail on a correct write. And
+     * deliberately *not* compared via `CoordinatesSchema.parse` — this guards the
+     * offset arithmetic and nothing else. Whether the numbers themselves are
+     * acceptable is decided in `precheck`, before any splice is computed; asking
+     * it here would report a bad candidate as a bug in the writer.
+     */
+    verify: (rewritten, edit) => {
+      const expected = axesOf(edit);
+      const wrong = AXES.filter((axis) => {
+        const written = valueAt(rewritten, ["places", edit.placeIndex, "coordinates", axis]);
+
+        return typeof written !== "number" || written !== Number(formatCoordinate(expected[axis]));
+      });
+
+      return wrong.length === 0 ? undefined : wrong.join(" et ");
+    },
+  });
+}
+
+/* =============================================================== photo fields ==*/
+
+/**
+ * The three fields `npm run index-photos` writes on a photo, and the order they
+ * are appended in when they are absent.
+ *
+ * Read off the type rather than written twice: an added field leaves the object
+ * literal in {@link valuesOf} incomplete, so this module cannot quietly write two
+ * fields out of three. Same compile-time device as `AXES` / `axesOf` above.
+ */
+const PHOTO_FIELDS = ["width", "height", "blurDataUrl"] as const;
+
+type PhotoField = (typeof PHOTO_FIELDS)[number];
+
+export type PhotoFieldsEdit = {
+  /** Index into `photos[]`, as `TripSchema` and the findings number them. */
+  readonly photoIndex: number;
+  readonly width: number;
+  readonly height: number;
+  readonly blurDataUrl: string;
+};
+
+function valuesOf(edit: PhotoFieldsEdit): Readonly<Record<PhotoField, number | string>> {
+  return { width: edit.width, height: edit.height, blurDataUrl: edit.blurDataUrl };
+}
+
+/**
+ * A value as one line of YAML.
+ *
+ * `blurDataUrl` is base64 by the time the schema has accepted it, so a plain
+ * scalar is always safe **for the values this pipeline produces** — and this
+ * module deliberately does not depend on that. A single-quoted scalar is the one
+ * form that can carry anything (only `'` needs doubling), so anything that is not
+ * obviously a bare word gets quoted, and the driver's read-back guard confirms
+ * the string that comes out is the string that went in.
+ *
+ * The plain form is kept for the common case because it is what the author would
+ * have typed: quoting every placeholder would put 130 characters of quoted
+ * base64 in a diff where a bare word belongs.
+ */
+function formatFieldValue(value: number | string): string {
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  // Starts with a letter or a digit, and holds nothing YAML reads as structure:
+  // no space (so no ` #` comment and no `: ` separator), no quote, no bracket.
+  return /^[A-Za-z0-9][A-Za-z0-9+/=:;,._-]*$/.test(value)
+    ? value
+    : `'${value.replaceAll("'", "''")}'`;
+}
+
+/**
+ * The splices that write one photo's three fields. Three shapes, chosen from the
+ * AST and never from a regular expression on the text:
+ *
+ * 1. the key is absent — append `key: value` after the entry's last line;
+ * 2. the key holds a value — replace **the value's own range**, which leaves any
+ *    trailing comment and the author's spacing before it untouched;
+ * 3. the key is there and empty — or holds an explicit `null` — replace the
+ *    whitespace between the colon and whatever follows.
+ *
+ * A mapping or a list under one of these keys gets no branch and is refused; see
+ * that check for why forcing it through would be worse than stopping.
+ */
+function splicesForPhoto(
+  source: string,
+  photo: YAMLMap<unknown, unknown>,
+  edit: PhotoFieldsEdit
+): readonly Splice[] | { readonly reason: string } {
+  if (photo.flow) {
+    return {
+      reason: "cette photo est écrite en style « flow » ({ … }) → réécris-la en bloc de clés",
+    };
+  }
+
+  const first = photo.items[0];
+  const firstOffset = first === undefined ? undefined : keyStart(first);
+  if (firstOffset === undefined) {
+    return { reason: "cette photo n'a aucune clé lisible → réécris-la en bloc de clés" };
+  }
+  const keyIndent = indentAt(source, firstOffset);
+  const newline = detectNewline(source);
+  const value = valuesOf(edit);
+
+  const splices: Splice[] = [];
+  const absent: PhotoField[] = [];
+
+  for (const field of PHOTO_FIELDS) {
+    const pair = pairNamed(photo, field);
+    if (pair === undefined) {
+      absent.push(field);
+      continue;
+    }
+
+    const keyRange = valueRange(pair.key);
+    const written: unknown = pair.value;
+    const range = valueRange(written);
+
+    if (keyRange === undefined || range === undefined) {
+      return { reason: `la clé « ${field} » n'a pas de position lisible dans le fichier` };
+    }
+
+    /**
+     * A mapping or a list where a number or a string belongs. Refused rather than
+     * forced, and the two possible outcomes are why:
+     *
+     * - replacing the value keeps the author's comment and *silently deletes what
+     *   he wrote* — a `width:` holding a note to himself, gone without a trace;
+     * - appending beside it produces invalid YAML, and the command would announce
+     *   « fichier réécrit » over a file `validate:content` can no longer read.
+     *
+     * Same posture as the coordinates writer's refusal for a scalar under
+     * `coordinates:`, and it is the mirror image of it: there a *block* was
+     * expected and a scalar refused, here a scalar is expected and a block
+     * refused.
+     */
+    if (isMap(written) || isSeq(written)) {
+      return {
+        // `quoted` because this is a raw slice of the author's file on its way to
+        // a terminal — the attack `finding.ts` exists for.
+        reason: `la clé « ${field} » porte ${quoted(sourceExcerpt(source, range))} au lieu d'une valeur simple → remplace-la par « ${field}: » seul, l'indexation écrira la valeur`,
+      };
+    }
+
+    const empty = range[0] === range[1];
+
+    if (!empty) {
+      /* 2. A value with text: replace exactly it. `valueRange` stops before any
+            trailing comment, so the comment and its column survive verbatim. */
+      splices.push({ start: range[0], end: range[1], text: formatFieldValue(value[field]) });
+      continue;
+    }
+
+    /**
+     * 3. `width:` with nothing after it, or `width: # à mesurer`.
+     *
+     * **This is the branch that corrupted files in the coordinates writer, and it
+     * corrupts them here in exactly the same way.** On `width: # à mesurer` the
+     * null scalar's range starts *at the `#`*, so inserting at the value's offset
+     * gives `width: 1600# à mesurer` — which YAML reads as the **string**
+     * `"1600# à mesurer"`. The comment is absorbed into the scalar, gone for good
+     * on the next run, and the command exits 0 saying the file was rewritten.
+     *
+     * So the unit of replacement is the whitespace between the colon and whatever
+     * comes next on that line, and the separator is put back on both sides when
+     * there is something to separate from.
+     */
+    const colon = keyRange[1];
+    const { contentEnd } = lineEndFrom(source, colon);
+    const nextOnLine = Math.min(Math.max(range[0], colon + 1), contentEnd);
+    const rest = source.slice(nextOnLine, contentEnd);
+
+    splices.push({
+      start: colon + 1,
+      end: nextOnLine,
+      text:
+        rest === "" ? ` ${formatFieldValue(value[field])}` : ` ${formatFieldValue(value[field])} `,
+    });
+  }
+
+  if (absent.length > 0) {
+    const photoRange = valueRange(photo);
+    if (photoRange === undefined) {
+      return { reason: "cette photo n'a pas de position lisible dans le fichier" };
+    }
+    /**
+     * The absent keys are appended in **one** splice rather than one each. Two
+     * splices at the same offset are applied one after the other and come out in
+     * reverse, so `height:` would land above `width:` — the same trap the
+     * coordinates writer documents for its missing axes, and the reason
+     * `appends them in the order they are declared, not reversed` is a test.
+     */
+    /**
+     * Past the newline of the entry's last line, computed rather than taken from
+     * `range[1]` directly.
+     *
+     * `range[1]` of a block collection lands just past that newline **when the
+     * last line has a value**; when the last key was left empty it stops at the
+     * colon instead, before the break — which is where the tie documented on
+     * {@link Splice} comes from. Walking to the start of the following line
+     * removes the tie in the ordinary case and keeps the diff to appended lines;
+     * `rank` below covers the one case that cannot be walked past, a file ending
+     * without a newline.
+     */
+    const at = lineEndFrom(source, Math.max(0, photoRange[1] - 1)).next;
+    const lead = at === 0 || source[at - 1] === "\n" ? "" : newline;
+
+    splices.push({
+      start: at,
+      end: at,
+      rank: 1,
+      text:
+        lead +
+        absent
+          .map((field) => `${keyIndent}${field}: ${formatFieldValue(value[field])}${newline}`)
+          .join(""),
+    });
+  }
+
+  return splices;
+}
+
+/**
+ * The source text with a photo's measured fields written into it, and nothing
+ * else changed.
+ *
+ * The unhandled-key refusal the coordinates writer needs has **no counterpart
+ * here**, and the asymmetry is deliberate rather than an omission: `coordinates:`
+ * is a closed mapping, so a misspelled `latitude` inside it is a key this writer
+ * would have to reason about. A photo entry is an open block whose other keys —
+ * `src`, `alt`, `placeSlug` — are none of this writer's business, so a stranger
+ * beside them is simply left alone. What a *misspelling* of one of these three
+ * looks like is a key the schema does not know, and `validate:content` refuses it
+ * with a better sentence than this module could produce.
+ */
+export function writePhotoFields(
+  source: string,
+  edits: readonly PhotoFieldsEdit[]
+): YamlEditResult {
+  return editSequenceEntries<PhotoFieldsEdit>({
+    source,
+    collection: "photos",
+    entryNoun: "une photo",
+    edits,
+    indexOf: (edit) => edit.photoIndex,
+    writer: (text, photo, edit) => splicesForPhoto(text, photo, edit),
+    verify: (rewritten, edit) => {
+      const expected = valuesOf(edit);
+      const wrong = PHOTO_FIELDS.filter(
+        (field) => valueAt(rewritten, ["photos", edit.photoIndex, field]) !== expected[field]
+      );
+
+      return wrong.length === 0 ? undefined : wrong.join(" et ");
+    },
+  });
 }
