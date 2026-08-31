@@ -57,14 +57,48 @@ function baseAnchor(step: Step): string {
  * missing one.
  */
 export function stepAnchors(steps: readonly Step[]): readonly string[] {
-  const used = new Map<string, number>();
+  /**
+   * The set holds the anchors **actually emitted**, not the bases they were
+   * derived from — and the difference is a bug that shipped once.
+   *
+   * Counting occurrences per base looks equivalent and is not, because a
+   * disambiguating suffix can collide with another step's *base*. Measured on a
+   * real production build, with a trip whose content `TripSchema` and
+   * `npm run validate:content` both accept:
+   *
+   *     places: lyon-2 (Lyon 2e), lyon
+   *     steps:  stay lyon-2 · move lyon-2 → lyon · stay lyon · stay lyon
+   *
+   *     h3 ids: etape-2024-04-12-lyon-2        ← the stay in Lyon 2e
+   *             trajet-2024-04-12-lyon-2-lyon
+   *             etape-2024-04-12-lyon
+   *             etape-2024-04-12-lyon-2        ← the second stay in Lyon, "-2"
+   *     duplicates: etape-2024-04-12-lyon-2
+   *
+   * Two identical `id` in one document: the `#` link of the fourth step jumps to
+   * the first, and React sees a duplicate key. Slugs ending in a digit are not
+   * contrived — `lyon-2`, `paris-2`, `bordeaux-3` are how one names an
+   * arrondissement, a second station or a second hotel, and `SlugSchema` admits
+   * them.
+   *
+   * Hence: try the base, then `-2`, `-3`… and take the first spelling nobody
+   * holds. The loop terminates because each attempt is longer than the last, so
+   * the candidate eventually leaves the finite set of anchors already emitted.
+   * The first occurrence still keeps the bare anchor, which is what makes adding
+   * a second identical step leave the already-shared link alone.
+   */
+  const emitted = new Set<string>();
 
   return steps.map((step) => {
     const base = baseAnchor(step);
-    const previous = used.get(base) ?? 0;
-    const occurrence = previous + 1;
-    used.set(base, occurrence);
 
-    return occurrence === 1 ? base : `${base}-${occurrence}`;
+    let candidate = base;
+    for (let occurrence = 2; emitted.has(candidate); occurrence += 1) {
+      candidate = `${base}-${occurrence}`;
+    }
+
+    emitted.add(candidate);
+
+    return candidate;
   });
 }

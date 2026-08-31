@@ -133,6 +133,44 @@ describe("stepAnchors", () => {
   });
 
   /**
+   * **The collision the counter itself creates**, and the case that made this
+   * function keep a set of what it emitted rather than a count per base.
+   *
+   * Measured on a production build before the fix, with content `TripSchema` and
+   * `npm run validate:content` both accept: the fourth step's disambiguated
+   * anchor `etape-2024-04-12-lyon-2` was byte-for-byte the *base* anchor of the
+   * first, so the document carried the same `id` twice, the fourth step's `#`
+   * link jumped to the first, and React saw a duplicate key.
+   *
+   * Slugs ending in a digit are ordinary: `lyon-2` is how one names an
+   * arrondissement, `paris-2` a second station, `bordeaux-3` a second hotel —
+   * and `SlugSchema` admits all three. A general assertion that the anchors are
+   * distinct cannot be trusted on lists that have no such pair, which is why
+   * this case is written out rather than folded into the one above.
+   */
+  it("does not let a disambiguating suffix collide with another step's anchor", () => {
+    const anchors = stepAnchors(
+      steps(
+        stay("lyon-2", "2024-04-12", "2024-04-12"),
+        move("lyon-2", "lyon", "foot", "2024-04-12"),
+        stay("lyon", "2024-04-12", "2024-04-12"),
+        stay("lyon", "2024-04-12", "2024-04-14")
+      )
+    );
+
+    expect(new Set(anchors).size).toBe(anchors.length);
+    expect(anchors).toEqual([
+      "etape-2024-04-12-lyon-2",
+      "trajet-2024-04-12-lyon-2-lyon",
+      "etape-2024-04-12-lyon",
+      // `-2` is the first spelling tried and it belongs to the first step, so the
+      // counter walks past it. Not `…-lyon-2-2`: the suffix is appended to the
+      // base, never to a candidate, or a third collision would grow a tail.
+      "etape-2024-04-12-lyon-3",
+    ]);
+  });
+
+  /**
    * A fragment that needs percent-encoding is not copyable in practice: it
    * survives a paste into a browser bar and not into most chat clients. Slugs
    * and `YYYY-MM-DD` are both already restricted to this alphabet, so the
