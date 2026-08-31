@@ -95,12 +95,32 @@ export function TripHeader({
              * the same `values` object, so reusing one name for both would make
              * the message ambiguous.
              */}
-            {t.rich("datesValue", {
-              start: range.start,
-              end: range.end,
-              from: (chunks) => <time dateTime={machineDate(startDate)}>{chunks}</time>,
-              to: (chunks) => <time dateTime={machineDate(endDate)}>{chunks}</time>,
-            })}
+            {startDate === endDate
+              ? /*
+                 * A one-day trip is one date, never a range from a day to itself.
+                 *
+                 * This is a coherence fix, not a taste: the trip card on
+                 * `/fr/voyages` already prints such a trip as `1 juin 2024`, and
+                 * its suite pins that behaviour by name — "prints a one-day trip
+                 * as one date, **not as a range from a day to itself**". This
+                 * header printed « du 1 juin au 1 juin 2024 » for the same trip,
+                 * so the site said it twice, two ways, one of them the very
+                 * spelling the neighbouring test calls the defect.
+                 *
+                 * A separate message rather than a formatter trick: the French
+                 * « le … » and « du … au … » are different sentences, and the
+                 * choice between them is a translation, not a date format.
+                 */
+                t.rich("datesValueSingleDay", {
+                  start: range.end,
+                  from: (chunks) => <time dateTime={machineDate(startDate)}>{chunks}</time>,
+                })
+              : t.rich("datesValue", {
+                  start: range.start,
+                  end: range.end,
+                  from: (chunks) => <time dateTime={machineDate(startDate)}>{chunks}</time>,
+                  to: (chunks) => <time dateTime={machineDate(endDate)}>{chunks}</time>,
+                })}
           </dd>
         </div>
 

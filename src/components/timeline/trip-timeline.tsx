@@ -42,10 +42,7 @@ export type TripTimelineProps = {
 
 /** The text of the heading, reused as the anchor link's accessible name so the
  * two never describe different steps. */
-function headingText(
-  step: TimelineStep,
-  t: ReturnType<typeof useTranslations<"trip">>
-): string {
+function headingText(step: TimelineStep, t: ReturnType<typeof useTranslations<"trip">>): string {
   return step.kind === "stay"
     ? t("stayHeading", { place: step.place.name })
     : t("moveHeading", { from: step.from.name, to: step.to.name });
@@ -85,8 +82,29 @@ function MoveBody({ step, locale }: { step: TimelineMove; locale: string }): Rea
             labelled value rather than a bare noun floating after a date. Hidden
             visually because the icon already carries that meaning for anyone who
             can see it. */}
-        <span className={styles.visuallyHidden}>{t("transportTerm")} : </span>
-        <span className={styles.transportLabel}>{t(`transport.${step.mode}`)}</span>
+        {/*
+          The whole sentence is one message, and the visible pill is the one that
+          steps out of the accessibility tree.
+
+          It used to be a hidden `{t("transportTerm")} : ` beside a read label,
+          which put a *language rule* in the JSX: the space before a colon is a
+          French typographic convention, and in English the same markup reads
+          "Transport : Plane". Interpolating the mode into the message moves the
+          punctuation to the one place this project keeps language, and it is why
+          the pill becomes `aria-hidden` — otherwise the mode would be announced
+          twice, once in the sentence and once on its own.
+
+          What the criterion asks for is untouched: the icon is never alone. The
+          mode is still visible text next to it for anyone who can see it, and
+          still a real text node — `aria-hidden` hides it from the tree, not from
+          the page, and never from `Ctrl+F`.
+        */}
+        <span className={styles.visuallyHidden}>
+          {t("transportAnnounce", { mode: t(`transport.${step.mode}`) })}
+        </span>
+        <span className={styles.transportLabel} aria-hidden="true">
+          {t(`transport.${step.mode}`)}
+        </span>
       </p>
     </>
   );
@@ -97,7 +115,20 @@ export function TripTimeline({ steps, stopNumbers }: TripTimelineProps): ReactEl
   const locale = useLocale();
 
   return (
-    <ol className={styles.list}>
+    /*
+      `role="list"` on an element that already has that role, for the reason
+      `tokens.css` and the map's marker list both record: `list-style: none` makes
+      Safari drop the list role, and with it "list, 9 items" and the "3 of 9" a
+      reader hears at each step. On a twenty-step itinerary that count is the only
+      thing telling them where they are.
+
+      This is the list the exception exists for. TIW-16 widened
+      `jsx-a11y/no-redundant-roles` from `{ ul: ["list"] }` to include `ol` — and
+      then did not use it here, which an audit caught: of the eight lists styled
+      `list-style: none` across the two screens, this was the only one missing the
+      role. No unit test can see it, jsdom keeps the role either way.
+    */
+    <ol className={styles.list} role="list">
       {steps.map((step) => {
         const label = headingText(step, t);
         const stop = step.kind === "stay" ? stopNumbers.get(step.place.slug) : undefined;
