@@ -112,6 +112,25 @@ function readPrerenderedRoutes(): string[] {
 const PRERENDERED_ROUTES = readPrerenderedRoutes();
 
 /**
+ * The prerendered routes that produced an HTML **document**, and the ones that
+ * produced a Route Handler **body** — `sitemap.xml` and `robots.txt` since TIW-21.
+ *
+ * The budgets and the client-`Link` fingerprint below apply to documents only: a
+ * `.body` carries no `<script src>` and weighing it would mean weighing nothing. The
+ * partition is asserted to cover every manifest route above, so neither list can
+ * quietly lose a member.
+ */
+const DOCUMENT_ROUTES = PRERENDERED_ROUTES.filter((route) =>
+  existsSync(path.join(APP_DIR, `${route.replace(/^\//, "")}.html`))
+);
+
+const BODY_ROUTES = PRERENDERED_ROUTES.filter(
+  (route) =>
+    !DOCUMENT_ROUTES.includes(route) &&
+    existsSync(path.join(APP_DIR, `${route.replace(/^\//, "")}.body`))
+);
+
+/**
  * `/fr` → `fr.html`, `/_global-error` → `_global-error.html`, and
  * `/fr/voyages/japon-2024` → `fr/voyages/japon-2024.html`, which is how Next
  * lays the prerendered documents out under `.next/server/app`.
@@ -171,18 +190,37 @@ describe("the budget knows which routes to measure", () => {
     expect(PRERENDERED_ROUTES).toContain("/_not-found");
   });
 
-  it("has an HTML document on disk for every route it names", () => {
+  it("has an artefact on disk for every route it names", () => {
     for (const route of PRERENDERED_ROUTES) {
-      const file = path.join(APP_DIR, `${route.replace(/^\//, "")}.html`);
+      const bare = route.replace(/^\//, "");
+      const document = path.join(APP_DIR, `${bare}.html`);
+      const body = path.join(APP_DIR, `${bare}.body`);
 
-      // A manifest entry with no document means the route→file mapping above has
-      // stopped matching Next's output layout, and the budgets would throw.
-      expect(existsSync(file), `${route} is in the manifest but ${file} is missing.`).toBe(true);
+      // A manifest entry with neither means the route→file mapping has stopped
+      // matching Next's output layout, and the budgets below would throw.
+      expect(
+        existsSync(document) || existsSync(body),
+        `${route} is in the manifest but neither ${document} nor ${body} exists.`
+      ).toBe(true);
     }
+  });
+
+  it("counts every prerendered route as either a document or a body, never neither", () => {
+    /**
+     * Guards the split introduced by TIW-21. `sitemap.xml` and `robots.txt` are
+     * prerendered **Route Handlers**: Next writes them as a `.body`/`.meta` pair and
+     * not as HTML, so they have no `<script>` payload to weigh and the budgets below
+     * skip them. That skip is what this case keeps honest — a *page* that stopped
+     * emitting HTML would otherwise drop out of the budget in silence, which is the
+     * failure shape this whole file refuses.
+     */
+    expect([...DOCUMENT_ROUTES, ...BODY_ROUTES].sort()).toEqual([...PRERENDERED_ROUTES]);
+    expect(DOCUMENT_ROUTES).toContain("/fr");
+    expect(DOCUMENT_ROUTES).toContain("/_not-found");
   });
 });
 
-describe.each(PRERENDERED_ROUTES)("the %s payload stays within budget", (route) => {
+describe.each(DOCUMENT_ROUTES)("the %s payload stays within budget", (route) => {
   it("keeps the document under the HTML budget", () => {
     const bytes = brotliBytes(Buffer.from(documentHtml(route), "utf8"));
 
@@ -278,7 +316,7 @@ describe("next-intl's client Link stays out of the initial bundle", () => {
     }
   });
 
-  it.each(PRERENDERED_ROUTES)("%s ships no chunk carrying it", (route) => {
+  it.each(DOCUMENT_ROUTES)("%s ships no chunk carrying it", (route) => {
     const { counted } = initialChunks(route);
 
     /**
