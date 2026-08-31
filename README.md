@@ -185,6 +185,62 @@ langue mais introduit une route dynamique `ƒ` et rend `<html id="__next_error__
 L'alarme est le test unitaire « declares exactly one active locale » : il passe au rouge dès
 qu'une seconde locale est déclarée, et son commentaire liste ce qu'il faut traiter d'abord.
 
+**Adresses durables et aperçus de partage.** Le slug d'un voyage publié est **définitif**.
+Le renommer est autorisé et coûte une entrée dans `src/i18n/slug-history.ts`, pour toujours :
+`next.config.ts` en dérive une redirection **301** (`statusCode: 301`, et non
+`permanent: true` qui émet un 308 que plusieurs dérouleurs de liens refusent de suivre).
+Le registre porte aussi les voyages **retirés volontairement**, dont l'adresse reste une
+page qui explique que le récit n'est plus en ligne et propose la carte et les trois
+derniers voyages. Le vrai cas n'est pas la suppression, c'est le renommage silencieux :
+transformer `japon-2024` en `japon-printemps-2024` casse tous les liens déjà envoyés, dans
+des conversations que personne ne peut rééditer, et rien ne le signale. Le registre refuse
+au build une entrée qui ne peut pas vouloir dire ce qu'elle dit — slug malformé,
+renommage sur lui-même, même ancienne adresse deux fois, slug à la fois renommé et retiré,
+chaîne de redirections.
+
+**Le 410 n'est pas rendu, et c'est mesuré.** Une page retirée répond **200** avec
+`noindex, follow` là où le critère demande 410. Next 16.3.1 sait porter 404, 401 et 403 sur
+un document prérendu (`notFound()`, `unauthorized()`, `forbidden()`) et n'expose rien pour
+410 ; un Route Handler y arrive, et cesse d'être prérendu dès qu'il le fait — le même
+handler rend `○` en 200 et `ƒ` en 410, alors que le fichier `.meta` écrit à côté d'un corps
+prérendu porte bien un champ `status`. Un vrai 410 coûte donc une fonction serveur sur une
+URL qui n'a rien à calculer, contre l'invariant 1. Le détail complet est dans
+`src/app/[locale]/voyages/[slug]/withdrawn-notice.tsx`.
+
+**L'origine du site vit dans un seul fichier**, `src/app/site-url.ts` : `TIW_SITE_URL` s'il
+est posé, sinon `VERCEL_PROJECT_PRODUCTION_URL` que Vercel fournit à chaque build, sinon la
+constante `FALLBACK_SITE_URL`. Le jour où un vrai domaine est ajouté, il n'y a **rien** à
+modifier dans le dépôt : Vercel sert le nouveau domaine par la deuxième entrée. `VERCEL_URL`
+est délibérément ignorée — c'est l'URL du _déploiement_, avec un suffixe différent à chaque
+poussée, donc une canonique qui nomme une adresse que personne ne relira jamais. Une valeur
+présente mais inutilisable fait **échouer le build** au lieu de retomber sur le défaut : une
+canonique fausse partout avec un build vert est exactement la casse silencieuse que ce dépôt
+refuse.
+
+**Image de partage : la photo de couverture, pas une image générée** — décision mesurée, pas
+par facilité. Un `opengraph-image.tsx` sous `[slug]` a été construit et pesé : sans
+`generateStaticParams` il rend `ƒ` ; **avec**, la colonne de build affiche `●` et se trompe —
+aucun PNG n'est écrit sous `.next/server/app`, aucune paire `.body`/`.meta`, et
+`prerender-manifest.json` ne liste aucune des images concrètes sous `routes`, donc
+`npm run test:build` (qui dérive sa liste de `routes`) ne les pèse pas non plus. Surtout :
+l'image étant rendue à la demande, elle sort de la frontière de publication que
+`dynamicParams = false` ferme sur la page. Mesuré contre `next start` avec un voyage
+`draft: true` : `/fr/voyages/<brouillon>` répond **404** et
+`/fr/voyages/<brouillon>/opengraph-image` répond **200** avec un PNG de 20,6 Ko portant son
+titre. Ajouter `dynamicParams = false` sur la route d'image ne corrige rien : elle répond
+alors **404 pour tous les slugs**, publiés compris. Un voyage sans photo obtient donc une
+carte avec titre et description sans image, et `twitter:card` retombe sur `summary`.
+
+**`sitemap.xml` et `robots.txt` sont des Route Handlers prérendus** (`○` dans la colonne de
+build, un `.body` sur le disque). Le sitemap ne liste que les voyages **publiés**, et ce
+n'est pas un filtre écrit là : il appelle `listTripSummaries()`, la même porte que la page
+d'accueil et la liste, donc il n'existe pas de seconde règle de publication qui puisse
+diverger de la première. `robots.txt` ne `Disallow` rien — pas même les adresses retirées : un
+robot interdit de récupérer une page ne peut jamais y lire le `noindex`, donc l'entrée
+_conserverait_ le référencement qu'elle prétend retirer. Sur un déploiement de
+prévisualisation (`VERCEL_ENV` présent et différent de `production`), il refuse en revanche
+tout le monde.
+
 **Validation du contenu.** Les voyages sont des `content/trips/<slug>/trip.yaml` écrits à
 la main ; `content/README.md` en donne la structure. `npm run validate:content` les valide
 avec le **même `TripSchema`** que les pages (une règle métier a un seul endroit où vivre) et

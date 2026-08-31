@@ -84,10 +84,10 @@ dans le dépôt, donc dans la revue.
 
 ## Ce qui reste à faire à la main
 
-Les deux sections qui suivent ne sont pas automatisables depuis le dépôt : elles
-passent par le compte Vercel et par les réglages GitHub. **Elles ne sont pas
-faites.** Tant qu'elles ne le sont pas, le workflow tourne et affiche un résultat,
-mais rien ne bloque une fusion et rien n'est déployé.
+Les trois sections qui suivent ne sont pas automatisables depuis le dépôt : elles
+passent par le compte Vercel, par une URL publique et par les réglages GitHub.
+**Elles ne sont pas faites.** Tant qu'elles ne le sont pas, le workflow tourne et
+affiche un résultat, mais rien ne bloque une fusion et rien n'est déployé.
 
 ### 1. Rattacher le projet Vercel
 
@@ -101,9 +101,14 @@ Dans l'ordre, sur <https://vercel.com>.
    vide évite d'entretenir deux valeurs dont une seule s'applique.
 3. **Environment Variables : aucune.** Le projet n'a aucun secret — le géocodage
    utilise `geocoding-api.open-meteo.com`, qui ne demande pas de clé, et il tourne
-   sur le poste, pas au build. `TIW_GEOCODING_URL`, `TIW_CONTENT_DIR` et
-   `TIW_PUBLIC_DIR` sont des variables de test : elles n'ont rien à faire ici.
-   S'il faut un jour en ajouter une, elle se déclare par environnement
+   sur le poste, pas au build. `TIW_GEOCODING_URL`, `TIW_CONTENT_DIR`,
+   `TIW_PUBLIC_DIR` et `TIW_SLUG_HISTORY` sont des variables de test : elles n'ont
+   rien à faire ici. `TIW_SITE_URL` non plus, et c'est le point le plus contre-intuitif
+   de cette liste : l'origine du site se lit d'elle-même dans
+   `VERCEL_PROJECT_PRODUCTION_URL`, que la plateforme pose sur chaque build, donc la
+   déclarer à la main créerait une seconde vérité qui ne suivrait pas l'ajout d'un
+   domaine. Elle n'existe que comme échappatoire pour un hôte que Vercel ne connaît
+   pas. S'il faut un jour en ajouter une, elle se déclare par environnement
    (Production / Preview / Development) et **jamais** dans un fichier committé.
 4. **Deploy.** Ce premier déploiement construit la branche par défaut du dépôt
    GitHub, qui est `develop` — voir l'étape suivante, à faire tout de suite après.
@@ -152,7 +157,59 @@ avant de le faire :
    dans **Settings → Domains** et demande un enregistrement DNS chez le
    registraire — hors périmètre de ce ticket.
 
-### 2. Protéger `main` et `develop`
+### 2. Contrôler les aperçus de lien partagé
+
+**Ceci n'a pas été fait et ne pouvait pas l'être : il faut une URL publique.** Le
+dépôt livre les balises — `og:title`, `og:description`, `og:url`, `og:site_name`,
+`og:locale`, `og:type`, `og:image` avec ses dimensions et son texte alternatif, les
+`twitter:*` équivalentes, et une `<link rel="canonical">` par page — et elles sont
+vérifiées localement sur le HTML prérendu par `tests/build/durable-urls.test.ts` et
+sur le HTML servi par `tests/e2e/durable-urls.spec.ts`. Ce qu'aucun test ne peut
+faire, c'est constater ce qu'une plateforme tierce **décide** d'afficher : chacune
+applique ses propres règles de taille d'image, de longueur de titre et de cache.
+
+À faire une fois le projet rattaché, dans cet ordre. Les deux premières lignes
+suffisent à remplir le critère « au moins deux plateformes ».
+
+1. **Facebook Sharing Debugger** — <https://developers.facebook.com/tools/debug/>.
+   Coller `https://<domaine>/fr`, puis `https://<domaine>/fr/voyages`, puis l'URL
+   d'un voyage publié. C'est l'outil le plus bavard des trois : il liste les balises
+   qu'il a lues et **nomme** celles qui manquent. « Scrape Again » force la relecture
+   — indispensable, son cache garde une première lecture plusieurs jours, et un
+   aperçu qui reste faux après correction est presque toujours ce cache.
+2. **LinkedIn Post Inspector** — <https://www.linkedin.com/post-inspector/>. Mêmes
+   trois URL. LinkedIn a son propre cache, indépendant de celui de Facebook, et cet
+   outil est la seule façon de le vider.
+3. **Un vrai message, sur une application de messagerie.** Coller l'URL d'un voyage
+   dans une conversation avec soi-même (WhatsApp, Signal, Telegram, iMessage) et
+   regarder la carte se déplier. Ce n'est pas un pis-aller : le validateur de cartes
+   de X/Twitter a été retiré, et une messagerie est de toute façon le chemin réel par
+   lequel un lien de ce site circulera. Ce qu'il faut voir : le titre du voyage, la
+   description, et la photo de couverture — **pas** un rectangle gris.
+4. **Un voyage sans photo**, s'il en existe un. La carte attendue est un titre et une
+   description **sans image** (`twitter:card` retombe sur `summary`), et c'est le
+   comportement voulu : le dépôt ne génère pas d'image de partage, pour les raisons
+   mesurées que le README détaille. Une carte vide avec un cadre d'image béant est la
+   régression à guetter ici.
+5. **Google Search Console**, si le site doit être indexé : ajouter la propriété du
+   domaine, soumettre `https://<domaine>/sitemap.xml`, puis utiliser l'inspection
+   d'URL sur `/fr/voyages/<un-voyage>` pour vérifier que la canonique que Google
+   retient est bien celle que la page déclare.
+
+Vérifier aussi, à la main et une seule fois, que `https://<domaine>/robots.txt`
+nomme le sitemap avec le bon domaine, et que `https://<domaine>/sitemap.xml` ne
+contient que des voyages publiés. Les deux sont prérendus au build : s'ils portent le
+mauvais domaine, c'est que `VERCEL_PROJECT_PRODUCTION_URL` n'était pas ce qu'on
+croyait, et le seul fichier à regarder est `src/app/site-url.ts`.
+
+**Sur une prévisualisation, tout ceci répond volontairement autre chose.**
+`robots.txt` y refuse tous les robots (`VERCEL_ENV` présent et différent de
+`production`), et les canoniques y pointent vers le domaine de production — une
+prévisualisation ne doit pas concurrencer la vraie page dans un index. Contrôler les
+aperçus se fait donc sur le déploiement de production, ou en acceptant que les
+canoniques affichées ne soient pas celles de l'URL testée.
+
+### 3. Protéger `main` et `develop`
 
 **Ces commandes modifient les réglages du dépôt. Elles n'ont pas été exécutées** —
 à relire et à lancer sciemment. Elles supposent un `gh auth status` avec le droit
@@ -213,6 +270,47 @@ Vérifier ensuite que la garde mord réellement, une fois : ouvrir une pull requ
 avec une faute de lint volontaire et constater que le bouton de fusion est barré.
 C'est la même méthode que celle qui a prouvé `test:build` et `test:lint` — une
 garde qu'on n'a pas vue refuser n'est pas une garde.
+
+## Renommer ou retirer un voyage
+
+Deux gestes qui cassent des liens déjà envoyés, et deux procédures de trois lignes.
+Le registre est `src/i18n/slug-history.ts` ; il est vide aujourd'hui, et la première
+entrée est celle qui compte.
+
+**Renommer.** Le slug d'un voyage publié est définitif. On peut le changer, mais
+jamais seul :
+
+1. changer `slug:` dans `content/trips/<dossier>/trip.yaml` (et renommer le dossier,
+   par convention) ;
+2. ajouter `{ from: "<ancien>", to: "<nouveau>" }` à `renamed` dans
+   `src/i18n/slug-history.ts` — **cette entrée ne se supprime jamais**, y compris des
+   années plus tard : elle est la seule chose qui rattrape un lien envoyé dans une
+   conversation que personne ne peut rééditer ;
+3. `npm run build` puis `npm run test:e2e`. Le build refuse une entrée incohérente
+   (slug malformé, renommage sur lui-même, doublon, chaîne de redirections) en
+   nommant le problème.
+
+L'ancienne adresse répond alors **301** vers la nouvelle, servie par la couche de
+routage de la plateforme : aucune fonction serveur, et la nouvelle page reste
+prérendue.
+
+**Retirer.** Retirer un récit, ce n'est pas seulement supprimer son dossier :
+
+1. ajouter le slug à `withdrawn` dans `src/i18n/slug-history.ts` ;
+2. supprimer `content/trips/<dossier>/` ;
+3. `npm run build`. L'adresse répond **200** avec une page qui dit que le récit n'est
+   plus en ligne et propose la carte et les trois derniers voyages, et la page porte
+   `noindex, follow`. Le sitemap ne la liste plus.
+
+Le critère du ticket demandait 410 ; le README explique, mesures à l'appui, pourquoi
+un 410 réel coûterait une route non prérendue et pourquoi le `noindex` fait le vrai
+travail de déréférencement. Si un jour ce 410 devient indispensable, la voie la moins
+chère est une règle au niveau de la plateforme, pas une route Next.
+
+**Ce qu'il ne faut pas faire, dans les deux cas :** réutiliser un ancien slug pour un
+autre voyage. L'entrée du registre redirigerait alors les lecteurs de l'ancien récit
+vers le nouveau, silencieusement. Le build ne peut pas l'attraper — il ne sait pas que
+les deux voyages sont différents.
 
 ## Rollback
 

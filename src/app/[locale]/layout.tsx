@@ -4,8 +4,11 @@ import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { SiteNav } from "@/components/site/site-nav";
+import { localePathname } from "@/i18n/pathname";
 import { routing } from "@/i18n/routing";
 import "@/styles/tokens.css";
+import { shareMetadata } from "../share";
+import { SITE_URL } from "../site-url";
 import { MAIN_CONTENT_ID } from "./main-content";
 import styles from "./layout.module.css";
 
@@ -21,6 +24,28 @@ export function generateStaticParams(): LocaleParams[] {
   return routing.locales.map((locale) => ({ locale }));
 }
 
+/**
+ * The locale segment's metadata — and, since TIW-21, two things that describe the
+ * home page rather than the layout. That is a coupling, so it is written down
+ * rather than left to be discovered.
+ *
+ * `metadataBase` belongs here: it applies to "the current segment and below", so
+ * one declaration lets every page under `[locale]` hand Next a *relative* canonical
+ * and a relative `og:image` and have them resolved once, in Next's implementation
+ * instead of a second one of ours. Without it Next warns and falls back to
+ * `http://localhost:3000` — measured on this branch before the line existed: a
+ * wrong absolute URL written into every prerendered document, with a green build.
+ *
+ * The **canonical and the Open Graph block below describe `/fr`**, the home page,
+ * whose file (`./page.tsx`) belongs to another ticket and declares no metadata of
+ * its own. Next merges metadata shallowly per top-level field, so a page declaring
+ * `alternates` or `openGraph` replaces these entirely — `./voyages/page.tsx` and
+ * `./voyages/[slug]/page.tsx` both do, through `shareMetadata`. The trap that
+ * leaves is precise: a *new* page under this segment that forgets its own canonical
+ * inherits the home page's, and asks to be de-indexed in its favour.
+ * `tests/build/durable-urls.test.ts` refuses exactly that — it reads every
+ * prerendered document and compares its canonical with its own URL.
+ */
 export async function generateMetadata({
   params,
 }: {
@@ -33,10 +58,18 @@ export async function generateMetadata({
   }
 
   const t = await getTranslations({ locale, namespace: "metadata" });
+  const siteName = t("title");
 
   return {
-    title: t("title"),
-    description: t("description"),
+    metadataBase: SITE_URL,
+    ...shareMetadata({
+      locale,
+      path: localePathname({ href: "/", locale }),
+      title: siteName,
+      description: t("description"),
+      siteName,
+      type: "website",
+    }),
   };
 }
 

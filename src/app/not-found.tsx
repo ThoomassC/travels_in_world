@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { homePathname } from "@/i18n/pathname";
+import { homePathname, tripsPathname } from "@/i18n/pathname";
 import { routing } from "@/i18n/routing";
 import "@/styles/tokens.css";
 
@@ -52,6 +52,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function NotFound() {
   const t = await getTranslations({ locale: routing.defaultLocale, namespace: "notFound" });
   const homeHref = homePathname();
+  const tripsHref = tripsPathname();
 
   return (
     <html lang={routing.defaultLocale}>
@@ -59,7 +60,27 @@ export default async function NotFound() {
         <main>
           <h1>{t("title")}</h1>
           <p>{t("description")}</p>
-          <a href={homeHref}>{t("backHome")}</a>
+          {/*
+            TWO ways out, and the second one is not decoration. The home page is the
+            world map, which serves the reader who knows which trip they were after;
+            the listing serves the reader who does not, and a 404 offering only the
+            map sends them to hunt for a marker they cannot name. Both hrefs come
+            from `@/i18n/pathname` — never from `@/i18n/navigation`, which on THIS
+            route costs 12.4 KB brotli of next-intl's client `Link` and its
+            `use-intl` baggage; see the header of this file.
+
+            A `<ul>` and not two loose anchors: they are a list of ways out, and a
+            screen reader announcing "2 éléments" is what tells the reader the page
+            has finished offering them.
+          */}
+          <ul>
+            <li>
+              <a href={homeHref}>{t("backHome")}</a>
+            </li>
+            <li>
+              <a href={tripsHref}>{t("backTrips")}</a>
+            </li>
+          </ul>
         </main>
       </body>
     </html>
