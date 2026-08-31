@@ -63,6 +63,29 @@
 }
 
 /**
+ * **The only legitimate `outline: none` of this repository, and the reason is
+ * that the replacement is the rule immediately above.**
+ *
+ * Without this the reader gets *two* rings, not one. The global `:focus-visible`
+ * of `src/styles/tokens.css` fires on the anchor as well, and an anchor inside a
+ * heading is an inline box the width of its text — measured at 138 × 22 px, the
+ * four words of the title — so the card was drawing the ring the comment above
+ * describes *and* the browser was drawing a second one inside it, around the
+ * title alone. The intent stated above was never the rendered result.
+ *
+ * `:has(.link:focus-visible)` above is what makes the suppression safe: the two
+ * selectors fire on the exact same condition, so the ring cannot disappear
+ * without the card's ring appearing. Deleting these two declarations without
+ * deleting that rule is what would be the accessibility regression — which is
+ * why it is written here rather than left for the next reviewer to rediscover as
+ * a bare `outline: none`.
+ */
+.link:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/**
  * The thumbnail box, sized before the image loads.
  *
  * `TripSummary` carries `coverPhotoSrc` and NOT the photo's `width`/`height` —
