@@ -91,5 +91,9 @@
     "title": "Ce récit n’est plus en ligne",
     "body": "Ce voyage a été retiré du carnet par son auteur. L’adresse est bien la bonne : il n’y a simplement plus rien à lire ici. La carte du monde et les derniers récits publiés vous attendent juste en dessous.",
     "backMap": "Voir la carte du monde"
+  },
+  "brand": {
+    "name": "Travels in World",
+    "homeDestination": ", retour à l’accueil"
   }
 }
