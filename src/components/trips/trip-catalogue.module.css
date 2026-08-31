@@ -1,0 +1,60 @@
+/* =============================================================================
+   The full listing: continents, then countries, then cards.
+   ============================================================================ */
+
+.catalogue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+}
+
+.continent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/**
+ * The heading and its count share a baseline on a wide screen and stack on a
+ * narrow one — `flex-wrap` alone, with no media query, because the only thing
+ * that decides is whether the two fit.
+ */
+.continentHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  padding-block-end: var(--space-2);
+  /* The rule is what makes a continent read as a chapter rather than as a
+     slightly larger country. `--border-subtle` is the right token here and not
+     on the card: this line is decoration next to a heading that already carries
+     the information, which is the case its declaration allows. */
+  border-block-end: 1px solid var(--border-subtle);
+}
+
+.continentHeading {
+  font-size: var(--text-xl);
+}
+
+.count {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.country {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.countryHeading {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-body);
+}
+
+.countries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}

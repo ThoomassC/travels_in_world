@@ -1,0 +1,51 @@
+/* =============================================================================
+   The home page's "Derniers voyages" block, and the honest waiting message that
+   takes its place while nothing is published.
+   ============================================================================ */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.heading {
+  font-size: var(--text-lg);
+}
+
+/**
+ * The way out sits after the cards, in the DOM and on screen.
+ *
+ * Putting it beside the heading is the common arrangement and it was refused
+ * here: it would come *before* the three trips in reading order, so a
+ * screen-reader user and a keyboard user both meet the escape hatch before the
+ * content the section exists for. Below the cards it is where a reader who has
+ * finished reading them looks, and no `order` trick is needed to make the paint
+ * disagree with the DOM.
+ */
+.more {
+  align-self: flex-start;
+  min-block-size: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  font-weight: var(--weight-medium);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface);
+  /* `--control-border`, not `--border-subtle` (1.37:1, `decorative only` by its
+     own declaration): this box is the only thing on the page saying the catalogue
+     is empty on purpose, so its edge has to be perceivable. */
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+}
+
+.emptyBody {
+  color: var(--text-muted);
+  /* A measure, not a width: past ~70 characters the eye loses the line start. */
+  max-width: 55ch;
+}
