@@ -23,6 +23,14 @@ export default defineConfig({
     baseURL: BASE_URL,
     trace: "on-first-retry",
   },
+  /**
+   * `*.populated.spec.ts` belongs to `playwright.content.config.ts`, which serves
+   * a build of `tests/fixtures/content/home-map` instead of the repository's own
+   * (empty) `content/trips`. Those specs count trips per country, so against this
+   * server they would fail on every count they assert. `npm run test:e2e` runs
+   * both configs, in sequence — see `package.json`.
+   */
+  testIgnore: /\.populated\.spec\.ts$/,
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   /**
    * The E2E suite runs against a production build: the locale redirect and the

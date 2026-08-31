@@ -1,0 +1,14 @@
+slug: islande-2022
+title: Islande, cercle d'or
+startDate: 2022-09-10
+endDate: 2022-09-18
+places:
+  - slug: reykjavik
+    name: Reykjavik
+    countryCode: IS
+    coordinates: { lat: 64.1466, lon: -21.9426 }
+steps:
+  - kind: stay
+    placeSlug: reykjavik
+    startDate: 2022-09-10
+    endDate: 2022-09-18
