@@ -497,13 +497,28 @@ describe("invariant 2 survives whatever the map rule adds", () => {
   ];
 
   /**
-   * Both sides of the new boundary. `src/app/**` is the folder the map block is
-   * aimed away from; `src/map/**` is the folder it has to carve an exemption for,
-   * and an exemption written as a whole-rule `"off"` would take the navigation ban
-   * down with it inside the map.
+   * Three folders, and the third one is why this list is not two.
+   *
+   * `src/app/**` is what the map block is aimed away from; `src/map/**` is the
+   * folder it carves an exemption for, and an exemption written as a whole-rule
+   * `"off"` would take the navigation ban down with it inside the map.
+   *
+   * **`src/content/**` is the folder that had no case at all, and it is the one
+   * where this block is the *only* thing left standing.** Every other folder is
+   * covered twice: `content-facade` comes later and spreads the navigation
+   * patterns again — except over `src/content/**`, which it ignores, because that
+   * is the folder that owns the content rule. So for a content module,
+   * `map-entry-point` is the last block to set `no-restricted-imports`, and its
+   * spread is the whole guarantee.
+   *
+   * Measured while writing ADR 0010, by deleting `NAVIGATION_RESTRICTED_PATTERNS`
+   * from that spread: `npm run test:lint` stayed **289/289 green** and
+   * `npm run lint` stayed green, while `import Link from "next/link"` went from
+   * REFUSED to **ALLOWED** in `src/content/loader.ts` and `src/content/validate.ts`.
+   * A repetition the config comments call load-bearing, that no test held.
    */
   it.each(
-    ["src/app/[locale]/page.tsx", "src/map/world.ts"].flatMap((file) =>
+    ["src/app/[locale]/page.tsx", "src/map/world.ts", "src/content/loader.ts"].flatMap((file) =>
       NAVIGATION_FIXTURES.map((fixture) => ({ file, ...fixture }))
     )
   )("still refuses $label from $file", async ({ file, source }) => {
