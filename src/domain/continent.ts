@@ -14,13 +14,33 @@ import type { CountryCode } from "./geo";
  * will read those two comments before this one:
  *
  * - **it validates nothing.** {@link continentOf} is total: an unknown code
- *   answers `null` and the listing renders it under its own heading. So a country
- *   this table has never heard of is a *presentation* outcome, not a rejected
- *   trip. That is precisely what `CountryCodeSchema` refused to become;
+ *   answers `null` rather than throwing, and `buildCatalogue` has a group for
+ *   exactly that. So this table rejects no trip — which is precisely what
+ *   `CountryCodeSchema` refused to become;
  * - **it is tied to no dataset.** The map's table can only name countries
- *   `world-atlas` draws. A continent is a property of the country, and a trip to
- *   Kosovo — which the 110m dataset cannot draw at all — still has to be filed
- *   somewhere.
+ *   `world-atlas` draws. A continent is a property of the country, not of one
+ *   vintage of one dataset, which is why Kosovo has a row here and none there.
+ *
+ * **What the reader must NOT conclude from the first point, because an earlier
+ * version of this comment said it and it was false.** It claimed the listing
+ * "renders an unknown code under its own heading" — a *rendered* outcome. It does
+ * not, today: `buildWorldGeometry` (`src/map/world.ts`) throws on any code
+ * outside the 249 of ISO 3166-1, and the home page calls it, so a trip declaring
+ * one fails `next build` before any listing is produced. Measured with a trip
+ * declaring `XK`, which `CountryCodeSchema` and `npm run validate:content` both
+ * accept:
+ *
+ * ```
+ * Error occurred prerendering page "/fr".
+ * Error: le code pays « XK » n'est pas un code ISO 3166-1 alpha-2 …
+ * ⨯ Next.js build worker exited with code: 1
+ * ```
+ *
+ * The totality is kept all the same, and so is the listing's group: a pure
+ * function owes its caller an answer for every input of its type, and the day
+ * the map learns to tolerate a code it cannot draw, the listing must not be
+ * what breaks instead. The real defect is upstream of both — a validator that
+ * accepts what the build refuses — and it belongs to its own ticket.
  *
  * What stays true of the neighbours' worry is the *dating*, and the answer is a
  * test rather than a promise: `tests/domain/continent.test.ts` checks this table
@@ -68,7 +88,14 @@ const POLAR_TERRITORIES = ["AQ", "BV", "GS", "HM", "TF"] as const;
  *
  * `XK` is here and is NOT one of the 249: Kosovo's code is user-assigned, not
  * officially allocated, so `src/map/iso-3166.ts` does not carry it and the map
- * cannot draw it. A trip there still has to appear in the listing.
+ * cannot draw it.
+ *
+ * The row is a *continent* answer and nothing more. It does not make a trip to
+ * Kosovo publishable: `buildWorldGeometry` throws on `XK` and the home page
+ * calls it, so such a trip fails `next build` before it reaches any listing —
+ * measured, and quoted at the top of this file. The row is here so that the day
+ * the map tolerates an undrawable code, this table already has the answer
+ * instead of being the next thing to fix.
  */
 const CONTINENT_BY_COUNTRY_RECORD = {
   // --- Africa -------------------------------------------------------------
@@ -357,9 +384,17 @@ const CONTINENT_BY_COUNTRY: ReadonlyMap<string, Continent> = new Map(
  * reason the table is allowed to live in the domain. `CountryCodeSchema`
  * validates the *shape* of a code and not its existence, on purpose, so `"ZZ"`
  * is a perfectly valid trip as far as every other rule of this project is
- * concerned. Throwing here would make an unknown code crash the listing; folding
- * it into a continent would file a trip under a heading that is simply false.
- * `null` says "not placed", and the listing has a heading for exactly that.
+ * concerned. Folding it into a continent would file a trip under a heading that
+ * is simply false; `null` says "not placed", and `buildCatalogue` has a group
+ * for exactly that.
+ *
+ * A throw here would be wrong for a reason that is about this function and not
+ * about the screen: a total function is the contract a pure domain owes its
+ * callers, and there is more than one caller. What is **not** a reason — the
+ * earlier wording of this paragraph said it was — is that throwing "would crash
+ * the listing". The listing is unreachable for such a code today anyway: the map
+ * throws on it first, at build time, and the note at the top of this file has
+ * the measurement.
  *
  * Case-sensitive, deliberately: `CountryCodeSchema` accepts uppercase only, so a
  * lowercase code never came through it, and quietly upper-casing here would hide

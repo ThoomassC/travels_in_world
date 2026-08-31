@@ -143,9 +143,22 @@ export function formatDateRange(locale: string, startDate: string, endDate: stri
  *
  * ICU echoes its input back rather than answering `undefined` for an unknown
  * region — the trap `src/map/world.ts` documents — so both readings are folded
- * into the same answer. `CountryCodeSchema` validates the *shape* of a code and
- * deliberately not its existence, so this is reachable from real content, and
- * showing `"QQ"` is honest where showing `undefined` would not be.
+ * into the same answer, and showing `"QQ"` is honest where showing `undefined`
+ * would not be.
+ *
+ * **How reachable that branch really is, corrected.** This paragraph used to say
+ * "reachable from real content", on the grounds that `CountryCodeSchema`
+ * validates the *shape* of a code and deliberately not its existence. The first
+ * half is true — `npm run validate:content` accepts a trip declaring `QQ` or
+ * `XK` — and the conclusion was not: `buildWorldGeometry` throws on any code
+ * outside the 249 of ISO 3166-1 and the home page calls it, so such a trip fails
+ * `next build` and no card of it is ever rendered. Measured; the reproduction is
+ * quoted in `src/domain/continent.ts`.
+ *
+ * The fallback stays, for the reason `formatDateRange`'s does: `TripEntry` is a
+ * structural type, this function is called with a bare `string`, and answering
+ * `undefined` under a heading would be a worse failure than printing a code. It
+ * is a total function's contract, not a screen this project can show today.
  */
 export function countryNameOf(locale: string, code: string): string {
   return regionNamesFor(locale).of(code) ?? code;

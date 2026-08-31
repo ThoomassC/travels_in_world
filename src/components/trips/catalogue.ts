@@ -141,6 +141,20 @@ export function buildCatalogue(
    * remainder — and a heading like "Ailleurs" landing first because of its
    * initial would read as a mistake in the data rather than as a deliberate
    * catch-all.
+   *
+   * **No reader has seen that heading, and none can today.** This comment used
+   * to present the group as a presentation outcome, which reads as though the
+   * screen were the thing being described. It is not: `continentOf` answers
+   * `null` only for a code outside its table, and `buildWorldGeometry` throws on
+   * any code outside ISO 3166-1's 249 before the home page finishes rendering —
+   * so a trip that would land here fails `next build` instead. The reproduction
+   * and its output are in `src/domain/continent.ts`.
+   *
+   * The branch is kept deliberately, and the reason is not caution. `null` is a
+   * value this function's input type allows, so a `buildCatalogue` that dropped
+   * or mis-sorted it would be incorrect on its own terms — and the day the map
+   * learns to tolerate a code it cannot draw, which is the fix this asymmetry
+   * really calls for, the listing must not be the next thing to break.
    */
   groups.sort((left, right) => {
     if (left.continent === null) return right.continent === null ? 0 : 1;

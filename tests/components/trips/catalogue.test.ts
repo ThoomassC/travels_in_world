@@ -160,12 +160,23 @@ describe("buildCatalogue", () => {
     expect(catalogue.reduce((total, group) => total + group.tripCount, 0)).toBe(60);
   });
 
-  it("gives a trip whose country it cannot place its own group, at the end", () => {
+  it("groups a trip whose country it cannot place on its own, last", () => {
     /**
      * `CountryCodeSchema` checks the shape of a code and deliberately not its
-     * existence, so `"ZZ"` is a trip this project accepts and stores. It must
-     * appear in the listing — under an honest heading, and after the continents
-     * that are real, whatever that heading sorts to alphabetically.
+     * existence, so `"ZZ"` is a trip `npm run validate:content` accepts and
+     * stores. What is pinned here is `buildCatalogue`'s answer for a `null`
+     * continent — a value its own input type allows: one group, sorted last,
+     * whatever its heading sorts to alphabetically.
+     *
+     * **This describes the function, not a screen, and the earlier wording
+     * ("it must appear in the listing") was wrong about the screen.** No reader
+     * can reach that heading today: `buildWorldGeometry` throws on any code
+     * outside ISO 3166-1's 249 and the home page calls it, so such a trip fails
+     * `next build` before any listing exists. The reproduction and its exact
+     * output are recorded in `src/domain/continent.ts`. A pure function is owed a
+     * defined answer for every input of its type regardless, and that answer is
+     * what these two tests hold in place — so that the day the map tolerates an
+     * undrawable code, the listing is not the next thing to fix.
      */
     const unplaceable = tripEntry({
       slug: "quelque-part",

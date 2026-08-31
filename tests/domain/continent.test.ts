@@ -98,7 +98,10 @@ describe("continentOf", () => {
     ["GL", "americas"],
     // Mexico is Central America, which M49 folds into the single Americas region.
     ["MX", "americas"],
-    // Kosovo's code is user-assigned; the map cannot draw it, the listing must.
+    // Kosovo's code is user-assigned, so `src/map/iso-3166.ts` does not carry it
+    // and this table does. That is a continent answer and not a publishable
+    // trip: `buildWorldGeometry` throws on `XK`, so a trip declaring it fails
+    // `next build` — measured, and quoted in `src/domain/continent.ts`.
     ["XK", "europe"],
   ])("places %s in %s", (code, continent) => {
     expect(continentOf(code)).toBe(continent);
@@ -114,9 +117,17 @@ describe("continentOf", () => {
   });
 
   it("answers null for a code it has never heard of, rather than throwing", () => {
-    // `CountryCodeSchema` validates the shape of a code and deliberately not its
-    // existence, so this is reachable from a real `trip.yaml`. A throw here would
-    // take the whole listing down for one typo.
+    /**
+     * `CountryCodeSchema` validates the shape of a code and deliberately not its
+     * existence, so `npm run validate:content` accepts a `trip.yaml` declaring
+     * `ZZ`. Totality is what a pure function owes its callers for every input of
+     * its type, and that is what is asserted.
+     *
+     * The earlier comment added "a throw here would take the whole listing down
+     * for one typo", which is not what happens: the map throws on such a code
+     * first, at build time, so there is no listing to take down. See
+     * `src/domain/continent.ts` for the measurement.
+     */
     expect(continentOf("ZZ")).toBeNull();
     expect(continentOf("QQ")).toBeNull();
   });
