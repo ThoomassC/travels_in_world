@@ -497,16 +497,26 @@ const config = [
       // eslint-config-next ships most of these as "warn"; strict raises them to error.
       ...jsxA11y.flatConfigs.strict.rules,
       /**
-       * `role="list"` on a `<ul>` is redundant markup that is not redundant in
-       * practice: `list-style: none` makes Safari drop the list role, and with
-       * it the list's `aria-label` and its item count. A reader landing among
-       * the world map's sixty trip links needs both. The rule ships an option
-       * for exactly this case, and it is the narrowest possible exception — only
-       * `list` on `ul`; every other redundant role stays an error.
+       * `role="list"` on a list element is redundant markup that is not redundant
+       * in practice: `list-style: none` makes Safari drop the list role, and with
+       * it the list's `aria-label` and its item count. A reader landing among the
+       * world map's sixty trip links needs both. The rule ships an option for
+       * exactly this case, and this is the narrowest exception that covers it —
+       * only `list`, and only on the two list elements; every other redundant
+       * role stays an error.
+       *
+       * **`ol` was added by TIW-16, and the reason is that the bug does not care.**
+       * The mini-map's stop list is an `<ol>` because the stops *are* ordered, and
+       * it is styled `list-style: none` like every other list here. ARIA has no
+       * separate ordered-list role — `ol` and `ul` both map to `list` — so
+       * `role="list"` is exactly as redundant and exactly as protective on one as
+       * on the other. Restricting the exception to `ul` did not make the rule
+       * stricter, it made an author choose between the right element and a green
+       * lint.
        *
        * No test can see the underlying bug: jsdom keeps the role either way.
        */
-      "jsx-a11y/no-redundant-roles": ["error", { ul: ["list"] }],
+      "jsx-a11y/no-redundant-roles": ["error", { ul: ["list"], ol: ["list"] }],
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": [
         "error",
