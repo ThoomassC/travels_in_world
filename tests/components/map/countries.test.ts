@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   tallyVisitedCountries,
-  type NamedCountry,
+  type CountingTrip,
+  type CountryLabels,
   type VisitedCountryTally,
 } from "@/components/map/countries";
 
@@ -10,161 +11,170 @@ import {
  * than a few lines inside the component: "how many trips reach this country" is
  * the fact the map had in **no** channel — the caption gives a number of
  * countries, a marker names a trip and its first arrival, and nothing joined the
- * two. It is worth the cases below rather than a render assertion.
+ * two.
+ *
+ * Names are the codes themselves in most cases here, so the assertions are about
+ * the arranging and never about ICU's French collation. The two tests that care
+ * about real names build their own labels and say so.
  */
 
-const country = (code: string | null, name: string): NamedCountry => ({ code, name });
+const trip = (slug: string, ...countryCodes: string[]): CountingTrip => ({ slug, countryCodes });
 
-/** The order `buildWorldGeometry` hands `visited` in: localised name, collated. */
-const VISITED: readonly NamedCountry[] = [
-  country("BO", "Bolivie"),
-  country("IS", "Islande"),
-  country("JP", "Japon"),
-  country("PE", "Pérou"),
-];
+/** Labels that do not localise: the name is the code. */
+const CODE_LABELS: CountryLabels = {
+  countryName: (code) => code,
+  compare: (left, right) => left.localeCompare(right, "fr"),
+};
 
 /**
- * One entry per published trip, in the content façade's order. Japan holds two
- * trips and one trip crosses Peru and Bolivia — the two shapes that make a
- * per-country count differ from a count of trips and from a count of countries.
+ * Japan holds two trips and one trip crosses Peru and Bolivia — the two shapes
+ * that make a per-country count differ both from a count of trips and from a
+ * count of countries. In the content façade's order: `startDate` descending.
  */
-const TRIPS: readonly (readonly string[])[] = [
-  ["JP"], // japon-2025
-  ["JP"], // japon-2024
-  ["PE", "BO"], // perou-bolivie-2023
-  ["IS"], // islande-2022
+const TRIPS: readonly CountingTrip[] = [
+  trip("japon-2025", "JP"),
+  trip("japon-2024", "JP"),
+  trip("perou-bolivie-2023", "PE", "BO"),
+  trip("islande-2022", "IS"),
 ];
 
 const readable = (tally: readonly VisitedCountryTally[]): readonly string[] =>
-  tally.map((entry) => `${entry.name} ${entry.trips}`);
+  tally.map((entry) => `${entry.name} ${entry.tripSlugs.length}`);
 
 describe("tallyVisitedCountries", () => {
   it("counts the trips that reach each country", () => {
-    expect(readable(tallyVisitedCountries(VISITED, TRIPS))).toEqual([
-      "Bolivie 1",
-      "Islande 1",
-      "Japon 2",
-      "Pérou 1",
+    expect(readable(tallyVisitedCountries(TRIPS, CODE_LABELS))).toEqual([
+      "BO 1",
+      "IS 1",
+      "JP 2",
+      "PE 1",
     ]);
   });
 
-  it("keeps the order it was given, which is the reader's alphabet and not the count", () => {
-    // `visited` arrives sorted by localised name through a `Intl.Collator`, and
-    // re-sorting here would make the list disagree with the order the caption
-    // enumerates. Sorting by count descending is the tempting alternative and it
-    // is refused: a reader scanning for one country needs the alphabet.
-    const tally = tallyVisitedCountries(VISITED, TRIPS);
+  it("names the trips of each country, so a single one can be linked directly", () => {
+    // The count alone would leave a country holding one trip pointing at a
+    // listing the reader then has to search. The slugs make the link precise.
+    const byCode = new Map(
+      tallyVisitedCountries(TRIPS, CODE_LABELS).map((entry) => [entry.code, entry.tripSlugs])
+    );
 
-    expect(tally.map((entry) => entry.code)).toEqual(["BO", "IS", "JP", "PE"]);
+    expect(byCode.get("JP")).toEqual(["japon-2025", "japon-2024"]);
+    expect(byCode.get("BO")).toEqual(["perou-bolivie-2023"]);
+    expect(byCode.get("PE")).toEqual(["perou-bolivie-2023"]);
   });
 
-  it("has exactly one entry per visited country, so the caption's count cannot disagree", () => {
-    // The figcaption says "N pays" from `visited.length`; this list is what a
-    // reader checks that number against. One row per country, always.
-    expect(tallyVisitedCountries(VISITED, TRIPS)).toHaveLength(VISITED.length);
+  it("orders by localised name and not by count", () => {
+    /**
+     * Japan holds the most trips and still comes third. Sorting by count is the
+     * tempting "where has he been most" reading and it is refused: the caption
+     * beside this list collates the same countries by name, and a reader
+     * scanning for one country needs the alphabet they are scanning with.
+     */
+    const tally = tallyVisitedCountries(TRIPS, {
+      countryName: (code) =>
+        ({ BO: "Bolivie", IS: "Islande", JP: "Japon", PE: "Pérou" })[code] ?? code,
+      compare: new Intl.Collator("fr").compare,
+    });
+
+    expect(readable(tally)).toEqual(["Bolivie 1", "Islande 1", "Japon 2", "Pérou 1"]);
+  });
+
+  it("collates rather than comparing code units", () => {
+    // `"Éthiopie" < "Zambie"` is false in code-unit order — every accented
+    // letter sorts after `Z`. The same trap `buildWorldGeometry` records.
+    const tally = tallyVisitedCountries([trip("a", "ZM"), trip("b", "ET")], {
+      countryName: (code) => (code === "ET" ? "Éthiopie" : "Zambie"),
+      compare: new Intl.Collator("fr").compare,
+    });
+
+    expect(tally.map((entry) => entry.name)).toEqual(["Éthiopie", "Zambie"]);
   });
 
   it("counts a country once for a trip that names it twice", () => {
     // `visitedCountryCodes` de-duplicates upstream today, so this is the tally
-    // refusing to *depend* on that: a two-city trip inside one country is one
-    // trip, whatever shape its code list arrives in.
-    const tally = tallyVisitedCountries([country("JP", "Japon")], [["JP", "JP", "JP"]]);
+    // refusing to *depend* on that.
+    const tally = tallyVisitedCountries([trip("japon-2024", "JP", "JP", "JP")], CODE_LABELS);
 
-    expect(tally[0]?.trips).toBe(1);
+    expect(tally[0]?.tripSlugs).toEqual(["japon-2024"]);
   });
 
   it("counts one trip for every country it crosses", () => {
     // The audit's gap, stated as arithmetic: a trip crossing three countries
     // tints three and its marker names one.
-    const tally = tallyVisitedCountries(
-      [country("BO", "Bolivie"), country("PE", "Pérou")],
-      [["PE", "BO"]]
-    );
-
-    expect(readable(tally)).toEqual(["Bolivie 1", "Pérou 1"]);
+    expect(readable(tallyVisitedCountries([trip("tour", "PE", "BO", "CL")], CODE_LABELS))).toEqual([
+      "BO 1",
+      "CL 1",
+      "PE 1",
+    ]);
   });
 
-  it("answers nothing at all when no country is visited", () => {
+  it("answers nothing at all when no trip is published", () => {
     // Today's production state — `content/trips` is empty. The component turns
     // this into a fallback block with a way out, never an empty list.
-    expect(tallyVisitedCountries([], [])).toEqual([]);
+    expect(tallyVisitedCountries([], CODE_LABELS)).toEqual([]);
   });
 
-  it("keeps a country no trip reaches, and says zero", () => {
+  it("never invents a row: every country comes from a trip", () => {
     /**
-     * Unreachable through the sanctioned path: `visited` is selected *from* the
-     * trips' own codes, so a country in it always holds at least one trip.
-     *
-     * Kept rather than dropped, deliberately. Dropping it would let the list
-     * hold fewer rows than the "N pays" the caption announces, and the two
-     * channels disagreeing is the failure a reader can actually catch — a
-     * visible "0 voyage" leads someone to the wiring bug, a silently missing row
-     * leads nowhere.
+     * The property that removed a whole class of defect. While this tally read
+     * `@/map`'s tinted subset, it was a second rendering of the drawing's own
+     * input — so the list died with the geometry it exists to stand in for, and
+     * a row could name a country whose trips lived under another country's
+     * heading. Derived from the trips, a row without a trip is unrepresentable.
      */
-    const tally = tallyVisitedCountries(
-      [country("JP", "Japon"), country("FR", "France")],
-      [["JP"]]
-    );
+    const tally = tallyVisitedCountries(TRIPS, CODE_LABELS);
 
-    expect(readable(tally)).toEqual(["Japon 1", "France 0"]);
+    expect(tally.every((entry) => entry.tripSlugs.length > 0)).toBe(true);
   });
 
-  it("drops the shapes the dataset leaves unidentified", () => {
-    /**
-     * Three geometries of the 110m set carry no alpha-2 code, which is why
-     * `MapCountry.code` is nullable at all. They can never be *visited* —
-     * `buildWorldGeometry` selects the tinted subset by code — so this is
-     * totality, not a reachable case: a row with no code could be counted by
-     * nothing and linked to nowhere.
-     */
-    const tally = tallyVisitedCountries(
-      [country("JP", "Japon"), country(null, "Territoire non identifié")],
-      [["JP"]]
-    );
+  it("has one row per distinct country, so the caption's count cannot disagree", () => {
+    // The figcaption says "N pays" from the tinted subset, which `@/map` selects
+    // from these very codes — and it fails the build for a code it cannot draw,
+    // rather than quietly dropping one. So the two counts are the same count.
+    const distinct = new Set(TRIPS.flatMap((entry) => entry.countryCodes));
 
-    expect(readable(tally)).toEqual(["Japon 1"]);
-  });
-
-  it("ignores a code no country on the map carries", () => {
-    // A trip in a country the 110m dataset has no geometry for. It counts
-    // towards nothing rather than inventing a row the map cannot draw.
-    const tally = tallyVisitedCountries([country("JP", "Japon")], [["JP"], ["VA"]]);
-
-    expect(readable(tally)).toEqual(["Japon 1"]);
+    expect(tallyVisitedCountries(TRIPS, CODE_LABELS)).toHaveLength(distinct.size);
   });
 
   it("compares codes exactly, both sides being uppercase by schema", () => {
     /**
-     * No `toUpperCase()` here, and that is a decision rather than an omission.
-     * `CountryCodeSchema` refuses anything but `/^[A-Z]{2}$/` on the content
-     * side, and `src/map/iso-3166.ts` is written with 249 uppercase keys, so a
-     * normalisation on this side would guard a case no input can present — the
+     * No `toUpperCase()`, and that is a decision rather than an omission.
+     * `CountryCodeSchema` refuses anything but `/^[A-Z]{2}$/`, so a
+     * normalisation here would guard a case no input can present — the
      * discipline `frameAround` records after a mutation run killed a floor that
-     * guarded nothing.
-     *
-     * This test therefore pins the *absence* of the normalisation, so that a
-     * future lowercase code fails loudly here instead of turning every count
-     * into a silent zero.
+     * guarded nothing. This pins the *absence*: a lowercase code shows up as a
+     * second row here rather than silently splitting a count in production.
      */
-    const tally = tallyVisitedCountries([country("JP", "Japon")], [["jp"]]);
-
-    expect(tally[0]?.trips).toBe(0);
+    expect(tallyVisitedCountries([trip("a", "JP"), trip("b", "jp")], CODE_LABELS)).toHaveLength(2);
   });
 
   it("scales to sixty trips over twenty-three countries", () => {
-    const codes = Array.from({ length: 23 }, (_, index) =>
-      String.fromCharCode(65 + Math.floor(index / 26), 65 + (index % 26))
+    const codes = Array.from({ length: 23 }, (_, index) => `C${String(index).padStart(2, "0")}`);
+    // Trip n reaches country n % 23, so the first eleven hold three trips.
+    const trips = Array.from({ length: 60 }, (_, index) =>
+      trip(`voyage-${index}`, codes[index % 23] ?? "ZZ")
     );
-    const visited = codes.map((code, index) => country(code, `Pays ${index}`));
-    // Trip n reaches country n % 23, so the first eleven countries hold three
-    // trips and the rest hold two.
-    const trips = Array.from({ length: 60 }, (_, index) => [codes[index % 23] ?? "ZZ"]);
 
-    const tally = tallyVisitedCountries(visited, trips);
+    const tally = tallyVisitedCountries(trips, CODE_LABELS);
 
     expect(tally).toHaveLength(23);
-    expect(tally.reduce((total, entry) => total + entry.trips, 0)).toBe(60);
-    expect(tally[0]?.trips).toBe(3);
-    expect(tally[22]?.trips).toBe(2);
+    expect(tally.reduce((total, entry) => total + entry.tripSlugs.length, 0)).toBe(60);
+    expect(tally[0]?.tripSlugs).toHaveLength(3);
+    expect(tally[22]?.tripSlugs).toHaveLength(2);
+  });
+
+  it("hands back copies, so a caller reordering a row cannot corrupt the next page", () => {
+    /**
+     * The content façade memoises its parsed trips for the whole build and hands
+     * the same objects to every page — the reason `summaryOf` copies every array
+     * in `src/domain/trip.ts`. `readonly` is compile-time only.
+     */
+    const tally = tallyVisitedCountries(TRIPS, CODE_LABELS);
+    (tally[2]?.tripSlugs as string[]).reverse();
+
+    expect(tallyVisitedCountries(TRIPS, CODE_LABELS)[2]?.tripSlugs).toEqual([
+      "japon-2025",
+      "japon-2024",
+    ]);
   });
 });

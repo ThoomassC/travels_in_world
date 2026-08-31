@@ -205,10 +205,11 @@
  * layout. `display: none` and `visibility: hidden` are excluded: both drop the
  * text from the tree, which would leave a link unnamed and a caption silent.
  *
- * Used twice — for a marker's accessible name, and for the list of visited
- * countries under the caption. Out of flow, so it changes neither the 44 px box
- * of a marker nor the height of the caption, and `white-space: nowrap` inside a
- * 1 px box cannot scroll anything.
+ * Used once, for a marker's accessible name. It served the caption's hidden
+ * enumeration of visited countries too until TIW-15 replaced that with the
+ * visible `VisitedCountries` list. Out of flow, so it changes neither the 44 px
+ * box of a marker nor the height of the caption, and `white-space: nowrap` inside
+ * a 1 px box cannot scroll anything.
  */
 .visuallyHidden {
   position: absolute;

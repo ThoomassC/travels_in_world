@@ -7,11 +7,12 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 // strings and cannot tell `src/components/map` from a relative spelling of
 // `src/map`. See the header of `src/components/map/index.ts`.
 import { VisitedCountries, WorldMap, type TripMark } from "@/components/map";
+import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { LatestTrips } from "@/components/trips/latest-trips";
 import { listTripSummaries } from "@/content/trips";
 import { buildWorldGeometry, projectPoint } from "@/map";
 import { localePathname } from "@/i18n/pathname";
-import { tripPath, tripsCountryPath, tripsPath } from "@/i18n/paths";
+import { tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import { MAIN_CONTENT_ID } from "./main-content";
 import styles from "./page.module.css";
@@ -129,24 +130,34 @@ export default async function HomePage({ params }: HomePageProps) {
         </div>
 
         {/*
-          The map's textual equivalent (TIW-15), and it sits *outside*
-          `.mapFrame` on purpose. That wrapper caps the map at `45vh × aspect` —
-          about 691 px on a 1152 px desktop — so a list rendered inside it would
-          be a centred column two thirds of the page wide, with its `h2` out of
-          line with the "Derniers voyages" `h2` right below. The reading order is
-          what the acceptance criterion asks for ("sous la carte"), and DOM order
-          is what gives it.
+          The map's textual equivalent (TIW-15), and it sits *outside* `.mapFrame`
+          on purpose. That wrapper caps the map at `45vh × aspect` — about 691 px
+          on a 1152 px desktop — so a list rendered inside it would be a centred
+          column two thirds of the page wide, with its `h2` out of line with the
+          "Derniers voyages" `h2` right below. The reading order is what the
+          acceptance criterion asks for ("sous la carte"), and DOM order gives it.
 
-          `world.visited` is passed to both, and that is the point: the
-          `<figcaption>`'s "N pays" and the rows of this list are two renderings
-          of one array, so they cannot disagree. The counts come from the trips'
-          own `countryCodes` — every country of a trip, not just the one its
-          marker names, which is the relation the map had in no channel.
+          **`trips` and not `world.visited`.** The equivalent is derived from the
+          content, never from the geometry beside it: `buildWorldGeometry` throws
+          for a declared code it cannot draw, so a state with no country shape is
+          a state with no declared code, and a list fed from the tinted subset
+          would have been empty in exactly the states where the drawing is
+          missing. One failure, both channels — which is the opposite of what the
+          "map failed" criterion asks for. The two counts still agree: the
+          caption counts the tinted subset, which `@/map` selects from these very
+          codes.
+
+          The naming and the collation come from the listing's own helpers, so a
+          country reads the same here and on `/fr/voyages`, and this page stays
+          the one place that holds both façades.
         */}
         <VisitedCountries
-          visited={world.visited}
-          tripCountryCodes={trips.map((trip) => trip.countryCodes)}
-          countryHref={(code) => localePathname({ href: tripsCountryPath(code), locale })}
+          trips={trips}
+          labels={{
+            countryName: (code) => countryNameOf(locale, code),
+            compare: collatorFor(locale).compare,
+          }}
+          tripHref={(slug) => localePathname({ href: tripPath(slug), locale })}
           allTripsHref={localePathname({ href: tripsPath(), locale })}
         />
       </section>

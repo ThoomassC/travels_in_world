@@ -101,14 +101,27 @@ export async function auditPage(page: Page): Promise<AxeReport> {
 }
 
 /**
- * True when every element a rule fired on lies inside the map's `<figure>`.
+ * True when every element a rule fired on lies inside the map's own `<figure>` —
+ * the one holding the `<svg>`.
  *
  * Used to confine one known, documented violation to the layer that owns it (see
  * the `target-size` note in `map-equivalent.populated.spec.ts`). Resolved in the
  * page against the live DOM rather than pattern-matched against CSS Module class
  * names, whose hashes change with every edit to the stylesheet — and the map's
- * textual equivalent is deliberately a *sibling* of the figure, so "inside the
+ * textual equivalent is deliberately a *sibling* of that figure, so "inside the
  * figure" is exactly the distinction that matters.
+ *
+ * **`closest("figure")` alone is not enough**, and the first version stopped
+ * there. `/fr` happens to hold exactly one `<figure>` today, so the allowance was
+ * correctly confined by luck; the day a trip thumbnail is wrapped in one — the
+ * trip page's mini-map already has a `<figure>` — a `target-size` failure on a
+ * thumbnail link would have been swallowed in silence. So the figure must be the
+ * one containing the drawing.
+ *
+ * An empty target list answers `false`: with nothing to place, the violation is
+ * *reported* rather than tolerated, which is the safe direction. Same for the
+ * selectors axe cannot resolve here (a frame path into an iframe or a shadow
+ * root) — they fail the `closest` test and the violation is reported.
  */
 export async function firedOnlyInsideTheMap(
   page: Page,
@@ -119,12 +132,19 @@ export async function firedOnlyInsideTheMap(
   }
 
   return page.evaluate(
-    (selectors) =>
-      selectors.every((selector) => {
+    (selectors) => {
+      const mapFigure = document.querySelector("figure:has(svg)");
+
+      if (mapFigure === null) {
+        return false;
+      }
+
+      return selectors.every((selector) => {
         const element = document.querySelector(selector);
 
-        return element !== null && element.closest("figure") !== null;
-      }),
+        return element !== null && element.closest("figure") === mapFigure;
+      });
+    },
     [...targets]
   );
 }

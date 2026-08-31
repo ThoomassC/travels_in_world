@@ -107,10 +107,12 @@ test("the fallback block stands in for the drawing rather than leaving an empty 
   const out = page.getByRole("link", { name: frMessages.map.allTrips });
   await expect(out).toBeVisible();
 
-  // An empty list is not announced at all — "liste, 0 élément" over a map that
-  // is simply not populated yet is worse than no list. Nothing but a country row
-  // carries a `#pays-` fragment, so its absence is the absence of the list.
-  await expect(page.locator("a[href*='#pays-']")).toHaveCount(0);
+  // An empty list is not announced at all — "liste, 0 élément" over a map that is
+  // simply not populated yet is worse than no list. Asserted inside the block's
+  // own landmark, so the page's other lists (the navigation) do not mask it.
+  await expect(
+    page.getByRole("region", { name: frMessages.map.countriesHeading }).getByRole("list")
+  ).toHaveCount(0);
 
   await out.click();
   await expect(page).toHaveURL(/\/fr\/voyages$/);

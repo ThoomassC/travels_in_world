@@ -253,31 +253,41 @@ en `--text-accent` **et par son épaisseur**, parce qu'aucune valeur de rempliss
 3:1 en thème clair et qu'un canal non coloré est nécessaire.
 
 **L'équivalent textuel de la carte est un composant à part, pas un bloc masqué**
-(`src/components/map/visited-countries.tsx`, TIW-15) : sous la carte, la liste des pays
-visités avec le nombre de voyages de chacun, chaque pays étant un lien vers la section de ce
-pays dans `/voyages`. Trois choses à savoir avant d'y toucher :
+(`src/components/map/visited-countries.tsx`, TIW-15) : sous la carte, les pays
+atteints par les voyages publiés avec le nombre de voyages de chacun, chaque pays
+étant un lien. Quatre choses à savoir avant d'y toucher :
 
-1. **Il relie, il ne duplique pas.** `/voyages` est déjà l'inventaire complet de « quels
-   voyages, où » (`h2` continent → `h3` pays → `h4` voyage) ; le refaire sous la carte
-   donnerait deux inventaires à tenir d'accord. Ce qui manquait était le **compte par pays**,
-   qui n'existait dans aucun canal, et le lien vers le groupe qu'il compte. Le fragment a une
-   seule définition, `countryAnchor` dans `src/i18n/paths.ts`, appelée par les deux côtés :
-   un fragment qui ne correspond à rien n'échoue pas, il dépose le lecteur en haut d'une page
-   de soixante voyages. `tests/components/map/country-anchor.test.tsx` compare les deux côtés.
-2. **La légende ne promet plus le monde quand le cadre est recadré.** `frameAround` plancher
-   un cadre à 30 % de la largeur du monde, donc avec **un** voyage publié la carte montrait un
-   continent sous une légende disant « Carte du monde : 1 voyage, 1 pays ». Deux clés
-   (`map.summary`, `map.summaryCropped`) et un test qui assère le libellé **contre le
-   `viewBox` rendu**, pas contre une capture.
-3. **Aucun cadre vide.** Sans géométrie, le `<svg>` était une boîte au rapport verrouillé
-   contenant du vide, sans une erreur ni une ligne de console. `WorldMap` ne rend alors pas la
-   boîte du tout : une phrase prend sa place, et la liste des pays reste à côté.
+1. **Il lit les voyages, jamais la géométrie.** C'est ce qui rend le critère « carte
+   en échec » atteignable : `buildWorldGeometry` **jette** pour un code déclaré
+   qu'il ne sait pas dessiner, donc un état sans forme de pays est un état sans code
+   déclaré — et une liste alimentée par le sous-ensemble teinté aurait été vide
+   exactement dans les états où le dessin manque. Une panne, deux canaux perdus.
+2. **Il relie, il ne duplique pas.** `/voyages` est déjà l'inventaire complet de
+   « quels voyages, où ». Ce qui manquait était le **compte par pays**, qui
+   n'existait dans aucun canal. Le lien d'une ligne va vers ce qui existe à coup
+   sûr : **le voyage lui-même** quand le pays n'en porte qu'un, la liste complète
+   sinon. Jamais un fragment. La première version pointait
+   `/voyages#pays-<code>` et **ça pendait dans le vide** — `buildCatalogue` classe
+   un voyage sous son **pays de première arrivée** seulement, donc un pays
+   seulement _traversé_ n'a aucune section, et `#pays-bo` ne correspondait à rien
+   (mesuré sur un build de production). Un fragment sans cible n'échoue pas : il
+   dépose le lecteur en haut d'une longue page.
+3. **La légende ne promet plus le monde quand le cadre est recadré.** `frameAround`
+   plancher un cadre à 30 % de la largeur du monde, donc avec **un** voyage publié
+   la carte montrait un continent sous « Carte du monde : 1 voyage, 1 pays ». Deux
+   clés (`map.summary`, `map.summaryCropped`) et un test qui assère le libellé
+   **contre le `viewBox` rendu**. Le recadrage porte sur les **balises** — une par
+   voyage, sur la première arrivée — et non sur les pays teintés, d'où
+   « recadrée sur les voyages publiés » et pas « sur les pays visités ».
+4. **Aucun cadre vide.** Sans géométrie, le `<svg>` était une boîte au rapport
+   verrouillé contenant du vide, sans une erreur ni une ligne de console.
+   `WorldMap` ne rend alors pas la boîte du tout : une phrase prend sa place.
 
-L'énumération masquée des pays visités qui vivait dans le `<figcaption>` a été **retirée** :
-un `<figcaption>` est le **nom accessible** du `<figure>` (HTML-AAM), et quarante noms de pays
-dans un nom accessible n'est pas un libellé. La liste visible la remplace sur tous les plans —
-noms visibles, comptés, et cliquables. `docs/adr/0003-carte-svg-inerte-et-balises-html.md` en
-décrit encore l'ancienne version : à reprendre avec TIW-27.
+L'énumération masquée des pays visités qui vivait dans le `<figcaption>` a été
+**retirée** : un `<figcaption>` est le **nom accessible** du `<figure>` (HTML-AAM),
+et quarante noms de pays dans un nom accessible n'est pas un libellé. La liste
+visible la remplace sur tous les plans. `docs/adr/0003-carte-svg-inerte-et-balises-html.md`
+en décrit encore l'ancienne version : à reprendre avec TIW-27.
 
 **Dépendances écartées** (délibérément, ne pas les rajouter sans ticket) : bibliothèque de
 carte côté client (Leaflet, MapLibre), gestionnaire d'état (Redux, Zustand), client HTTP ou
@@ -335,7 +345,11 @@ Pour s'en passer, `agentRules: false` dans `next.config.ts`.
   `.next` s'écrasent, et donner un `distDir` au second ajoute à la racine un répertoire de
   build que `eslint .` parcourt — ESLint ne lit pas `.gitignore`. **L'ordre compte** : la
   config peuplée passe en premier, donc le `.next` qui reste sur le disque est celui du
-  contenu réel, ce que `npm run test:build` attend.
+  contenu réel, ce que `npm run test:build` attend. **Corollaire à connaître** :
+  `npm run test:e2e:content` lancé **seul** laisse un `.next` bâti sur les fixtures, et
+  `npm run test:build` mesurerait alors le budget de pages de fixtures en restant vert —
+  il dérive ses routes du manifeste, pas d'une liste attendue. Relancer `npm run build`
+  avant `npm run test:build` dans ce cas.
 - **L'audit d'accessibilité est automatisé** (`tests/e2e/support/axe.ts`) : axe-core est
   injecté dans la page servie et interrogé sur les tags WCAG 2.2 AA, dans les deux thèmes —
   chaque couleur venant d'un jeton redéclaré sous `prefers-color-scheme: dark`, une faute de

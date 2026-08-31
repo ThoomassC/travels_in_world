@@ -312,12 +312,12 @@ describe("WorldMap", () => {
       {
         trips: 1,
         countries: 1,
-        expected: "Carte du monde, recadrée sur les pays visités : 1 voyage, 1 pays",
+        expected: "Carte du monde, recadrée sur les voyages publiés : 1 voyage, 1 pays",
       },
       {
         trips: 2,
         countries: 2,
-        expected: "Carte du monde, recadrée sur les pays visités : 2 voyages, 2 pays",
+        expected: "Carte du monde, recadrée sur les voyages publiés : 2 voyages, 2 pays",
       },
     ];
 
@@ -368,7 +368,7 @@ describe("WorldMap", () => {
       // The 30 % legibility floor, normalised to the world's ratio.
       expect(viewBoxOf(container)).toBe("336 175 288 150");
       expect(captionOf(container)).toBe(
-        "Carte du monde, recadrée sur les pays visités : 1 voyage, 1 pays"
+        "Carte du monde, recadrée sur les voyages publiés : 1 voyage, 1 pays"
       );
     });
 

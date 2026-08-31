@@ -24,13 +24,28 @@ import {
  *     Bolivie 1 voyage · Islande 1 voyage · Japon 2 voyages · Pérou 1 voyage
  */
 
-/** The four rows, in the order the page must render them. */
+/**
+ * The four rows, in the order the page must render them, each with the target its
+ * link carries.
+ *
+ * **A country holding one trip goes straight to that trip; several go to the
+ * listing.** The first version sent every row to `/fr/voyages#pays-<code>` and it
+ * dangled: `TripCatalogue` files a trip under its *first arrival* country only,
+ * so Bolivia — merely crossed by `perou-bolivie-2023` — had no section, and
+ * `#pays-bo` matched nothing on a real build. A fragment matching no id does not
+ * fail; it silently leaves the reader at the top of the listing. Both targets
+ * below are routes, so neither can dangle.
+ */
 const EXPECTED = [
-  { name: "Bolivie", label: "Bolivie 1 voyage", anchor: "pays-bo" },
-  { name: "Islande", label: "Islande 1 voyage", anchor: "pays-is" },
-  { name: "Japon", label: "Japon 2 voyages", anchor: "pays-jp" },
-  { name: "Pérou", label: "Pérou 1 voyage", anchor: "pays-pe" },
+  { name: "Bolivie", label: "Bolivie 1 voyage", href: "/fr/voyages/perou-bolivie-2023" },
+  { name: "Islande", label: "Islande 1 voyage", href: "/fr/voyages/islande-2022" },
+  { name: "Japon", label: "Japon 2 voyages", href: "/fr/voyages" },
+  { name: "Pérou", label: "Pérou 1 voyage", href: "/fr/voyages/perou-bolivie-2023" },
 ] as const;
+
+/** Every row of the equivalent, located by its heading's region. */
+const countryLinks = (page: import("@playwright/test").Page) =>
+  page.getByRole("region", { name: "Les pays visités" }).getByRole("link");
 
 test("the fixture really is the four trips this file assumes", async ({ page }) => {
   /**
@@ -41,7 +56,7 @@ test("the fixture really is the four trips this file assumes", async ({ page }) 
   await page.goto("/fr");
 
   await expect(page.getByRole("figure")).toHaveAccessibleName(
-    "Carte du monde, recadrée sur les pays visités : 4 voyages, 4 pays"
+    "Carte du monde, recadrée sur les voyages publiés : 4 voyages, 4 pays"
   );
 });
 
@@ -55,22 +70,26 @@ test("the countries and their trip counts are under the map, in the reader's alp
   ).toBeVisible();
 
   /**
-   * Located by the fragment rather than by `h2 ~ ul a`: that sibling selector
-   * also matches the "Derniers voyages" heading and its own list further down
-   * the page, so it would have counted trips as countries. Nothing but a country
-   * link carries `#pays-`.
+   * Located through the block's own landmark rather than by a sibling selector:
+   * `h2 ~ ul a` also matches the "Derniers voyages" heading and its list further
+   * down the page, so it would have counted trips as countries.
    *
    * The count is *inside* each link, so it is part of the accessible name and a
    * reader tabbing through hears it. A count beside the link would satisfy a
    * visual check and be silent to the keyboard.
    */
-  const links = page.locator("a[href*='#pays-']");
+  const links = countryLinks(page);
   await expect(links).toHaveCount(EXPECTED.length);
 
   const names = await links.evaluateAll((elements) =>
     elements.map((element) => (element.textContent ?? "").trim())
   );
   expect(names).toEqual(EXPECTED.map((entry) => entry.label));
+
+  // And every link goes where the row promises.
+  for (const entry of EXPECTED) {
+    await expect(page.getByRole("link", { name: entry.label })).toHaveAttribute("href", entry.href);
+  }
 });
 
 test("only the visited countries are links; the other 174 shapes are not", async ({ page }) => {
@@ -90,8 +109,7 @@ test("only the visited countries are links; the other 174 shapes are not", async
    * 174 neutral ones quietly focusable. Asserted as a relation between the
    * drawing and the equivalent, which is the property the criterion states.
    */
-  const countryLinks = page.locator("a[href*='#pays-']");
-  await expect(countryLinks).toHaveCount(4);
+  await expect(countryLinks(page)).toHaveCount(4);
 });
 
 /**
@@ -101,27 +119,36 @@ test("only the visited countries are links; the other 174 shapes are not", async
  *
  * The route walked here is the one a reader takes: in at the top of the document,
  * through the navigation, across the map's four markers, into the four countries,
- * and out the far side into the rest of the page. Then Enter on a country, and the
- * landing is checked — because a link that goes nowhere useful is a link that
+ * and out the far side into the rest of the page. Then Enter, twice, on the two
+ * kinds of country row — because a link that goes nowhere useful is a link that
  * passed every audit.
  */
 test("a reader reaches every country by keyboard and lands on its trips", async ({ page }) => {
   await page.goto("/fr");
 
-  /** The accessible name of whatever holds the focus, plus where it sits. */
+  /**
+   * Where the focus is, and — crucially — *which block* it is in.
+   *
+   * Not by href pattern: a country holding one trip now links to that trip's own
+   * page, which is the same shape as a marker's href (`/fr/voyages/<slug>`). The
+   * two are told apart by the part of the document they live in, which is what the
+   * criterion is actually about — the equivalent is under the map.
+   */
   const focused = () =>
     page.evaluate(() => {
       const active = document.activeElement;
 
       return {
-        tag: active?.tagName ?? "NONE",
         text: (active?.textContent ?? "").replace(/\s+/g, " ").trim(),
         href: active?.getAttribute("href") ?? null,
         insideSvg: Boolean(active?.closest("svg")),
+        inMap: Boolean(active?.closest("figure")),
+        inEquivalent: Boolean(active?.closest("section[aria-labelledby='pays-visites']")),
       };
     });
 
-  const journey: { tag: string; text: string; href: string | null }[] = [];
+  type Stop = Awaited<ReturnType<typeof focused>>;
+  const journey: Stop[] = [];
 
   // 40 presses is comfortably past the far side of the country list on this
   // fixture; the loop stops early once the last country has been passed.
@@ -133,9 +160,9 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
     // never enters the drawing.
     expect(stop.insideSvg).toBe(false);
 
-    journey.push({ tag: stop.tag, text: stop.text, href: stop.href });
+    journey.push(stop);
 
-    if (stop.href?.includes(`#${EXPECTED[EXPECTED.length - 1]?.anchor}`) === true) {
+    if (stop.inEquivalent && stop.text === EXPECTED[EXPECTED.length - 1]?.label) {
       break;
     }
   }
@@ -143,62 +170,79 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
   // 1. The first stop is the skip link — the document's own entry point.
   expect(journey[0]?.text).toBe(frMessages.trips.skipToContent);
 
-  // 2. The four markers of the map are on the way, named by trip and place.
-  const markerStops = journey.filter((stop) => /^\/fr\/voyages\/[a-z0-9-]+$/.test(stop.href ?? ""));
+  // 2. The map's four markers are on the way, one per published trip.
+  const markerStops = journey.filter((stop) => stop.inMap);
   expect(markerStops).toHaveLength(4);
 
   /**
-   * 3. The four countries follow, in order, each announcing its own count. This
-   * is the criterion "entirely navigable by keyboard" stated as the sequence a
-   * reader actually receives rather than as a property of the markup.
+   * 3. The four countries follow, in order, each announcing its own count. This is
+   * the criterion "entirely navigable by keyboard" stated as the sequence a reader
+   * actually receives rather than as a property of the markup.
    */
-  const countryStops = journey.filter((stop) => stop.href?.includes("#pays-") === true);
+  const countryStops = journey.filter((stop) => stop.inEquivalent);
   expect(countryStops.map((stop) => stop.text)).toEqual(EXPECTED.map((entry) => entry.label));
+  expect(countryStops.map((stop) => stop.href)).toEqual(EXPECTED.map((entry) => entry.href));
 
   // 4. The countries come after the markers: the equivalent is *under* the map in
   //    the tab order as well as on the screen.
-  const firstCountry = journey.findIndex((stop) => stop.href?.includes("#pays-") === true);
-  const lastMarker = journey.reduce(
-    (last, stop, index) => (/^\/fr\/voyages\/[a-z0-9-]+$/.test(stop.href ?? "") ? index : last),
-    -1
-  );
+  const firstCountry = journey.findIndex((stop) => stop.inEquivalent);
+  const lastMarker = journey.reduce((last, stop, index) => (stop.inMap ? index : last), -1);
   expect(firstCountry).toBeGreaterThan(lastMarker);
 
   /**
-   * 5. And the focus leaves the map region entirely — no trap. One more Tab from
-   *    the last country reaches something that is neither a marker nor a country.
+   * 5. And the focus leaves both blocks entirely — no trap. One more Tab from the
+   *    last country reaches something that is neither a marker nor a country.
    */
   await page.keyboard.press("Tab");
   const after = await focused();
   expect(after.insideSvg).toBe(false);
-  expect(after.href?.includes("#pays-") ?? false).toBe(false);
+  expect(after.inMap).toBe(false);
+  expect(after.inEquivalent).toBe(false);
 
   /**
-   * 6. Enter on a country lands on the section of the listing that holds its
-   *    trips. This is the assertion that makes "link rather than duplicate"
-   *    honest: the count under the map is only useful if it leads to the trips it
-   *    counts. A fragment matching no `id` would silently land at the top of the
-   *    page and every other assertion here would still pass.
+   * 6. Enter on a country holding one trip lands on that trip. This is the
+   *    assertion that makes "link rather than duplicate" honest: the count under
+   *    the map is only useful if it leads to the trips it counts.
+   *
+   *    Iceland is the plain case; **Bolivia is the case that broke the first
+   *    version.** Its trip is filed on `/fr/voyages` under Peru, so the fragment
+   *    `#pays-bo` this row used to carry matched nothing at all — and the trip page
+   *    is the one document that does name Bolivia.
    */
+  for (const [label, slug] of [
+    ["Islande 1 voyage", "islande-2022"],
+    ["Bolivie 1 voyage", "perou-bolivie-2023"],
+  ] as const) {
+    await page.goto("/fr");
+    const row = page.getByRole("link", { name: label });
+    await row.focus();
+    await expect(row).toBeFocused();
+    await page.keyboard.press("Enter");
+
+    await expect(page).toHaveURL(new RegExp(`/fr/voyages/${slug}$`));
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  }
+
+  /**
+   * 7. And a country holding several lands on the listing, where its own heading
+   *    holds exactly the number the row promised. The count is only meaningful if
+   *    it matches what the reader then finds.
+   */
+  await page.goto("/fr");
   const japan = page.getByRole("link", { name: "Japon 2 voyages" });
   await japan.focus();
-  await expect(japan).toBeFocused();
   await page.keyboard.press("Enter");
 
-  await expect(page).toHaveURL(/\/fr\/voyages#pays-jp$/);
+  await expect(page).toHaveURL(/\/fr\/voyages$/);
 
-  const section = page.locator("#pays-jp");
-  await expect(section).toBeVisible();
-  await expect(section.getByRole("heading", { level: 3, name: "Japon" })).toBeVisible();
+  const japanSection = page.locator("section:has(> h3)").filter({ hasText: "Japon" }).first();
+  await expect(japanSection.getByRole("heading", { level: 3, name: "Japon" })).toBeVisible();
   /**
    * The section's *own* list items, hence the direct-child selector: a `TripCard`
    * contains lists of its own, so `getByRole("listitem")` inside the section
-   * counted 8 where the fixture has 2 — measured. Two is what the country link
-   * promised, and this is the assertion that makes the count mean something.
+   * counted 8 where the fixture has 2 — measured.
    */
-  await expect(section.locator("> ul > li")).toHaveCount(2);
-  // In view, not merely present: the fragment moved the reader.
-  await expect(section).toBeInViewport();
+  await expect(japanSection.locator("> ul > li")).toHaveCount(2);
 });
 
 test("shift-tab walks back out of the country list the way it came", async ({ page }) => {
@@ -211,14 +255,18 @@ test("shift-tab walks back out of the country list the way it came", async ({ pa
   await page.keyboard.press("Shift+Tab");
 
   const back = await page.evaluate(() => ({
-    href: document.activeElement?.getAttribute("href") ?? null,
     insideSvg: Boolean(document.activeElement?.closest("svg")),
+    inMap: Boolean(document.activeElement?.closest("figure")),
+    inEquivalent: Boolean(
+      document.activeElement?.closest("section[aria-labelledby='pays-visites']")
+    ),
   }));
 
   expect(back.insideSvg).toBe(false);
-  // Backwards from the first country is the last marker of the map, not Bolivia
-  // again and not nothing.
-  expect(back.href).toMatch(/^\/fr\/voyages\/[a-z0-9-]+$/);
+  // Backwards from the first country is the map's last marker — so the focus left
+  // the equivalent rather than sticking on Bolivia or falling nowhere.
+  expect(back.inEquivalent).toBe(false);
+  expect(back.inMap).toBe(true);
 });
 
 test("the list is in the HTML the server sent, not assembled by a script", async ({ request }) => {
@@ -239,10 +287,12 @@ test("the list is in the HTML the server sent, not assembled by a script", async
   expect(html).toContain(frMessages.map.countriesHeading);
   for (const entry of EXPECTED) {
     expect(html).toContain(entry.name);
-    expect(html).toContain(`#${entry.anchor}`);
+    expect(html).toContain(`href="${entry.href}"`);
   }
   // Two trips for Japan and one for the rest: the count itself is in the bytes.
   expect(html).toContain("2 voyages");
+  // And not a single dangling fragment, which is what the first version shipped.
+  expect(html).not.toContain("#pays-");
 });
 
 test("the caption tells the truth about what the drawing shows", async ({ page }) => {
@@ -267,7 +317,7 @@ test("the caption tells the truth about what the drawing shows", async ({ page }
 
   expect(width).toBeLessThan(960);
   await expect(page.locator("figcaption")).toHaveText(
-    "Carte du monde, recadrée sur les pays visités : 4 voyages, 4 pays"
+    "Carte du monde, recadrée sur les voyages publiés : 4 voyages, 4 pays"
   );
 });
 
@@ -298,30 +348,37 @@ test("the caption tells the truth about what the drawing shows", async ({ page }
  */
 const KNOWN_MARKER_OVERLAP = "target-size";
 
-test("the populated home page has no WCAG 2.2 AA violation, in either theme", async ({ page }) => {
-  for (const colorScheme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme });
-    await page.goto("/fr");
+test("the populated pages have no WCAG 2.2 AA violation, in either theme", async ({ page }) => {
+  /**
+   * Both prerendered routes, and `/fr/voyages` matters here specifically: on the
+   * repository's empty content `TripCatalogue` renders nothing at all, so the
+   * listing is only ever audited *populated* from this file.
+   */
+  for (const route of ["/fr", "/fr/voyages"] as const) {
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      await page.goto(route);
 
-    const report = await auditPage(page);
+      const report = await auditPage(page);
 
-    const unexpected: AxeViolation[] = [];
+      const unexpected: AxeViolation[] = [];
 
-    for (const violation of report.violations) {
-      const confinedToTheDrawing =
-        violation.id === KNOWN_MARKER_OVERLAP &&
-        (await firedOnlyInsideTheMap(page, violation.targets));
+      for (const violation of report.violations) {
+        const confinedToTheDrawing =
+          violation.id === KNOWN_MARKER_OVERLAP &&
+          (await firedOnlyInsideTheMap(page, violation.targets));
 
-      if (!confinedToTheDrawing) {
-        unexpected.push(violation);
+        if (!confinedToTheDrawing) {
+          unexpected.push(violation);
+        }
       }
-    }
 
-    expect(
-      unexpected,
-      `${colorScheme}: ${describeViolations({ ...report, violations: unexpected })}`
-    ).toEqual([]);
-    expect(report.passes).toBeGreaterThan(10);
+      expect(
+        unexpected,
+        `${route} (${colorScheme}): ${describeViolations({ ...report, violations: unexpected })}`
+      ).toEqual([]);
+      expect(report.passes).toBeGreaterThan(10);
+    }
   }
 });
 
@@ -338,6 +395,18 @@ test("the marker overlap is the only violation, and it never reaches the country
 
   const report = await auditPage(page);
 
-  expect(report.violations.map((violation) => violation.id)).toEqual([KNOWN_MARKER_OVERLAP]);
+  /**
+   * This goes red in **two** directions, and only one of them is a defect.
+   *
+   * A *new* rule id appearing is a regression to fix. `target-size` *ceasing* to
+   * fire is the good news — TIW-14 clustered the markers, or the fixture moved, or
+   * axe changed its heuristic (`axe-core` is a caret range) — and the action then
+   * is to delete the allowance in the audit above along with this test, not to
+   * make either of them pass again.
+   */
+  expect(
+    report.violations.map((violation) => violation.id),
+    `Expected exactly the known marker overlap. If target-size no longer fires, delete the allowance in the audit test above and this test with it; if a different rule appears, that one is a regression. Got: ${describeViolations(report)}`
+  ).toEqual([KNOWN_MARKER_OVERLAP]);
   expect(await firedOnlyInsideTheMap(page, report.violations[0]?.targets ?? [])).toBe(true);
 });

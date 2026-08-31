@@ -3,14 +3,25 @@
 
    No colour is declared here: every value comes from `src/styles/tokens.css`,
    which is what keeps the dark theme working without this file knowing that it
-   exists. Measured on the tokens used below (composed, both themes):
+   exists. Measured composed, in paint order, against the surface each thing is
+   really painted on — a pill sits on `--surface`, not on the page:
 
-     --text-accent on --site-background     5.30:1 light / 12.40:1 dark
-     --text-muted  on --site-background     5.85:1 light / 13.70:1 dark
-     --control-border on --site-background  3.22:1 light /  5.99:1 dark
+   | pair                                          | light   | dark     |
+   | --------------------------------------------- | ------- | -------- |
+   | `--text-accent` on `--surface` (country name) | 6.48:1  | 10.88:1  |
+   | `--text-muted` on `--surface` (the count)     | 7.15:1  | 12.03:1  |
+   | `--control-border` vs `--site-background`     | 3.22:1  |  5.99:1  |
+   | `--control-border` vs `--surface`             | 3.93:1  |  5.26:1  |
+   | `--accent-quiet-border` vs `--site-background` | 1.66:1 |  4.53:1  |
 
-   The first two are text (4.5:1 needed at this size), the third is the pill's
-   border, which is a boundary of a user interface component (1.4.11, 3:1).
+   The first two are text (4.5:1 needed at this size); the border is the boundary
+   of a user interface component (1.4.11, 3:1). The last row is the token this
+   file must NOT use on the border, and the reason is in `.link:hover` below.
+
+   The first version of this header quoted the two text pairs against
+   `--site-background` (5.30:1 / 5.85:1). Conservative, so never a conformance
+   risk — but it measured a background the text is not on, which in a repository
+   where these tables *are* the review artefact costs more than the numbers.
    ============================================================================ */
 
 .countries {
@@ -77,9 +88,23 @@
     border-color 120ms ease;
 }
 
+/**
+ * **Hover changes the fill and never the border**, and the four measured numbers
+ * are the whole argument.
+ *
+ * The border is this pill's only visible boundary: its `--surface` fill measures
+ * 1.22:1 against the page. Swapping the border to `--accent-quiet-border` on
+ * hover — which is what this rule did first — took that boundary from 3.22:1 to
+ * **1.66:1** in the light theme, so pointing at the pill made it *less*
+ * delimitable than leaving it alone, and 1.4.11 failed on hover only. The dark
+ * theme stayed conformant at 4.53:1, which is exactly why the audit runs in both.
+ *
+ * `src/components/trips/trip-card.module.css` had already measured and settled
+ * this same token pair for a pill, in favour of `--control-border`. This file
+ * briefly re-introduced the token that comparison rejected.
+ */
 .link:hover {
   background: var(--accent-quiet);
-  border-color: var(--accent-quiet-border);
 }
 
 /**
