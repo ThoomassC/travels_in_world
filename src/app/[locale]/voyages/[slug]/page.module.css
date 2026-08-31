@@ -1,0 +1,80 @@
+/* =============================================================================
+   Trip page layout.
+
+   `main` in `tokens.css` already caps the page at `--content-max-width` (72rem)
+   and centres it. What this file adds is the *reading* measure, which is a
+   different and much narrower constraint — see `.trip` below.
+   ============================================================================ */
+
+.page {
+  /* The global `main` rule sets a 72rem cap, a column and a gap; the sections
+     below manage their own rhythm, so the gap is neutralised here rather than
+     fought section by section. */
+  gap: 0;
+}
+
+/**
+ * The line-length cap the acceptance criterion asks for on a large screen.
+ *
+ * 68 characters, not 72rem: prose set the full width of a 1600 px display runs
+ * to well over 150 characters a line, and the eye loses the start of the next
+ * one. `ch` is the right unit because it is defined against the font actually
+ * rendering the text, so the measure holds if the reader changes the font size.
+ *
+ * The map is deliberately allowed to break out of it — see `.section` variants
+ * below — because a map is not prose and a narrow map is a worse map.
+ */
+.trip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-space);
+  max-inline-size: 68ch;
+  /* Centred within `main`'s own 72rem box rather than left-aligned against it,
+     so the column sits under the middle of a wide viewport. */
+  margin-inline: auto;
+  inline-size: 100%;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.sectionHeading {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+}
+
+/**
+ * `auto-fill` rather than `auto-fit`: with `auto-fit` a single remaining photo
+ * stretches across the whole row, which blows one image up to three times the
+ * size of its neighbours for no reason the reader can see.
+ */
+.gallery {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  /* `min(100%, …)` and not `14rem` alone: a track that cannot shrink below its
+     floor overflows the viewport once the reader raises the browser's default
+     font size — a setting distinct from page zoom, which this page already
+     passes. Measured at 320 px wide: 372 px of scrollWidth at a 24 px default,
+     496 px at 32 px. `trip-card.module.css` already carries this pattern. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-4);
+}
+
+.galleryItem {
+  margin: 0;
+}
+
+.photo {
+  width: 100%;
+  /* A uniform ratio so the grid does not stagger; the intrinsic `width` and
+     `height` attributes still reserve the space before the file arrives. */
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}

@@ -55,7 +55,14 @@ import type { CountryCode } from "./geo";
  * a reader sees come from the message catalogue, never from here — the domain
  * knows no locale (`docs/adr/0001-domain-purity.md`).
  */
-export const CONTINENTS = ["africa", "americas", "antarctica", "asia", "europe", "oceania"] as const;
+export const CONTINENTS = [
+  "africa",
+  "americas",
+  "antarctica",
+  "asia",
+  "europe",
+  "oceania",
+] as const;
 
 export type Continent = (typeof CONTINENTS)[number];
 
