@@ -3,6 +3,10 @@ node_modules
 
 # Next.js build output
 .next
+# The second production build the Playwright photo suite makes, kept out of
+# `.next` so it cannot be mistaken for the one `npm run test:build` measures.
+# See `TIW_DIST_DIR` in next.config.ts.
+.next-photos
 out
 next-env.d.ts
 

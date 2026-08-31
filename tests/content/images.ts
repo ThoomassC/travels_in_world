@@ -27,6 +27,15 @@ export type ImageSpec = {
   readonly height: number;
   /** Changes the noise, so two images of one size are not the same bytes. */
   readonly seed?: number;
+  /**
+   * Drops the high-frequency grain, keeping only the colour structure.
+   *
+   * For the **committed** E2E fixture, where the point is the viewer's behaviour
+   * and not an encoder's limits: grain is incompressible by construction, so a
+   * 600 × 400 noisy JPEG is ~90 KB where a smooth one is ~6 KB. The suites about
+   * size thresholds want the grain; a fixture in the repository does not.
+   */
+  readonly smooth?: boolean;
   /** Defaults to the extension of `name`. */
   readonly format?: "jpeg" | "png" | "webp";
 };
@@ -38,7 +47,7 @@ export type ImageSpec = {
  * percent, and a flaky size assertion is the kind that gets a `toBeGreaterThan`
  * loosened until it stops guarding anything.
  */
-function noise(width: number, height: number, seed: number): Buffer {
+function noise(width: number, height: number, seed: number, smooth: boolean): Buffer {
   const channels = 3;
   const buffer = Buffer.alloc(width * height * channels);
   let state = (seed * 2654435761) % 0x7fffffff || 1;
@@ -47,10 +56,12 @@ function noise(width: number, height: number, seed: number): Buffer {
     for (let x = 0; x < width; x += 1) {
       const index = (y * width + x) * channels;
       state = (state * 1103515245 + 12345) & 0x7fffffff;
-      const grain = ((state >> 16) & 0xff) / 8;
+      const grain = smooth ? 0 : ((state >> 16) & 0xff) / 8;
 
       const horizon = y / height;
-      const dx = x - width * 0.7;
+      // The sun moves with the seed, so a smooth image still differs from its
+      // neighbour: without it two fixture photographs would share a placeholder.
+      const dx = x - width * (0.2 + 0.15 * (seed % 5));
       const dy = y - height * 0.25;
       const sun = Math.exp(-(dx * dx + dy * dy) / (2 * (width / 12) ** 2));
       const shore = horizon > 0.72 ? 0.38 : 1;
@@ -66,7 +77,7 @@ function noise(width: number, height: number, seed: number): Buffer {
 
 export async function writeImage(target: string, spec: ImageSpec): Promise<void> {
   const format = spec.format ?? (path.extname(spec.name).slice(1) as "jpeg" | "png" | "webp");
-  const raw = noise(spec.width, spec.height, spec.seed ?? 1);
+  const raw = noise(spec.width, spec.height, spec.seed ?? 1, spec.smooth ?? false);
   const image = sharp(raw, {
     raw: { width: spec.width, height: spec.height, channels: 3 },
   });

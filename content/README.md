@@ -244,6 +244,7 @@ là, la validation ne pouvait pas encore les voir.
 ```bash
 npm run new-trip japon-2024        # crée le dossier et un trip.yaml commenté, sans coordonnées
 npm run geocode japon-2024         # résout les coordonnées des villes et les écrit dans le fichier
+npm run index-photos japon-2024    # mesure les photos, écrit leurs dimensions et leurs vignettes
 npm run validate:content           # valide content/trips/ ; rapporte tout, sort en 1 s'il reste un problème
 npm run validate:content -- --help
 ```
@@ -251,11 +252,12 @@ npm run validate:content -- --help
 `npm run validate:content` tourne aussi automatiquement avant `npm run test` (script
 `pretest`) : un contenu fautif ne peut pas traverser la suite sans se faire voir. `geocode`,
 lui, ne tourne jamais tout seul — il appelle un service en ligne, ce n'est pas quelque chose
-qu'une suite de tests déclenche dans ton dos.
+qu'une suite de tests déclenche dans ton dos. `index-photos` non plus, pour une autre raison :
+il **réécrit des images sur le disque** (voir plus bas), et ça ne se déclenche pas dans ton dos.
 
 ### Le `--` avant les options
 
-Aucune de ces trois commandes ne reçoit une option si tu oublies le `--` : npm la garde pour
+Aucune de ces quatre commandes ne reçoit une option si tu oublies le `--` : npm la garde pour
 lui. Sans option, `npm run geocode japon-2024` suffit ; **dès qu'il y a une option**, il faut
 écrire `npm run geocode -- japon-2024 --pick 1`. Ce que fait npm sinon, mesuré :
 
@@ -281,7 +283,13 @@ endroit sans un mot. La suite s'enchaîne d'elle-même :
 2. tu remplis les noms de villes et leurs codes pays ;
 3. `npm run validate:content` — refuse, et dit « lance `npm run geocode japon-2024` » ;
 4. `npm run geocode japon-2024` — liste les homonymes, demande un numéro, écrit ;
-5. `npm run validate:content` — vert.
+5. tu déposes tes photos dans `public/photos/japon-2024/` et tu les déclares dans `photos[]`
+   avec leur `alt` — c'est la seule chose que la machine ne peut pas écrire à ta place ;
+6. `npm run validate:content` — refuse, et dit « lance `npm run index-photos japon-2024` » ;
+7. `npm run index-photos japon-2024` — mesure, écrit les trois clés, produit les versions AVIF ;
+8. `npm run validate:content` — vert.
+
+Les étapes 5 à 7 sont facultatives : un voyage sans photo est un voyage valide.
 
 ### Ce que `geocode` refuse de faire
 
@@ -336,10 +344,84 @@ content/trips/japon-2024/trip.yaml:13:5 — places[1].coordinates : la ville « 
 
 Deux réparations ont leur commande dédiée :
 
-| Problème               | Commande                      | État                                  |
-| ---------------------- | ----------------------------- | ------------------------------------- |
-| coordonnées manquantes | `npm run geocode <slug>`      | livrée (TIW-10)                       |
-| dimensions de photo    | `npm run index-photos <slug>` | pas encore écrite (TIW-17), sort en 1 |
+| Problème                                          | Commande                      | État            |
+| ------------------------------------------------- | ----------------------------- | --------------- |
+| coordonnées manquantes                            | `npm run geocode <slug>`      | livrée (TIW-10) |
+| dimensions, vignette ou versions AVIF d'une photo | `npm run index-photos <slug>` | livrée (TIW-17) |
+
+### Ce que `index-photos` fait, et ce qu'il refuse de faire
+
+Trois clés d'une photo sont **écrites par la machine, jamais à la main** — exactement comme
+`coordinates` l'est par `geocode` :
+
+| Clé           | Ce que c'est                              | Pourquoi la machine                                              |
+| ------------- | ----------------------------------------- | ---------------------------------------------------------------- |
+| `width`       | la largeur réelle du fichier              | la boîte est réservée avant l'arrivée des octets : zéro décalage |
+| `height`      | la hauteur réelle du fichier              | idem                                                             |
+| `blurDataUrl` | une vignette WebP de 16 px en `data:` URI | l'aperçu flouté pendant le chargement                            |
+
+Ce que tu écris toi : `src`, `alt`, et facultativement `placeSlug`. `alt` est la seule chose
+qu'aucune machine ne peut deviner, et c'est pour ça que la validation refuse une photo sans.
+
+La commande produit en plus, à côté de chaque original, les **versions AVIF** que la page
+demandera : `tokyo-480.avif`, `tokyo-960.avif`, `tokyo-1440.avif`. Elles sont versionnées avec
+les originaux, et le rang qui dépasserait la largeur de l'original n'est pas produit — une
+photo de 1200 px n'a pas de version 1440.
+
+- **Il mesure tout à chaque passage**, et ne se fie pas au fichier. `geocode` saute un lieu qui
+  a déjà ses coordonnées, parce qu'une latitude écrite une fois est vraie pour toujours ; une
+  photo, non : tu la recadres sur place et le `trip.yaml` décrit alors une image qui n'existe
+  plus — ce qui réserve la mauvaise boîte, précisément le décalage que `width` et `height`
+  existent pour éviter. Une mesure lit un en-tête, pas une image : c'est ce qui rend ça gratuit.
+- **Il ne fait rien deux fois.** Une valeur n'est réécrite que si la mesure diffère, une version
+  AVIF que si le fichier sur le disque n'a pas déjà la bonne taille. Sur un voyage déjà indexé :
+  « 4 photos sont déjà à jour, rien à faire », même contenu, même horodatage.
+- **Il ne reformate rien.** Tes commentaires, l'ordre de tes clés, ton indentation et tes lignes
+  vides sont conservés — seules les lignes de `width`, `height` et `blurDataUrl` apparaissent
+  dans le diff. Même mécanique que `geocode`, et le même module.
+- **Il garde ce qui est mesuré même si une photo échoue.** Fichier introuvable, fichier qui n'est
+  pas une image, `src` relatif : **cette** photo reste telle quelle, les autres sont écrites, et
+  la commande sort en 1. « Code 1 » ne veut donc pas dire « fichier intact ».
+- **Il refuse un `src` qui porte un nom qu'il écrit lui-même.** `tokyo-480.jpg` est exactement le
+  fichier où va la version 480 px de `tokyo.jpg` : l'un des deux est condamné. Le message dit
+  **renomme**, et ne propose surtout pas de relancer la commande — la relancer est ce qui
+  détruirait ton original.
+
+#### Il réécrit tes images au-delà de 3000 px ou de 1,5 Mo
+
+C'est la seule commande de ce dépôt qui **modifie un fichier que tu as déposé**, et il vaut
+mieux le savoir avant : une image au-delà de l'un des deux seuils est redimensionnée sur place,
+avec un avertissement qui nomme le fichier et donne ses dimensions et son poids avant et après.
+
+```
+photos[2] « /photos/japon-2024/osaka.jpg » : image réécrite sur le disque, 4032 × 3024 (4,4 Mo) → 3000 × 2250 (663 Ko)
+```
+
+Deux seuils et non un, en « ou » : une photo de 2800 px et de 2 Mo est autant de poids mort dans
+un historique git qu'une de 4032 px, et une première version qui ne regardait que la largeur la
+laissait passer. La réduction est déterministe — un palier fixe, pas une recherche sur la
+qualité — donc deux passages sur le même fichier donnent les mêmes octets et le second ne fait
+rien.
+
+**Garde tes originaux pleine taille ailleurs que dans `public/`.** Le dépôt n'est pas ta
+photothèque : ce qui y entre est ce que le site sert, et l'historique git ne rend jamais un
+octet.
+
+#### Le poids du dépôt est un budget
+
+`npm run check:photo-weight` pèse les images suivies par git et **refuse au-delà de 150 Mo**.
+L'arithmétique : 200 photos à 400 Ko font 80 Mo d'originaux, et trois rangs d'AVIF coûtent entre
+22 et 150 Ko par photo selon sa compressibilité — mesuré sur la sortie réelle de la commande —
+soit ~96 Mo pour 200 photos.
+
+Chaque clone paie ce poids, chaque job d'intégration continue le paie, et la plateforme le paie
+**encore** à chaque build, parce qu'un build part d'un clone. Et git ne le rend pas : une photo
+supprimée aujourd'hui est encore dans l'historique demain.
+
+Au-delà du seuil, la réponse n'est pas « compresse plus fort » : les images passent sur un
+stockage externe et `src` devient une URL absolue. C'est un changement de **contenu** et non de
+structure — ni le schéma ni les pages n'ont à bouger — et c'est pour ça que le seuil peut se
+permettre d'être un refus plutôt qu'un avertissement que personne ne lit.
 
 ### Valider autre chose que le contenu réel
 

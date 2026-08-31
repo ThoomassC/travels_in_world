@@ -56,7 +56,15 @@
     "scripts/**/*.ts",
     "scripts/**/*.mts",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    // Added by `next build` itself, the first time the Playwright photo suite's
+    // fixture build ran with `TIW_DIST_DIR=.next-photos` (see next.config.ts).
+    // Committed rather than reverted: Next rewrites this file on every build that
+    // sets the variable, so reverting it only re-creates the change — the same
+    // reasoning `AGENTS.md` gives for committing the block `next dev` writes into
+    // it. The globs match nothing when that build has not run.
+    ".next-photos/types/**/*.ts",
+    ".next-photos/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", "out"]
 }

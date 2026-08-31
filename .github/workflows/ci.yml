@@ -129,6 +129,14 @@ jobs:
   # series, and handing Playwright a pre-built server would mean weakening
   # `reuseExistingServer: false` — trading a proven guard for ~40 s.
   #
+  # Since TIW-17 this job makes TWO builds of its own, and the second is not
+  # redundancy either: the photo viewer can only be exercised on a trip page that
+  # has photographs, and `content/trips` is empty until TIW-24 — which the specs
+  # here assert, deliberately, because it is what production serves. The fixture
+  # build therefore goes to its own `distDir` (`TIW_DIST_DIR`, see
+  # `playwright.config.ts`) so it can neither clobber `.next` nor be mistaken for
+  # the build `test:build` measures in the job above.
+  #
   # What DOES deserve to be shared between runs is the browser download, below.
   e2e:
     name: Playwright (build de production)
