@@ -16,7 +16,7 @@ function Placeholder() {
   return (
     <section>
       <h1>{t("title")}</h1>
-      <p>{t("placeholderBody")}</p>
+      <p>{t("intro")}</p>
     </section>
   );
 }
@@ -30,7 +30,7 @@ describe("toolchain smoke", () => {
     );
 
     expect(screen.getByRole("heading", { level: 1, name: frMessages.home.title })).toBeVisible();
-    expect(screen.getByText(frMessages.home.placeholderBody)).toBeInTheDocument();
+    expect(screen.getByText(frMessages.home.intro)).toBeInTheDocument();
   });
 
   it("keeps a usable localStorage despite Node 25's native global (see tests/setup.ts)", () => {
@@ -63,10 +63,11 @@ describe("toolchain smoke", () => {
     expect(locales).toContain(defaultLocale);
   });
 
-  it("has a message for every key the placeholder page reads", () => {
+  it("has a namespace for every part of the site that reads one", () => {
     expect(Object.keys(frMessages)).toEqual(
-      expect.arrayContaining(["metadata", "home", "notFound"])
+      expect.arrayContaining(["metadata", "home", "trips", "map", "notFound"])
     );
-    expect(frMessages.home.placeholderHeading).not.toBe("");
+    expect(frMessages.home.intro).not.toBe("");
+    expect(frMessages.trips.allHeading).not.toBe("");
   });
 });

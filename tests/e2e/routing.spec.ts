@@ -11,15 +11,127 @@ test("the bare root redirects to the default locale", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
 });
 
-test("the French home page renders the placeholder from the message catalogue", async ({
+/**
+ * The home page's first screen, asserted against the state production is really
+ * in: `content/trips` is empty, so this is what a reader sees today.
+ */
+test("the French home page carries the sentence, the map and an honest empty block", async ({
   page,
 }) => {
   await page.goto("/fr");
 
   await expect(page.getByRole("heading", { level: 1, name: frMessages.home.title })).toBeVisible();
+  await expect(page.getByText(frMessages.home.intro)).toBeVisible();
+  // The map is a `<figure>` carrying a counted caption — see TIW-13.
+  await expect(page.getByRole("figure")).toBeVisible();
+
+  // No trip published: the waiting message, and NOT a "Derniers voyages" heading
+  // above nothing. That distinction is an acceptance criterion, not a nicety.
   await expect(
-    page.getByRole("heading", { level: 2, name: frMessages.home.placeholderHeading })
+    page.getByRole("heading", { level: 2, name: frMessages.home.emptyHeading })
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: frMessages.home.latestHeading })
+  ).toHaveCount(0);
+});
+
+/**
+ * The skip link, end to end, because none of its three parts can be asserted
+ * under jsdom: the hiding is `clip-path` (a computed style jsdom does not lay
+ * out), the reveal is `:focus-visible`, and the landing needs a browser that
+ * really moves the focus.
+ *
+ * What is pinned is not the ring or the pixels — those are for a human eye — but
+ * the two facts that break silently: the link is the first tab stop, and
+ * `<main>` still carries the `id` it points at. The link lives in the layout and
+ * each page renders its own `<main>`, so a page can ship without the target and
+ * nothing else on the site would say so.
+ */
+test("the first tab stop is a skip link, and it lands the focus on main", async ({ page }) => {
+  await page.goto("/fr");
+
+  const skip = page.getByRole("link", { name: frMessages.trips.skipToContent });
+
+  // Out of the visual layout until focused: a 1 px box, the `clip-path` pattern
+  // this repository uses to keep text in the accessibility tree. `toBeVisible()`
+  // cannot tell the difference — a 1 px box counts as visible.
+  const atRest = await skip.boundingBox();
+  expect(atRest?.width).toBeLessThanOrEqual(1);
+
+  await page.keyboard.press("Tab");
+  await expect(skip).toBeFocused();
+
+  // Focused, it is a real 44 px target — WCAG 2.2 target size (minimum).
+  const focused = await skip.boundingBox();
+  expect(focused?.height ?? 0).toBeGreaterThanOrEqual(44);
+  expect(focused?.width ?? 0).toBeGreaterThan(44);
+
+  await page.keyboard.press("Enter");
+
+  // `tabIndex={-1}` on `<main>` is what makes this true here and in Safari:
+  // without it the scroll position moves and the focus does not, so the next Tab
+  // resumes from the top of the document and the reader has skipped nothing.
+  await expect(page.locator("main")).toBeFocused();
+});
+
+test("the full listing carries the skip link's target too", async ({ page }) => {
+  // The same assertion on the second route: the `id` belongs to the page, so it
+  // is exactly the kind of thing that ships on one page and not on the next.
+  await page.goto("/fr/voyages");
+
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+
+  await expect(page.locator("main")).toBeFocused();
+});
+
+test("the main navigation reaches the full listing, at the same level as the map", async ({
+  page,
+}) => {
+  await page.goto("/fr");
+
+  const nav = page.getByRole("navigation", { name: frMessages.trips.navLabel });
+  await expect(nav.getByRole("link", { name: frMessages.trips.navMap })).toBeVisible();
+
+  await nav.getByRole("link", { name: frMessages.trips.navAll }).click();
+
+  // The listing is the index of the collection the trip pages are items of, so
+  // its URL is `tripsPath()` — built on the same segment as `tripPath()`.
+  await expect(page).toHaveURL(/\/fr\/voyages$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: frMessages.trips.allHeading })
+  ).toBeVisible();
+});
+
+/**
+ * "Rendered by the server and readable without JavaScript" is an acceptance
+ * criterion, and switching JavaScript off is the only way to assert it: a green
+ * suite in a JavaScript-enabled browser cannot tell a server-rendered page from
+ * one that hydration filled in.
+ *
+ * `browser.newContext` does not inherit the project's `use`, hence the explicit
+ * `baseURL` — without it `page.goto("/fr/voyages")` throws on a relative URL.
+ */
+test("the full listing is readable with JavaScript disabled", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+  const page = await context.newPage();
+
+  try {
+    const response = await page.goto("/fr/voyages");
+
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByRole("heading", { level: 1, name: frMessages.trips.allHeading })
+    ).toBeVisible();
+    // Empty today, so what has to be readable is the waiting message and the way
+    // back to the map — a page with neither is a dead end.
+    await expect(
+      page.getByRole("heading", { level: 2, name: frMessages.trips.emptyHeading })
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: frMessages.trips.emptyBackHome })).toBeVisible();
+  } finally {
+    await context.close();
+  }
 });
 
 test("an unknown path under the active locale renders the localised 404", async ({ page }) => {

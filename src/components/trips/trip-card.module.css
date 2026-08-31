@@ -1,0 +1,253 @@
+/* =============================================================================
+   Trip card — one entry of a listing, and the grid the entries sit in.
+
+   No colour is declared here; every value comes from `src/styles/tokens.css`,
+   which is what keeps the dark theme working without this file knowing about it.
+   There is no JavaScript behind any state below.
+   ============================================================================ */
+
+/**
+ * The container the cards expect, kept in the card's own stylesheet on purpose:
+ * the thumbnail's ratio and the minimum column width are one decision, and
+ * splitting them across two modules is how a card ends up 140 px wide with a
+ * 3:2 image in it.
+ *
+ * `auto-fill` with a `minmax` floor rather than a media query: the number of
+ * columns then follows the space actually available — three on a wide page, one
+ * on a 320 px phone — and the same grid serves the home page's three cards and a
+ * country group of eleven.
+ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  /* The positioning context for `.link::after`, which is what makes the whole
+     card clickable while keeping exactly one link in the tab order. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--surface);
+  /* `--control-border` and not `--border-subtle`: the latter measures 1.37:1 and
+     its own declaration in `tokens.css` says `decorative only`. A card's edge is
+     what separates one trip from the next. */
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+  transition: border-color 120ms ease;
+}
+
+.card:hover {
+  border-color: var(--accent-quiet-border);
+}
+
+/**
+ * The focus ring belongs to the card, not to the four words of the title.
+ *
+ * The link covers the card through `::after`, so a keyboard reader aiming at
+ * this entry sees a ring around the thing they will activate. `:focus-visible`
+ * on the anchor alone would outline the title text while the click target is the
+ * whole card — WCAG 2.4.11 asks for the focused component to be visible, not for
+ * a fragment of it.
+ */
+.card:has(.link:focus-visible) {
+  outline: 2px solid var(--focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--focus-inner);
+}
+
+/**
+ * **The only legitimate `outline: none` of this repository, and the reason is
+ * that the replacement is the rule immediately above.**
+ *
+ * Without this the reader gets *two* rings, not one. The global `:focus-visible`
+ * of `src/styles/tokens.css` fires on the anchor as well, and an anchor inside a
+ * heading is an inline box the width of its text — measured at 138 × 22 px, the
+ * four words of the title — so the card was drawing the ring the comment above
+ * describes *and* the browser was drawing a second one inside it, around the
+ * title alone. The intent stated above was never the rendered result.
+ *
+ * `:has(.link:focus-visible)` above is what makes the suppression safe: the two
+ * selectors fire on the exact same condition, so the ring cannot disappear
+ * without the card's ring appearing. Deleting these two declarations without
+ * deleting that rule is what would be the accessibility regression — which is
+ * why it is written here rather than left for the next reviewer to rediscover as
+ * a bare `outline: none`.
+ */
+.link:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/**
+ * The thumbnail box, sized before the image loads.
+ *
+ * `TripSummary` carries `coverPhotoSrc` and NOT the photo's `width`/`height` —
+ * those live on `photos[]`, which only the trip page receives. So the `<img>`
+ * ships without intrinsic dimensions, and without a ratio locked here every card
+ * would grow when its image arrives and shove the rest of the list down the page
+ * (CLS). The ratio is on the box, so the empty state below occupies exactly the
+ * same space as a loaded photo.
+ */
+.thumbnail {
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+}
+
+.image {
+  display: block;
+  inline-size: 100%;
+  /* Overrides the `img { height: auto }` of the global base: the image has to
+     fill the ratio-locked box rather than re-derive a height from its own. */
+  block-size: 100%;
+  object-fit: cover;
+}
+
+/**
+ * No photo yet. A flat token surface and nothing else — no icon, no initial, no
+ * "image manquante" label: it is not information, so it says nothing, and
+ * `aria-hidden` keeps it out of the accessibility tree entirely. Rendering
+ * nothing at all was the alternative, and it is worse — the cards of a mixed
+ * listing would then have two different heights for no reason a reader could
+ * guess.
+ */
+.placeholder {
+  inline-size: 100%;
+  block-size: 100%;
+  background: linear-gradient(135deg, var(--surface-muted), var(--accent-quiet));
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Pushes `.cta` to the bottom edge whatever the title's line count, so the
+     read buttons of a row line up. */
+  flex: 1;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  line-height: 1.25;
+}
+
+.link {
+  color: var(--text-strong);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+/**
+ * The card-wide click target.
+ *
+ * An overlay rather than an `<a>` wrapped around everything: a link containing a
+ * heading, a list and a button-shaped affordance has all of that text in its
+ * accessible name, and a reader hears the whole card read out as one link name.
+ * With the overlay the link's name is the title alone, the tab order gains one
+ * stop per trip instead of two, and the pointer target is still the full card.
+ *
+ * The accepted cost, stated because it is real: text inside the card cannot be
+ * selected with the mouse.
+ */
+.link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.meta {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/**
+ * A rule, not a `·`.
+ *
+ * A generated `content: "·"` is text, and text in a pseudo-element is announced
+ * by several screen readers — three cards would add nine spoken "middle dot" to
+ * a page of sixty. A border carries the same visual separation and is
+ * unambiguously not content. The list itself is what separates the three facts
+ * for a reader who does not see it.
+ */
+.meta li + li {
+  padding-inline-start: var(--space-3);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+/**
+ * The read affordance — a `<span>`, and never a second link.
+ *
+ * The acceptance criterion asks each entry for a read button. Making it a real
+ * `<a>` would put two links to the same page in every card: sixty entries would
+ * be a hundred and twenty tab stops, and the screen-reader link list would carry
+ * sixty entries all named "Lire le récit" — the exact defect
+ * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` refuses for the map's
+ * markers. So the title is the link, the overlay above makes the whole card
+ * clickable, and this is the visible affordance that says what the card does.
+ * `aria-hidden` in the markup keeps it from repeating that promise out loud.
+ *
+ * **`--control-border` and not `--accent-quiet-border`, and the four measured
+ * numbers are the whole argument.** Contrast of the border against the surface
+ * the pill actually sits on (`--surface`, the card's own background):
+ *
+ * | token                   | light   | dark    |
+ * | ----------------------- | ------- | ------- |
+ * | `--accent-quiet-border` | 1.79:1  | 4.29:1  |
+ * | `--accent`              | 4.00:1  | 3.31:1  |
+ * | `--control-border`      | 3.93:1  | 5.26:1  |
+ *
+ * (Against `--site-background` behind the card the light column reads 1.66,
+ * 3.27 and 3.22 — the same ranking, since the two backgrounds are neighbours.)
+ *
+ * This is **not** a 1.4.11 failure: the pill is `aria-hidden` decoration whose
+ * own text sits at 6.48:1, so nothing here is a control needing a visible
+ * boundary. It is simply that at 1.79:1 the pill was practically invisible to a
+ * low-contrast eye, which costs the card the one thing this element exists for —
+ * saying that it is readable.
+ *
+ * `--control-border` rather than `--accent`, which was the other candidate: it
+ * is the only one of the two that improves **both** themes (`--accent` would
+ * take the dark theme down from 4.29 to 3.31), and it is the token whose
+ * declaration in `tokens.css` is annotated `>= 3:1, WCAG 1.4.11` — the
+ * repository's "a border you can see" token, which is exactly the job. What it
+ * gives up is the teal family, and the pill keeps it where it matters: the text
+ * is `--text-accent`, and `.card:hover .cta` below brings the accent back to the
+ * border on hover.
+ */
+.cta {
+  margin-block-start: auto;
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-accent);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.card:hover .cta {
+  background: var(--accent-quiet);
+  border-color: var(--text-accent);
+}
