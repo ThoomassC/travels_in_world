@@ -139,11 +139,24 @@ export function move(
 
 /* ------------------------------------------------------------------- trips -- */
 
+/**
+ * A real placeholder, not a plausible-looking string: `sharp` produced it from a
+ * photograph resized to 16 px wide at WebP quality 45, which is exactly what
+ * `npm run index-photos` writes. 76 bytes of image, 127 characters of URI — the
+ * measurement `BLUR_DATA_URL_MAX_LENGTH` is set against.
+ *
+ * Kept verbatim rather than generated, so a fixture cannot drift into a shape the
+ * schema accepts and a browser refuses to decode.
+ */
+export const BLUR_PLACEHOLDER =
+  "data:image/webp;base64,UklGRkQAAABXRUJQVlA4IDgAAADQAQCdASoQAAsAAwBSJagCdACqay0wAADW/3kC+r0JGLJocnBTD3RVqGBDka98YOLHP7Nr4jvAAA==";
+
 export const TOKYO_PHOTO = {
   src: "/photos/japon-2024/tokyo.jpg",
   alt: "Une ruelle de Shinjuku sous la pluie",
   width: 1600,
   height: 1067,
+  blurDataUrl: BLUR_PLACEHOLDER,
 };
 
 export const KYOTO_PHOTO = {
@@ -151,6 +164,7 @@ export const KYOTO_PHOTO = {
   alt: "Le chemin des philosophes au petit matin",
   width: 1600,
   height: 900,
+  blurDataUrl: BLUR_PLACEHOLDER,
 };
 
 /**

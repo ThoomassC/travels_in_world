@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import { timelineSteps } from "@/components/timeline/steps";
 import { TripSchema } from "@/domain/schema";
 import type { Trip } from "@/domain/schema";
-import { BANGKOK, KYOTO, move, stay, TOKYO, tripInput } from "../domain/fixtures";
+import {
+  BANGKOK,
+  KYOTO,
+  KYOTO_PHOTO,
+  move,
+  stay,
+  TOKYO,
+  TOKYO_PHOTO,
+  tripInput,
+} from "../domain/fixtures";
 
 function parse(input: Record<string, unknown> = {}): Trip {
   return TripSchema.parse(tripInput(input));
@@ -92,7 +101,13 @@ describe("timelineSteps", () => {
       timelineSteps({
         places: [TOKYO],
         steps: [
-          { kind: "move", fromSlug: "tokyo", toSlug: "atlantide", mode: "boat", date: "2024-04-16" },
+          {
+            kind: "move",
+            fromSlug: "tokyo",
+            toSlug: "atlantide",
+            mode: "boat",
+            date: "2024-04-16",
+          },
         ],
       })
     ).toThrow(/atlantide/);
@@ -100,5 +115,134 @@ describe("timelineSteps", () => {
 
   it("answers nothing for a trip with no steps", () => {
     expect(timelineSteps({ places: [], steps: [] })).toEqual([]);
+  });
+});
+
+/**
+ * The photos of a stay (TIW-17). A photo carrying `placeSlug` is shown inside
+ * that place's step rather than in the trip's gallery, and the index it carries is
+ * the page's single viewer's — see `src/components/photos/collection.ts`.
+ */
+describe("timelineSteps, photos of a stay", () => {
+  /** `[place slug, photo sources]` per stay, in order — what every case below
+   * asserts on, so a diff names the step that went wrong. */
+  function stayPhotos(trip: Trip): readonly (readonly [string, readonly string[]])[] {
+    return timelineSteps(trip).flatMap((step) =>
+      step.kind === "stay"
+        ? [[step.place.slug, step.photos.map((entry) => entry.src)] as const]
+        : []
+    );
+  }
+
+  it("attaches a photo to the stay of the place it names", () => {
+    expect(
+      stayPhotos(
+        parse({
+          photos: [
+            { ...TOKYO_PHOTO, placeSlug: "tokyo" },
+            { ...KYOTO_PHOTO, placeSlug: "kyoto" },
+          ],
+          coverPhotoSrc: undefined,
+        })
+      )
+    ).toEqual([
+      ["tokyo", [TOKYO_PHOTO.src]],
+      ["kyoto", [KYOTO_PHOTO.src]],
+      ["bangkok", []],
+    ]);
+  });
+
+  /** The ordinary case: a photo with no place belongs to the trip's gallery, and
+   * no step may claim it — it would then be on the page twice. */
+  it("leaves an unattached photo out of every stay", () => {
+    expect(stayPhotos(parse({ coverPhotoSrc: undefined })).map(([, sources]) => sources)).toEqual([
+      [],
+      [],
+      [],
+    ]);
+  });
+
+  /**
+   * The cover has already been shown by the header, so it is out of the viewer's
+   * array — and therefore out of a step, even when it names a place. This is the
+   * one path that could otherwise put the same image on the page twice with the
+   * gallery still looking correct.
+   */
+  it("does not put the cover inside a step, even when it names a place", () => {
+    expect(
+      stayPhotos(
+        parse({
+          photos: [{ ...TOKYO_PHOTO, placeSlug: "tokyo" }],
+          coverPhotoSrc: TOKYO_PHOTO.src,
+        })
+      )
+    ).toEqual([
+      ["tokyo", []],
+      ["kyoto", []],
+      ["bangkok", []],
+    ]);
+  });
+
+  /**
+   * The index is the position in the viewer's array — cover removed, the gallery's
+   * own photos included — and NOT the position inside the step. A step's second
+   * photo that thinks it is the viewer's photo 1 opens a different picture.
+   */
+  it("numbers a step's photos by their position in the viewer, not in the step", () => {
+    const rendered = timelineSteps(
+      parse({
+        photos: [
+          { ...TOKYO_PHOTO, src: "/photos/japon-2024/couverture.jpg" },
+          { ...TOKYO_PHOTO, src: "/photos/japon-2024/galerie.jpg" },
+          { ...TOKYO_PHOTO, src: "/photos/japon-2024/kyoto-a.jpg", placeSlug: "kyoto" },
+          { ...TOKYO_PHOTO, src: "/photos/japon-2024/kyoto-b.jpg", placeSlug: "kyoto" },
+        ],
+        coverPhotoSrc: "/photos/japon-2024/couverture.jpg",
+      })
+    );
+    const kyoto = rendered.find((step) => step.kind === "stay" && step.place.slug === "kyoto");
+
+    // `galerie.jpg` is 0 once the cover is dropped, so the two Kyoto photos are
+    // 1 and 2 — never 0 and 1.
+    expect(kyoto?.kind === "stay" ? kyoto.photos.map((entry) => entry.index) : null).toEqual([
+      1, 2,
+    ]);
+  });
+
+  /**
+   * A split stay — Tokyo, Kyoto, Tokyo again — is valid content: `TripSchema`
+   * calls two stays in the same place a split stay and accepts it explicitly. A
+   * photo names a *place*, not a date, so nothing in the content says which of the
+   * two it belongs to. It goes to the first, once.
+   */
+  it("gives a split stay's photos to the first visit and not the second", () => {
+    expect(
+      stayPhotos(
+        parse({
+          places: [TOKYO, KYOTO],
+          steps: [
+            stay("tokyo", "2024-04-12", "2024-04-14"),
+            move("tokyo", "kyoto", "train", "2024-04-14"),
+            stay("kyoto", "2024-04-14", "2024-04-18"),
+            move("kyoto", "tokyo", "train", "2024-04-18"),
+            stay("tokyo", "2024-04-18", "2024-04-22"),
+          ],
+          photos: [{ ...TOKYO_PHOTO, placeSlug: "tokyo" }],
+          coverPhotoSrc: undefined,
+        })
+      )
+    ).toEqual([
+      ["tokyo", [TOKYO_PHOTO.src]],
+      ["kyoto", []],
+      ["tokyo", []],
+    ]);
+  });
+
+  /** Every stay carries the field, empty or not, so `trip-timeline.tsx` reads
+   * `step.photos.length` without a null check. */
+  it("gives every stay a photos array", () => {
+    const rendered = timelineSteps(parse({ photos: [], coverPhotoSrc: undefined }));
+
+    expect(rendered.every((step) => step.kind === "move" || Array.isArray(step.photos))).toBe(true);
   });
 });

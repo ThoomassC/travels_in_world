@@ -1,5 +1,6 @@
 import path from "node:path";
 import { CountryCodeSchema } from "@/domain/geo";
+import { derivativeSources } from "@/domain/photo";
 import { TripSchema } from "@/domain/schema";
 import { isAssignedCountryCode } from "@/iso-3166";
 import {
@@ -19,7 +20,7 @@ import {
   RULE_STEP_OUT_OF_RANGE,
   RULE_TRIP_RANGE_INVERTED,
 } from "./diagnose";
-import { describeField, escapeControls, quoted } from "./finding";
+import { describeField, escapeControls, quoted, runCommand } from "./finding";
 import type { ContentFinding, ContentValidation, FieldPath } from "./finding";
 
 export type { ContentFinding, ContentValidation } from "./finding";
@@ -211,7 +212,7 @@ function findingsForTrip(
     ...unsafeKeyFindings(trip, file),
     ...schemaFindings(trip, file, tripSlug),
     ...countryCodeFindings(trip, file),
-    ...assetFindings(trip, file, request, directories),
+    ...assetFindings(trip, file, tripSlug, request, directories),
   ];
 
   return sortByPosition(deduplicate(collected));
@@ -554,6 +555,8 @@ function countryCodeFindings(
 function assetFindings(
   trip: Extract<TripFile, { state: "parsed" }>,
   file: string,
+  /** Already bounded and neutralised by the caller: it is printed in a command. */
+  tripSlug: string,
   request: ValidationRequest,
   directories: DirectoryCache
 ): readonly ContentFinding[] {
@@ -628,6 +631,61 @@ function assetFindings(
     }
   };
 
+  /** Whether a site-absolute path resolves to a real file, case included. */
+  const onDisk = (source: string): boolean =>
+    source.startsWith("/") &&
+    lookupFile(
+      request.publicDir,
+      source.split("/").filter((segment) => segment !== ""),
+      directories
+    ).state === "found";
+
+  /**
+   * The derivative files, and the reason this check is not optional.
+   *
+   * A `<picture>` **commits** to the `<source>` the browser selects. When the
+   * AVIF behind it 404s, the browser shows a broken image and does *not* fall
+   * through to the `<img>` — so a photo whose derivatives were never written is a
+   * hole in a page `next build` reports nothing about. Same class of fault as the
+   * missing original beside it, same layer, and the domain cannot see it for the
+   * same reason: it is a question about the disk.
+   *
+   * **One finding for the whole set, not one per width.** The three files come
+   * out of one run of one command, so three lines would be one repair said three
+   * times — the noise `deduplicate` and the derived-rule filter exist to keep out
+   * of this report. The widths already present are left out of the sentence, so a
+   * partial run says what is left to do rather than starting over.
+   *
+   * A photo narrower than the ladder's first rung has no derivative at all and
+   * `derivativeSources` returns nothing for it: the check goes quiet rather than
+   * demanding a file the command will never write.
+   */
+  const checkDerivatives = (source: string, field: FieldPath, width: number): void => {
+    const missing = derivativeSources({ src: source, width }).filter(
+      (derivative) => !onDisk(derivative.src)
+    );
+
+    if (missing.length === 0) {
+      return;
+    }
+
+    const command = `npm run index-photos ${tripSlug}`;
+    const one = missing.length === 1;
+
+    findings.push({
+      file,
+      field,
+      ...locationOf(trip, field),
+      problem: `${one ? "la version" : "les versions"} ${missing
+        .map((derivative) => `${derivative.width} px`)
+        .join(
+          ", "
+        )} de ${quoted(source)} ${one ? "n'existe pas" : "n'existent pas"} : la page ${one ? "la" : "les"} demanderait, et le navigateur afficherait une image cassée`,
+      action: runCommand(command),
+      command,
+    });
+  };
+
   const photos = valueAt(trip.value, ["photos"]);
   if (Array.isArray(photos)) {
     photos.forEach((_photo, index) => {
@@ -637,6 +695,22 @@ function assetFindings(
       }
       checked.add(source);
       check(source, ["photos", index, "src"], "la photo");
+
+      /**
+       * Only for a photo whose original was found, and whose declared width the
+       * schema would accept.
+       *
+       * Both gates earn their keep. Asking for the derivatives of a file that is
+       * itself missing appends three widths to a line that already says the photo
+       * is not there — two repairs in one sentence, of which only one is real.
+       * And a width the schema is about to refuse cannot say how many rungs to
+       * expect: a `width: 0` would ask for none and a `width: "1600"` would throw.
+       */
+      const width = valueAt(trip.value, ["photos", index, "width"]);
+
+      if (onDisk(source) && typeof width === "number" && Number.isInteger(width) && width > 0) {
+        checkDerivatives(source, ["photos", index, "src"], width);
+      }
     });
   }
 

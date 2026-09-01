@@ -1,5 +1,7 @@
 import type { ReactElement } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { PhotoFigure } from "@/components/photos/photo-figure";
+import type { PhotoView } from "@/components/photos/photo-figure";
 import type { PlainDate } from "@/domain/geo";
 import type { Duration } from "@/domain/trip";
 import { formatDayRange, machineDate } from "./dates";
@@ -25,12 +27,29 @@ import styles from "./trip-header.module.css";
  * test without a content directory or a server context.
  */
 
-export type TripHeaderCover = {
-  readonly src: string;
-  readonly alt: string;
-  readonly width: number;
-  readonly height: number;
-};
+/**
+ * The cover is a {@link PhotoView} and no longer a local four-field shape.
+ *
+ * Re-declaring it here would be a second contract to keep in step with the
+ * pipeline: TIW-17 made `blurDataUrl` a required field of every photo, and a copy
+ * of the shape is how the header would keep rendering a cover with no placeholder
+ * while nothing anywhere says so. The alias is kept so the page's existing type
+ * reference stays valid.
+ */
+export type TripHeaderCover = PhotoView;
+
+/**
+ * The cover's rendered width, told to the browser so it picks the right rung of
+ * the derivative ladder.
+ *
+ * The reading column is `68ch` — ~34 rem at the default font size — and below
+ * that the image is the viewport less `main`'s 1.5 rem of padding on each side.
+ * `max-block-size: 38vh` crops the box further (see the module), which only ever
+ * makes the needed *width* smaller, so this is an upper bound and never an
+ * under-estimate: the browser is allowed to pick a smaller rung, never forced
+ * into a bigger one.
+ */
+const COVER_SIZES = "(min-width: 37rem) 34rem, calc(100vw - 3rem)";
 
 export type TripHeaderProps = {
   readonly title: string;
@@ -144,26 +163,32 @@ export function TripHeader({
 
       {cover === null ? null : (
         /*
-         * A plain `<img>`, not `next/image`. Two reasons, and the second is the
-         * decisive one: `next/image` is a client component, and this page ships
-         * zero bytes of JavaScript; and the photo pipeline that would give the
-         * optimiser something to work with is TIW-17, unbuilt — `npm run
-         * index-photos` still exits 1 on purpose. The intrinsic `width` and
-         * `height` come from the schema, which makes them mandatory content
-         * rather than a hint, so the box is reserved before the bytes arrive and
-         * nothing shifts under the reader.
+         * Through `PhotoFigure`, which is now the one place this site emits an
+         * image — `<picture>`, the AVIF `srcset` from the ladder in
+         * `@/domain/photo`, and the blurred placeholder. Still no `next/image`:
+         * the optimiser is a client component and the derivatives are already on
+         * disk, written by `npm run index-photos` at authoring time.
+         *
+         * Rendering it here rather than passing `sizes` down to a local `<img>`
+         * is the choice that stops the markup drifting: the gallery, a step and
+         * the viewer would otherwise emit a `<picture>` and the cover an `<img>`,
+         * and the cover — the LCP of the page — would be the one image with no
+         * modern format and no placeholder.
+         *
+         * **The cover is not a viewer trigger.** It is the page's editorial
+         * opening; wrapping it in a link would put a modal and a tab stop before
+         * the reader has met the trip's summary. It is excluded from the viewer's
+         * array as well, which is what keeps "photo 3 sur 11" counting the photos
+         * a reader can actually open — see `collection.ts`.
          */
-        <img
+        <PhotoFigure
+          photo={cover}
+          sizes={COVER_SIZES}
           className={styles.cover}
-          src={cover.src}
-          alt={cover.alt}
-          width={cover.width}
-          height={cover.height}
           /* Above the fold by construction: this is the LCP candidate, so it is
              fetched eagerly and at high priority rather than lazily. */
           loading="eager"
           fetchPriority="high"
-          decoding="async"
         />
       )}
 

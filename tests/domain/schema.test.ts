@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { BLUR_DATA_URL_MAX_LENGTH } from "@/domain/photo";
 import {
   BudgetSchema,
   PhotoSchema,
@@ -255,6 +256,122 @@ describe("PhotoSchema", () => {
 
   it("rejects an empty source", () => {
     expect(attempt(PhotoSchema, { ...TOKYO_PHOTO, src: "" }).accepted).toBe(false);
+  });
+
+  /**
+   * The placeholder is required for the same reason the dimensions are: the three
+   * are written together by `npm run index-photos`, so an optional one means a
+   * photo indexed before the field existed renders with no placeholder and
+   * nothing anywhere says so. `content/README.md` documents it exactly as it
+   * documents `coordinates` — machine-written, never typed by hand.
+   *
+   * The shape is pinned, not just the presence, and the two rows that matter are
+   * the SVG one and the quote one. This value is interpolated into an inline
+   * `style` attribute on the page: `image/svg+xml` can carry script, and a raw
+   * `"` closes the attribute. Refusing anything but base64-encoded WebP is what
+   * makes the render site unable to be surprised.
+   */
+  it.each([
+    { label: "an empty blurDataUrl", value: "" },
+    { label: "a bare URL instead of a data URI", value: "/photos/japon-2024/tokyo-16.webp" },
+    { label: "a JPEG data URI", value: "data:image/jpeg;base64,/9j/4AAQSkZJRg==" },
+    {
+      label: "an SVG data URI, which can carry script",
+      value: "data:image/svg+xml;base64,PHN2Zz4=",
+    },
+    {
+      label: "base64 holding a quote that would escape a style attribute",
+      value: 'data:image/webp;base64,AA"AA',
+    },
+    { label: "a data URI longer than the cap", value: `data:image/webp;base64,${"A".repeat(600)}` },
+  ])("rejects a photo with $label", ({ value }) => {
+    expect(attempt(PhotoSchema, { ...TOKYO_PHOTO, blurDataUrl: value }).accepted).toBe(false);
+  });
+
+  it("rejects a photo with no blurDataUrl at all", () => {
+    const { blurDataUrl: _dropped, ...withoutPlaceholder } = TOKYO_PHOTO;
+
+    expect(attempt(PhotoSchema, withoutPlaceholder).accepted).toBe(false);
+  });
+
+  it("accepts a blurDataUrl exactly at the cap, and refuses the next character", () => {
+    const prefix = "data:image/webp;base64,";
+    const atCap = `${prefix}${"A".repeat(BLUR_DATA_URL_MAX_LENGTH - prefix.length)}`;
+
+    expect(atCap).toHaveLength(BLUR_DATA_URL_MAX_LENGTH);
+    expect(attempt(PhotoSchema, { ...TOKYO_PHOTO, blurDataUrl: atCap }).accepted).toBe(true);
+    expect(attempt(PhotoSchema, { ...TOKYO_PHOTO, blurDataUrl: `${atCap}A` }).accepted).toBe(false);
+  });
+
+  /**
+   * The attachment field, which is what lets a photo appear inside the step it
+   * belongs to instead of only in the trip's gallery. Optional: a photo with no
+   * place is the ordinary case, and it stays in the gallery.
+   */
+  it("accepts a photo attached to a place", () => {
+    expect(attempt(PhotoSchema, { ...TOKYO_PHOTO, placeSlug: "tokyo" }).accepted).toBe(true);
+  });
+
+  it.each(["Tokyo", "tokyo ", "", "tokyo--nord", "tokyo_nord"])(
+    "rejects the placeSlug %o, which is not a slug",
+    (placeSlug) => {
+      expect(attempt(PhotoSchema, { ...TOKYO_PHOTO, placeSlug }).accepted).toBe(false);
+    }
+  );
+
+  /**
+   * The name collision `isDerivativeName` exists for, refused where every other
+   * content rule lives. `tokyo-480.jpg` is exactly the file `index-photos` writes
+   * the 480 px derivative of `tokyo.jpg` to: whichever is written last wins, and
+   * the loser is either the author's original or a page serving a JPEG under an
+   * `.avif` name.
+   */
+  it.each(["/photos/japon-2024/tokyo-480.jpg", "/photos/japon-2024/tokyo-1440.png"])(
+    "rejects the source %s, which is a name the pipeline writes",
+    (src) => {
+      expect(attempt(PhotoSchema, { ...TOKYO_PHOTO, src }).accepted).toBe(false);
+    }
+  );
+
+  it.each(["/photos/japon-2024/2024-04-12.jpg", "/photos/japon-2024/tokyo-tour.jpg"])(
+    "still accepts the ordinary source %s",
+    (src) => {
+      expect(attempt(PhotoSchema, { ...TOKYO_PHOTO, src }).accepted).toBe(true);
+    }
+  );
+});
+
+/**
+ * The cross-field half of the attachment: a `placeSlug` naming a place the trip
+ * does not declare. `PhotoSchema` alone cannot see it — it is handed one photo,
+ * and `places[]` is a sibling — so it belongs in `checkTrip`, beside the
+ * identical rule for a step's place reference.
+ *
+ * Left unchecked, the page filters the gallery by a slug nothing matches: the
+ * photo disappears from the gallery, appears in no step, and the trip renders
+ * green with one photo fewer than the author wrote.
+ */
+describe("a photo attached to a place the trip does not declare", () => {
+  it("is rejected, and the message names the slug and the field", () => {
+    const outcome = attempt(
+      TripSchema,
+      tripInput({
+        photos: [{ ...TOKYO_PHOTO, placeSlug: "osaka" }, KYOTO_PHOTO],
+      })
+    );
+
+    expect(outcome.accepted).toBe(false);
+    expect(outcome.errors).toContain("osaka");
+    expect(pathsUnder(outcome, "photos.0.placeSlug")).toEqual(["photos.0.placeSlug"]);
+  });
+
+  it("is accepted when the slug is one of the trip's places", () => {
+    expect(
+      attempt(
+        TripSchema,
+        tripInput({ photos: [{ ...TOKYO_PHOTO, placeSlug: "tokyo" }, KYOTO_PHOTO] })
+      ).accepted
+    ).toBe(true);
   });
 });
 

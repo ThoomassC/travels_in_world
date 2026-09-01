@@ -1,0 +1,99 @@
+/* =============================================================================
+   The photo grid.
+
+   Rendered in two places at two widths — the trip's own gallery inside the 68ch
+   reading column, and a stay's photos inside the timeline's text column, which is
+   narrower by the marker gutter. Hence no fixed column count anywhere.
+
+   Only tokens from `src/styles/tokens.css`.
+   ============================================================================ */
+
+/**
+ * `auto-fill` rather than `auto-fit`: with `auto-fit` a single remaining photo
+ * stretches across the whole row, which blows one image up to three times the
+ * size of its neighbours for no reason the reader can see. The rule this file
+ * inherits from `page.module.css`, where the trip gallery used to live.
+ */
+.grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  /* `min(100%, …)` and not `14rem` alone: a track that cannot shrink below its
+     floor overflows the viewport once the reader raises the browser's default
+     font size — a setting distinct from page zoom. Measured at 320 px wide on the
+     trip page: 372 px of scrollWidth at a 24 px default, 496 px at 32 px.
+     `trip-card.module.css` and `trip-header.module.css` both carry this pattern,
+     and this is the third place it has been needed. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-4);
+}
+
+.item {
+  margin: 0;
+  /* The track can be narrower than the item's content on a 320 px screen; without
+     this the grid item refuses to shrink and the page scrolls sideways. */
+  min-width: 0;
+}
+
+/**
+ * The whole tile is the target, so there is no 44 px minimum to reserve: the
+ * smallest photo in the narrowest track is 224 px of grid track and the image
+ * fills it.
+ */
+.link {
+  display: block;
+  border-radius: var(--radius-sm);
+  /* The focus ring in `tokens.css` is drawn on the element's box; without this the
+     ring would hug the inline text box of an inline `<a>` rather than the photo. */
+  outline-offset: 2px;
+}
+
+.image {
+  width: 100%;
+  /* A uniform ratio so the grid does not stagger; the intrinsic `width` and
+     `height` attributes still reserve the space before the file arrives. */
+  aspect-ratio: 3 / 2;
+  /* Belt and braces over the global `img { max-width: 100% }`: the grid track can
+     be narrower than the image's intrinsic width at 320 px. */
+  max-inline-size: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  /* The colour under the blurred placeholder, and the whole of what is painted
+     when a photo has none. `PhotoFigure` sets `background-image` inline, which
+     wins over this shorthand for that longhand only — see its comment. */
+  background: var(--surface);
+  display: block;
+}
+
+/* A hairline of feedback on the tile itself, not on the image: transforming the
+   image would fight `object-fit` on a cropped photo. */
+.link:hover .image,
+.link:focus-visible .image {
+  filter: brightness(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link:hover .image,
+  .link:focus-visible .image {
+    /* A filter is not an animation, so the global reduce block in `tokens.css`
+       does not cover it; the hover is instantaneous either way, but a reader who
+       asked for less motion gets no brightness flicker under the pointer. */
+    filter: none;
+  }
+}
+
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  /* `clip-path`, never `display: none` nor `visibility: hidden`: those two remove
+     the text from the accessibility tree and the link goes back to being named by
+     its image alone. */
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

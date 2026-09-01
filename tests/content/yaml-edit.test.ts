@@ -452,7 +452,7 @@ describe("which place a refusal is about", () => {
 
     expect(result.state).toBe("unsupported");
     if (result.state !== "unsupported") return;
-    expect(result.placeIndex).toBe(1);
+    expect(result.entryIndex).toBe(1);
   });
 
   it("writes the rest once that place is dropped", () => {
@@ -475,7 +475,7 @@ describe("which place a refusal is about", () => {
 
     expect(result.state).toBe("unsupported");
     if (result.state !== "unsupported") return;
-    expect(result.placeIndex).toBe(0);
+    expect(result.entryIndex).toBe(0);
   });
 
   it("leaves the index out of a refusal about the document itself", () => {
@@ -483,7 +483,7 @@ describe("which place a refusal is about", () => {
 
     expect(result.state).toBe("unsupported");
     if (result.state !== "unsupported") return;
-    expect(result.placeIndex).toBeUndefined();
+    expect(result.entryIndex).toBeUndefined();
   });
 });
 
@@ -505,7 +505,7 @@ describe("coordinates that only become (0, 0) on the way to the file", () => {
     expect(result.state).toBe("unsupported");
     if (result.state !== "unsupported") return;
     expect(result.reason).toContain("(0, 0)");
-    expect(result.placeIndex).toBe(0);
+    expect(result.entryIndex).toBe(0);
   });
 
   it("still accepts a single axis that rounds to zero", () => {

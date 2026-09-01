@@ -2,6 +2,7 @@ import { symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findTrip, listTripSummaries, loadTrips, tripStaticParams } from "@/content/loader";
+import { BLUR_PLACEHOLDER } from "../domain/fixtures";
 import { fixtureRoots, temporaryContent, tripYaml } from "./support";
 import type { TemporaryContent } from "./support";
 
@@ -1181,6 +1182,7 @@ describe("the projections the façade hands to the pages", () => {
           "    alt: Une ruelle de Shinjuku sous la pluie",
           "    width: 1600",
           "    height: 1067",
+          `    blurDataUrl: ${BLUR_PLACEHOLDER}`,
         ].join("\n"),
         coverPhotoSrc: "coverPhotoSrc: /photos/japon-2024/tokyo.jpg",
         budget: ["budget:", "  totalCents: 420000", "  currency: EUR", "  travellers: 2"].join(

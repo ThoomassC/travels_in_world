@@ -46,35 +46,12 @@
   font-weight: var(--weight-semibold);
 }
 
-/**
- * `auto-fill` rather than `auto-fit`: with `auto-fit` a single remaining photo
- * stretches across the whole row, which blows one image up to three times the
- * size of its neighbours for no reason the reader can see.
- */
-.gallery {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  /* `min(100%, …)` and not `14rem` alone: a track that cannot shrink below its
-     floor overflows the viewport once the reader raises the browser's default
-     font size — a setting distinct from page zoom, which this page already
-     passes. Measured at 320 px wide: 372 px of scrollWidth at a 24 px default,
-     496 px at 32 px. `trip-card.module.css` already carries this pattern. */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
-  gap: var(--space-4);
-}
-
-.galleryItem {
-  margin: 0;
-}
-
-.photo {
-  width: 100%;
-  /* A uniform ratio so the grid does not stagger; the intrinsic `width` and
-     `height` attributes still reserve the space before the file arrives. */
-  aspect-ratio: 3 / 2;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-}
+/*
+   The gallery grid used to live here, and moved to
+   `src/components/photos/photo-gallery.module.css` with TIW-17. The reason is not
+   tidiness: the same grid is now rendered in two places — the trip's own gallery,
+   and the photos of a stay inside the timeline — and a second copy of the
+   `minmax(min(100%, 14rem), 1fr)` floor would be a second place for the 320 px
+   overflow lesson to be lost from. The rules moved verbatim, comments included;
+   nothing about the layout changed.
+*/

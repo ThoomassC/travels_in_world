@@ -32,28 +32,30 @@ npx next dev --hostname 0.0.0.0   # expose brouillons compris à tout le sous-r�
 
 ## Scripts
 
-| Script                     | Rôle                                                                      |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `npm run dev`              | Serveur de développement, sur `127.0.0.1` seulement                       |
-| `npm run build`            | Build de production — `prebuild` y lance `validate:content` d'abord       |
-| `npm run start`            | Sert le build de production                                               |
-| `npm run lint`             | ESLint (flat config)                                                      |
-| `npm run format`           | Prettier en écriture                                                      |
-| `npm run typecheck`        | `tsc --noEmit`                                                            |
-| `npm run test`             | Vitest, une passe                                                         |
-| `npm run test:watch`       | Vitest en veille                                                          |
-| `npm run test:build`       | Garde de prérendu + budget de bundle — **exige un `npm run build` avant** |
-| `npm run test:e2e`         | Playwright — build + start sur un port dédié, puis `tests/e2e`            |
-| `npm run validate:content` | Valide `content/trips/` — tourne aussi en `pretest` et en `prebuild`      |
-| `npm run new-trip <slug>`  | Crée `content/trips/<slug>/trip.yaml`, squelette commenté                 |
-| `npm run geocode <slug>`   | Résout et écrit les coordonnées des villes du voyage                      |
-| `npm run index-photos`     | **Non implémenté** — échoue volontairement, voir TIW-17                   |
+| Script                        | Rôle                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `npm run dev`                 | Serveur de développement, sur `127.0.0.1` seulement                       |
+| `npm run build`               | Build de production — `prebuild` y lance `validate:content` d'abord       |
+| `npm run start`               | Sert le build de production                                               |
+| `npm run lint`                | ESLint (flat config)                                                      |
+| `npm run format`              | Prettier en écriture                                                      |
+| `npm run typecheck`           | `tsc --noEmit`                                                            |
+| `npm run test`                | Vitest, une passe                                                         |
+| `npm run test:watch`          | Vitest en veille                                                          |
+| `npm run test:build`          | Garde de prérendu + budget de bundle — **exige un `npm run build` avant** |
+| `npm run test:e2e`            | Playwright — build + start sur un port dédié, puis `tests/e2e`            |
+| `npm run validate:content`    | Valide `content/trips/` — tourne aussi en `pretest` et en `prebuild`      |
+| `npm run new-trip <slug>`     | Crée `content/trips/<slug>/trip.yaml`, squelette commenté                 |
+| `npm run geocode <slug>`      | Résout et écrit les coordonnées des villes du voyage                      |
+| `npm run index-photos <slug>` | Mesure les photos, écrit leurs dimensions et produit les versions AVIF    |
+| `npm run check:photo-weight`  | Pèse les images suivies par git, refuse au-delà de 150 Mo                 |
 
-`index-photos` est le seul des trois à garder son placeholder : il a un nom réservé et sort
-en code 1 avec un message explicite, parce qu'un script qui existe et ne fait rien
-silencieusement est un piège. `validate:content` le **cite** dans ses messages (« lance
-`npm run index-photos japon-2024` ») : c'est délibéré, le message dit dès maintenant où la
-réparation se trouvera. Il est attribué à TIW-17, le ticket du pipeline de photos, et n'est pas livré ici.
+`validate:content` **cite** les deux commandes de réparation dans ses messages (« lance
+`npm run geocode japon-2024` », « lance `npm run index-photos japon-2024` ») : le message dit
+où la réparation se trouve, et les deux commandes existent. `index-photos` a longtemps été un
+placeholder qui sortait en code 1 en nommant TIW-17, parce qu'un script qui existe et ne fait
+rien silencieusement est un piège ; TIW-17 l'a livré, et c'est lui qui écrit `width`, `height`
+et `blurDataUrl` — jamais la main.
 
 ### La boucle d'écriture d'un voyage
 
@@ -62,8 +64,16 @@ npm run new-trip japon-2024      # squelette commenté, sans coordonnées
 #   … tu remplis les noms de villes et les codes pays …
 npm run validate:content         # refuse, et dit « lance npm run geocode japon-2024 »
 npm run geocode japon-2024       # liste les homonymes, demande un numéro, écrit
+#   … tu déposes tes photos dans public/photos/japon-2024/ et tu écris leur alt …
+npm run validate:content         # refuse, et dit « lance npm run index-photos japon-2024 »
+npm run index-photos japon-2024  # mesure, écrit les trois clés, produit les AVIF
 npm run validate:content         # vert
 ```
+
+Les trois dernières lignes sont facultatives : un voyage sans photo est un voyage valide.
+`index-photos` est la seule commande du dépôt qui **réécrit un fichier que tu as déposé** —
+une image au-delà de 3000 px ou de 1,5 Mo est redimensionnée sur place, avec un avertissement
+qui la nomme. Garde tes originaux pleine taille hors du dépôt.
 
 **Un `--` dès qu'il y a une option.** npm garde pour lui tout ce qui ressemble à une de ses
 propres options : sans le `--`, « --pick 1 » arrive au script comme un second voyage nommé
@@ -271,6 +281,24 @@ prérendu de `/fr`, avec un message qui renvoyait à `validate:content` : l'aute
 rond. La vérification vit maintenant dans le validateur, et le hook npm garantit qu'aucun
 `npm run build` ne s'exécute sans elle — la CI lançant le build et la validation dans deux
 jobs séparés, `vercel.json` seul ne suffisait pas.
+
+**Les photos.** Une photo se déclare sur le **voyage** et non sur l'étape (`photos[]`), avec un
+`src`, un `alt` obligatoire non vide, et facultativement un `placeSlug` : une photo rattachée à
+un lieu apparaît dans l'étape de ce lieu, une photo sans rattachement reste dans la galerie du
+voyage. Les trois autres clés — `width`, `height`, `blurDataUrl` — sont **écrites par
+`npm run index-photos`, jamais à la main**, comme `coordinates` l'est par `geocode` ; la
+validation les exige et nomme la commande.
+
+La conversion se fait dans la **commande d'auteur** et non au build : `next/image` est un
+composant client, que ce projet a déjà refusé pour la couverture, et une conversion pendant
+`next build` ferait payer ~0,7 s par photo à chaque déploiement pour un résultat que le contenu
+peut porter. Les versions AVIF (480, 960 et 1440 px, jamais au-delà de la largeur de l'original)
+sont donc versionnées à côté des originaux, et `validate:content` vérifie leur existence — ce
+n'est pas cosmétique : un `<picture>` **s'engage** sur la `<source>` que le navigateur retient,
+donc un AVIF absent est une image cassée et non un repli sur l'`<img>`. La contrepartie est le
+poids du dépôt, qui devient un budget mesuré : `npm run check:photo-weight` refuse au-delà de
+150 Mo, et `content/README.md` porte l'arithmétique. Le détail, seuils de redimensionnement
+inclus, est dans `content/README.md`.
 
 Deux dossiers de contenu sont paramétrables (`--content`, `--public`, ou `TIW_CONTENT_DIR`
 et `TIW_PUBLIC_DIR`), ce qui est ce qui permet de tester la validation contre les fixtures
@@ -490,7 +518,7 @@ Pour s'en passer, `agentRules: false` dans `next.config.ts`.
 
 `.github/workflows/ci.yml` rejoue toute la chaîne sur chaque pull request, et sur chaque
 poussée vers `main` et `develop` : `lint`, `typecheck`, `validate:content`, `test`,
-`test:lint`, `build`, `test:build`, `test:e2e`. Trois jobs en parallèle — les vérifications
+`test:lint`, `check:photo-weight`, `build`, `test:build`, `test:e2e`. Trois jobs en parallèle — les vérifications
 sans build, le build avec ses deux gardes d'artefact, Playwright — plus un quatrième,
 `Vérifications`, qui n'exécute rien et refuse si l'un des trois a échoué. C'est ce quatrième
 nom, et lui seul, que la protection de branche connaît : sinon un job ajouté demain serait

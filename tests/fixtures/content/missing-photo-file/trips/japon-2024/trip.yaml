@@ -29,6 +29,7 @@ steps:
 photos:
   - src: /photos/japon-2024/tokyo.jpg
     alt: Une ruelle de Shinjuku sous la pluie
-    width: 1600
-    height: 1067
+    width: 400
+    height: 267
+    blurDataUrl: data:image/webp;base64,UklGRkQAAABXRUJQVlA4IDgAAADQAQCdASoQAAsAAwBSJagCdACqay0wAADW/3kC+r0JGLJocnBTD3RVqGBDka98YOLHP7Nr4jvAAA==
 coverPhotoSrc: /photos/japon-2024/tokyo.jpg

@@ -1,16 +1,6 @@
-import { Buffer } from "node:buffer";
-import {
-  chmodSync,
-  readFileSync,
-  realpathSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import path from "node:path";
 import { CoordinatesSchema, CountryCodeSchema } from "@/domain/geo";
 import type { Coordinates } from "@/domain/geo";
+import { isInsideDirectory, temporaryFileGlob, writeAtomically } from "./atomic-write";
 import { displayPath, readTripCollection, stringAt, valueAt } from "./collection";
 import type { TripFile } from "./collection";
 import type { GeocodingCandidate, GeocodingClient, SearchFailure } from "./geocoding";
@@ -424,7 +414,8 @@ async function resolvePlace(
 /* ------------------------------------------------------------------ the writing -- */
 
 /**
- * The two fixed parts of a temporary name; the variable part is the pid.
+ * The two fixed parts of the temporary name this command writes; the variable
+ * part is the pid.
  *
  * Exported so the suite can build the name this module really writes and ask
  * **git** whether it ignores it, rather than asserting that a pattern happens to
@@ -433,143 +424,9 @@ async function resolvePlace(
 export const TEMPORARY_MARKER = ".geocode-";
 export const TEMPORARY_SUFFIX = ".tmp";
 
-/**
- * The shape of the temporary file an interrupted write can leave behind, as a
- * gitignore pattern. Built from the same two constants as the name itself, so the
- * entry in `.gitignore` cannot drift away from what this module actually writes —
- * and the suite asserts the repository carries the entry.
- *
- * A run killed between `writeFileSync` and `renameSync` leaves one of these next
- * to the trip. It is dead weight, not damage — nothing reads it, and the next run
- * overwrites it — but an untracked file appearing inside `content/trips/` after a
- * Ctrl+C is exactly the kind of debris that makes an author distrust the command
- * that put it there.
- */
-export const TEMPORARY_FILE_GLOB = `*${TEMPORARY_MARKER}*${TEMPORARY_SUFFIX}`;
+const TEMPORARY_NAMING = { marker: TEMPORARY_MARKER, suffix: TEMPORARY_SUFFIX } as const;
 
-type WriteResult =
-  /** `target` is the real file the bytes went to, symlinks resolved. */
-  | { readonly state: "written"; readonly target: string }
-  /** The bytes on disk are no longer the ones the edit was computed from. */
-  | { readonly state: "changed-underfoot" }
-  /**
-   * The bytes on disk differ from `expected` and yet decode to it: `expected` is
-   * a lossy decoding of this very file, not a copy of it. See `file-not-utf8`.
-   */
-  | { readonly state: "not-utf8" }
-  | { readonly state: "failed"; readonly reason: string };
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
-/** Best-effort cleanup: a failure to tidy up must not mask the real failure. */
-function discard(temporary: string): void {
-  try {
-    rmSync(temporary, { force: true });
-  } catch {
-    // Nothing useful to say: the caller is already returning a failure, and a
-    // stray temporary is covered by TEMPORARY_FILE_GLOB.
-  }
-}
-
-/**
- * Written to a sibling file and renamed over the target.
- *
- * `rename` within a directory is atomic on every filesystem this runs on, so an
- * interrupted run leaves either the old file or the new one — never a truncated
- * trip. A plain `writeFileSync` is one line shorter and can lose the file, which
- * is not a trade this command gets to make.
- *
- * A naive `rename` over the target loses three things the author would notice,
- * so all three are handled here rather than patched later:
- *
- * - **the symlink.** `trip.yaml` may be a link into a notes folder or a synced
- *   drive; renaming over the *link* replaces it with a regular file and silently
- *   detaches the trip from the file being edited. So the link is resolved first
- *   and the swap happens around the real file.
- * - **the mode.** A fresh temporary is created at `0o666 & ~umask`, so a trip
- *   kept at `0o600` would come back world-readable. The mode is copied over
- *   before the rename, not after: after is a window where the file is readable.
- * - **a save made in the meantime.** `expected` is the text the edit offsets were
- *   computed against, and it was read *before* the first request — the prompt then
- *   blocks on a human for as long as he likes. Comparing the bytes here, one
- *   syscall before the rename, is the only place the comparison means anything: a
- *   fingerprint taken at read time answers a question about the past.
- *
- * The window between that comparison and the rename is a few microseconds of
- * kernel work with no I/O in it. Closing it entirely needs an advisory lock the
- * author's editor would have to take too, which is not on offer; narrowing it to
- * this is.
- *
- * That last comparison is on **bytes**, and that is not a detail. It used to
- * decode the file with `"utf8"` — the same decoding `expected` had already been
- * through — so on a file that is not valid UTF-8 both sides carried the same
- * U+FFFD and the guard could not, structurally, see anything wrong. The rename
- * then wrote replacement characters over the author's own bytes. Comparing
- * buffers separates the two questions the guard has to answer: *did the file
- * change* (the decoded texts differ) and *was our copy of it lossy* (the decoded
- * texts match but the bytes do not).
- */
-function writeAtomically(absolutePath: string, expected: string, text: string): WriteResult {
-  let target: string;
-  try {
-    target = realpathSync(absolutePath);
-  } catch (cause) {
-    return { state: "failed", reason: errorMessage(cause) };
-  }
-
-  // Sibling of the *real* file, because `rename` is only atomic within one
-  // filesystem and a symlink can cross one.
-  const temporary = path.join(
-    path.dirname(target),
-    `.${path.basename(target)}${TEMPORARY_MARKER}${process.pid}${TEMPORARY_SUFFIX}`
-  );
-
-  try {
-    writeFileSync(temporary, text, "utf8");
-    chmodSync(temporary, statSync(target).mode & 0o7777);
-
-    const raw = readFileSync(target);
-
-    if (!raw.equals(Buffer.from(expected, "utf8"))) {
-      discard(temporary);
-
-      return raw.toString("utf8") === expected
-        ? { state: "not-utf8" }
-        : { state: "changed-underfoot" };
-    }
-
-    renameSync(temporary, target);
-
-    return { state: "written", target };
-  } catch (cause) {
-    discard(temporary);
-
-    return { state: "failed", reason: errorMessage(cause) };
-  }
-}
-
-/**
- * Whether `file` is under `directory`, both symlinks resolved.
- *
- * `directory` is resolved too because it very often is a link itself — on macOS
- * `os.tmpdir()` is `/var/folders/…`, a symlink to `/private/var/folders/…`, so
- * comparing a resolved file against an unresolved root answers "outside" for
- * every trip in the test suite.
- */
-function isInsideDirectory(directory: string, file: string): boolean {
-  let root = directory;
-  try {
-    root = realpathSync(directory);
-  } catch {
-    // Unresolvable: compare against the path as given rather than give up. The
-    // answer only decides whether one extra line is printed.
-  }
-  const relative = path.relative(root, file);
-
-  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
-}
+export const TEMPORARY_FILE_GLOB = temporaryFileGlob(TEMPORARY_NAMING);
 
 /* ------------------------------------------------------- the writable subset -- */
 
@@ -619,7 +476,7 @@ function writableSubset(source: string, edits: readonly CoordinateEdit[]): Subse
       return { state: "writable", edits: remaining, text: result.text, refused };
     }
 
-    const { placeIndex } = result;
+    const placeIndex = result.entryIndex;
     if (placeIndex === undefined) {
       return { state: "unusable", reason: result.reason, blocked: remaining, refused };
     }
@@ -807,7 +664,7 @@ async function resolveParsedTrip(
    * whether the author saved over it while the prompt was waiting.
    */
   const resolved = subset.edits.length;
-  const written = writeAtomically(trip.absolutePath, trip.source, subset.text);
+  const written = writeAtomically(trip.absolutePath, trip.source, subset.text, TEMPORARY_NAMING);
 
   if (written.state === "changed-underfoot") {
     return { state: "file-changed", file, resolved };
