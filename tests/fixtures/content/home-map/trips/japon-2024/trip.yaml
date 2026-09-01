@@ -25,3 +25,31 @@ steps:
     placeSlug: kyoto
     startDate: 2024-04-15
     endDate: 2024-04-16
+
+# Les photos, et pourquoi ce voyage-ci les porte : voir le README du dossier.
+# Quatre, chacune pour un cas — la couverture (exclue de la galerie), une photo
+# rattachée à un lieu (rendue dans l'étape de ce lieu), et deux sans rattachement
+# pour que la galerie ait de quoi faire naviguer la visionneuse.
+photos:
+  - src: /photos/japon-2024/tokyo.jpg
+    alt: Une ruelle de Shinjuku sous la pluie
+    width: 600
+    height: 400
+    blurDataUrl: data:image/webp;base64,UklGRkYAAABXRUJQVlA4IDoAAADwAQCdASoQAAsAAwBSJagCdAC6Fq/8gAAA/OknGsszevS+KLfaA1Bb34gK6pVIetfbRUJ3wcWTtoAA
+  - src: /photos/japon-2024/kyoto.jpg
+    alt: Le chemin des philosophes au petit matin
+    placeSlug: kyoto
+    width: 600
+    height: 400
+    blurDataUrl: data:image/webp;base64,UklGRkYAAABXRUJQVlA4IDoAAADwAQCdASoQAAsAAwBSJbACdAC3yJtBhwAA21XCs18l/3ix003og+x31/ADDRMSQfZzsnWTs1DfgAAA
+  - src: /photos/japon-2024/osaka.jpg
+    alt: Le château d'Osaka au crépuscule
+    width: 600
+    height: 400
+    blurDataUrl: data:image/webp;base64,UklGRkYAAABXRUJQVlA4IDoAAADQAQCdASoQAAsAAwBSJagCdACzr5IcAADW/7WO2Gm/oAi+QLrOW789FSMBGEJcvs52TU5gavHZQAAA
+  - src: /photos/japon-2024/nara.jpg
+    alt: Les daims de Nara sous les cerisiers
+    width: 600
+    height: 400
+    blurDataUrl: data:image/webp;base64,UklGRkgAAABXRUJQVlA4IDwAAAAQAgCdASoQAAsAAwBSJagCdADpIq+e/vAAANb8tvVqgEJk2fzVD+SK/kKU1a1o9L3jBxY5+n79p20AAAA=
+coverPhotoSrc: /photos/japon-2024/tokyo.jpg

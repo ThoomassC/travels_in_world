@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { validateContent } from "@/content/validate";
 import type { ContentFinding, ContentValidation } from "@/content/validate";
 import { describeField } from "@/content/report";
+import { BLUR_PLACEHOLDER } from "../domain/fixtures";
 import { fixtureRoots, temporaryContent, tripYaml } from "./support";
 import type { TemporaryContent } from "./support";
 
@@ -225,15 +226,168 @@ describe("a cover photo that matches no file on disk (acceptance criterion 6)", 
   });
 });
 
-describe("a photo without dimensions", () => {
+/**
+ * A photo the author declared and never indexed. All three machine-written
+ * fields are absent, and each earns its own line naming the one command that
+ * writes them — the same contract `coordinates` has with `npm run geocode`.
+ */
+describe("a photo that has never been indexed", () => {
   const validation = validateContent(fixtureRoots("photo-without-dimensions"));
 
-  it("names both missing fields and the indexing command", () => {
-    expect(fields(validation)).toEqual(["photos[0].width", "photos[0].height"]);
+  it("names the three missing fields, and the indexing command for each", () => {
+    expect(fields(validation)).toEqual([
+      "photos[0].width",
+      "photos[0].height",
+      "photos[0].blurDataUrl",
+    ]);
     expect(validation.findings.map((finding) => finding.command)).toEqual([
       "npm run index-photos japon-2024",
       "npm run index-photos japon-2024",
+      "npm run index-photos japon-2024",
     ]);
+  });
+});
+
+/**
+ * The derivative files, which are the one photo check no schema can make and the
+ * one whose absence is *invisible* on the page.
+ *
+ * A `<picture>` commits to the `<source>` a browser selects: if the AVIF 404s the
+ * browser shows a broken image and does **not** fall through to the `<img>`. So a
+ * declared photo whose derivatives are missing is a hole in the page that
+ * `next build` reports nothing about — exactly the shape of fault this validator
+ * exists for, and the same reasoning as the original-file check beside it.
+ */
+describe("a photo whose derivatives have not been written", () => {
+  const photo = [
+    "photos:",
+    "  - src: /photos/japon-2024/tokyo.jpg",
+    "    alt: Une ruelle de Shinjuku sous la pluie",
+    "    width: 1600",
+    "    height: 1067",
+    `    blurDataUrl: ${BLUR_PLACEHOLDER}`,
+  ].join("\n");
+
+  it("names the widths that are missing, once, and the command that writes them", () => {
+    const finding = single(
+      validateSource(tripYaml({ photos: photo }), ["photos/japon-2024/tokyo.jpg"])
+    );
+
+    expect(describeField(finding.field)).toBe("photos[0].src");
+    expect(finding.problem).toContain("480");
+    expect(finding.problem).toContain("960");
+    expect(finding.problem).toContain("1440");
+    expect(finding.command).toBe("npm run index-photos japon-2024");
+  });
+
+  /**
+   * One line, not three. The three files are written by one run of one command,
+   * so three findings would be the same repair said three times — the noise
+   * `deduplicate` and the derived-rule filter exist to keep out of this report.
+   */
+  it("reports one line for the three widths, not one per width", () => {
+    const validation = validateSource(tripYaml({ photos: photo }), ["photos/japon-2024/tokyo.jpg"]);
+
+    expect(validation.findings).toHaveLength(1);
+  });
+
+  it("says nothing once every derivative is on disk", () => {
+    const validation = validateSource(tripYaml({ photos: photo }), [
+      "photos/japon-2024/tokyo.jpg",
+      "photos/japon-2024/tokyo-480.avif",
+      "photos/japon-2024/tokyo-960.avif",
+      "photos/japon-2024/tokyo-1440.avif",
+    ]);
+
+    expect(validation.findings).toEqual([]);
+  });
+
+  /**
+   * A photo narrower than the first rung has no derivative to look for, so the
+   * check has to be silent rather than demand a file the command will never
+   * write. Measured as a real trap in the first version: the loop asked for every
+   * rung unconditionally and refused every thumbnail on the site.
+   */
+  it("asks for nothing from a photo narrower than the first rung", () => {
+    const small = [
+      "photos:",
+      "  - src: /photos/japon-2024/vignette.jpg",
+      "    alt: Une vignette",
+      "    width: 320",
+      "    height: 213",
+      `    blurDataUrl: ${BLUR_PLACEHOLDER}`,
+    ].join("\n");
+
+    const validation = validateSource(tripYaml({ photos: small }), [
+      "photos/japon-2024/vignette.jpg",
+    ]);
+
+    expect(validation.findings).toEqual([]);
+  });
+
+  it("names only the widths that are absent when some are already there", () => {
+    const finding = single(
+      validateSource(tripYaml({ photos: photo }), [
+        "photos/japon-2024/tokyo.jpg",
+        "photos/japon-2024/tokyo-480.avif",
+      ])
+    );
+
+    expect(finding.problem).not.toContain("480");
+    expect(finding.problem).toContain("960");
+    expect(finding.problem).toContain("1440");
+  });
+});
+
+describe("a photo attached to a place the trip does not declare", () => {
+  it("names the slug, the photo and what to write instead", () => {
+    const photo = [
+      "photos:",
+      "  - src: /photos/japon-2024/tokyo.jpg",
+      "    alt: Une ruelle de Shinjuku sous la pluie",
+      "    placeSlug: osaka",
+      "    width: 400",
+      "    height: 267",
+      `    blurDataUrl: ${BLUR_PLACEHOLDER}`,
+    ].join("\n");
+
+    const finding = single(
+      validateSource(tripYaml({ photos: photo }), ["photos/japon-2024/tokyo.jpg"])
+    );
+
+    expect(describeField(finding.field)).toBe("photos[0].placeSlug");
+    expect(finding.problem).toContain("osaka");
+    // The places that *are* declared, so the repair is a copy rather than a hunt.
+    expect(finding.action).toContain("tokyo");
+    expect(finding.action).toContain("kyoto");
+  });
+});
+
+/**
+ * The name collision, said in French. `tokyo-480.jpg` is exactly where
+ * `index-photos` writes the 480 px derivative of `tokyo.jpg`, so one of the two
+ * files is doomed — and the refusal has to say *rename it*, never "run the
+ * command", because running the command is what would destroy the original.
+ */
+describe("a photo named the way the pipeline names its own output", () => {
+  it("asks for a rename and does not offer the indexing command", () => {
+    const photo = [
+      "photos:",
+      "  - src: /photos/japon-2024/tokyo-480.jpg",
+      "    alt: Une ruelle de Shinjuku sous la pluie",
+      "    width: 400",
+      "    height: 267",
+      `    blurDataUrl: ${BLUR_PLACEHOLDER}`,
+    ].join("\n");
+
+    const finding = single(
+      validateSource(tripYaml({ photos: photo }), ["photos/japon-2024/tokyo-480.jpg"])
+    );
+
+    expect(describeField(finding.field)).toBe("photos[0].src");
+    expect(finding.problem).toContain("480");
+    expect(finding.action).toContain("renomme");
+    expect(finding.command).toBeUndefined();
   });
 });
 

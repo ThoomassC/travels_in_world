@@ -13,6 +13,8 @@
 # - `test:lint` proves the `src/domain` purity rule still refuses something. It
 #   has silently stopped refusing twice already, in a single ticket.
 # - `validate:content` refuses a trip whose YAML the pages could not load.
+# - `check:photo-weight` refuses a repository whose tracked images pass 150 MB.
+#   Every clone and every build pay that weight, and git never gives it back.
 #
 # See `docs/deploiement.md` for what this pipeline does NOT gate (preview
 # deployments) and why, and for the branch-protection settings that turn a red
@@ -81,6 +83,16 @@ jobs:
 
       - run: npm run test:lint
 
+      # The repository's own weight, which is the one budget that grows without
+      # anyone deciding to spend it: every clone pays it, every job here pays it,
+      # and the platform pays it again on each build because a build starts from a
+      # clone. Past 150 MB the answer is external storage and an absolute `src`,
+      # which is a content change and not a structural one — so this can afford to
+      # fail rather than warn. It asks git what is tracked, so it costs ~0.2 s and
+      # needs no build. Proven by deliberate failure: a 160 MB file staged under
+      # `public/photos/` exits 1 and names the file.
+      - run: npm run check:photo-weight
+
   # The build and the two guards that can only be read off its artefacts. One
   # job, not two: `test:build` asserts on `.next/`, so it must run on the same
   # filesystem as the build that produced it.
@@ -116,6 +128,14 @@ jobs:
   # both cost more: appending these steps to `build` would pay the two builds in
   # series, and handing Playwright a pre-built server would mean weakening
   # `reuseExistingServer: false` — trading a proven guard for ~40 s.
+  #
+  # Since TIW-17 this job makes TWO builds of its own, and the second is not
+  # redundancy either: the photo viewer can only be exercised on a trip page that
+  # has photographs, and `content/trips` is empty until TIW-24 — which the specs
+  # here assert, deliberately, because it is what production serves. The fixture
+  # build therefore goes to its own `distDir` (`TIW_DIST_DIR`, see
+  # `playwright.config.ts`) so it can neither clobber `.next` nor be mistaken for
+  # the build `test:build` measures in the job above.
   #
   # What DOES deserve to be shared between runs is the browser download, below.
   e2e:
