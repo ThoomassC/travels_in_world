@@ -43,11 +43,18 @@ const KB = 1024;
  * measurement to leave room for real work and low enough to catch a mistake:
  * a client-side map library or an icon set would blow straight through them.
  */
-// measured after TIW-20 wired the map: 35.8 KB /fr — the projected paths, inline in
-// the document — 2.3 KB /fr/voyages, 1.1 KB /_not-found. The 1.6 KB this line used to
-// claim was measured before any page rendered the map, and stayed here for two tickets.
+// measured on develop @ 5c5bf34, after TIW-14: 37.3 KB /fr — the projected paths, inline
+// in the document — 4.1 KB /fr/voyages, 1.3 KB /_not-found, 2.0 KB /_global-error. The
+// 1.6 KB this line once claimed was measured before any page rendered the map and stayed
+// here for two tickets, which is why every figure below now carries the commit it was
+// taken on: a number with no date is a number nobody can check.
 const HTML_BUDGET_BYTES = 100 * KB;
-const INITIAL_JS_BUDGET_BYTES = 150 * KB; // measured: 119.9 KB /fr, 111.1 KB /_not-found
+// measured on develop @ 5c5bf34: 123.2 KB /fr in 7 chunks — the heaviest route, and the
+// only margin that means anything — 120.0 KB /fr/voyages, 111.2 KB /_not-found and
+// /_global-error in 5. TIW-14's `map-viewport` chunk is 3.2 KB of the /fr figure and is
+// the first of the milestone's two `'use client'` components; the second, TIW-17's photo
+// viewer, spends against what is left.
+const INITIAL_JS_BUDGET_BYTES = 150 * KB;
 
 beforeAll(() => {
   if (!existsSync(APP_DIR)) {
@@ -94,7 +101,7 @@ describe("the build output stays prerendered", () => {
  * `use-intl` baggage sat in the initial bundle of `/_not-found` — the one route
  * nothing looked at — while `/fr` was reported clean. The first fix was to add
  * `/_not-found` to a two-entry list, which MOVED the hole rather than closing
- * it: the build also prerenders `/_global-error`, whose 111.1 KB and 5 chunks
+ * it: the build also prerenders `/_global-error`, whose 111.2 KB and 5 chunks
  * still answered to nothing.
  *
  * A list derived from the artefact cannot drift from the artefact. It also means

@@ -104,7 +104,12 @@ Aucun Tailwind (CSS nu avec custom properties). Aucune bibliothèque de carte : 
 du SVG calculé au build par d3-geo, **0 Ko de bibliothèque côté client**. Aucun gestionnaire
 d'état, aucun client HTTP ni React Query, aucune bibliothèque de formulaires, aucun
 CSS-in-JS. Avant d'ajouter une dépendance, vérifie le budget : `npm run test:build` mesure
-le JS initial, à **120 Ko brotli pour un plafond de 150 Ko** — il reste 30 Ko.
+le JS initial, à **123,2 Ko brotli sur `/fr` pour un plafond de 150 Ko** — il reste
+**26,8 Ko** (mesuré sur `develop` @ `5c5bf34`, après TIW-14). La marge qui compte est celle
+de la route la plus lourde, pas la moyenne : `/_not-found` en est à 111,2 Ko et sa marge de
+38,8 Ko ne finance rien. Les ADR portent des relevés **datés** de leur décision — ils ne
+sont pas réécrits quand le chiffre bouge, et ce paragraphe est le seul à dire l'état
+courant.
 
 Depuis TIW-12 il y a un **second** budget, que ce paragraphe est le seul endroit à réunir
 avec le premier : les tracés du planisphère sont plafonnés à **34 Ko brotli**, mesurés à
