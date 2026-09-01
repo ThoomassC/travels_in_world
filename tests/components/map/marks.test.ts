@@ -234,6 +234,7 @@ describe("placeMarks — what it does to the trip it carries", () => {
       "placeName",
       "point",
       "slug",
+      "startDate",
       "title",
     ]);
     expect(Object.keys(placed[0] ?? {}).sort()).toEqual(["leftPercent", "mark", "topPercent"]);

@@ -15,6 +15,18 @@ export type TripMark = {
   /** The trip's slug, used as the React key and nowhere else. */
   readonly slug: string;
   readonly title: string;
+  /**
+   * The trip's first calendar day, `YYYY-MM-DD` — never a `Date`, per
+   * `docs/adr/0001-domain-purity.md`.
+   *
+   * Read by `zonesOf` and by nothing else: the trip panel lists the trips of one
+   * zone **date descending**, which is an acceptance criterion of TIW-14. The
+   * content façade already hands the markers in that order and this component
+   * never re-sorts them, so the field looks redundant — and that is exactly why
+   * it is here. A criterion satisfied by an upstream sort is a criterion nothing
+   * in this layer would notice losing.
+   */
+  readonly startDate: string;
   /** The first place of the itinerary — the point the marker is anchored on. */
   readonly placeName: string;
   /** Already locale-prefixed by the page; the component never builds a URL. */

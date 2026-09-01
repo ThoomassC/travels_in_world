@@ -58,6 +58,8 @@ function tripMark(index: number): TripMark {
   return {
     slug,
     title: `Voyage ${index}`,
+    // Descending with the index, like the content façade's own order.
+    startDate: `20${String(24 - (index % 20)).padStart(2, "0")}-06-01`,
     placeName: `Ville ${index}`,
     href: `/fr/voyages/${slug}`,
     // Scattered across the world box so that 60 markers really do frame the
@@ -70,6 +72,7 @@ function tripMark(index: number): TripMark {
 const CENTRED_MARK: TripMark = {
   slug: "japon-2024",
   title: "Japon 2024",
+  startDate: "2024-04-12",
   placeName: "Tokyo",
   href: "/fr/voyages/japon-2024",
   point: { x: 480, y: 250 },
@@ -149,23 +152,57 @@ describe("WorldMap", () => {
       const { container } = renderMap({ marks: [CENTRED_MARK] });
       const canvas = mapSvg(container).parentElement;
 
-      // Asserted as a *relation* to the `viewBox`, not as a literal: these are
-      // the two numbers that must never disagree, because the markers are
-      // positioned in percentages of the container while the countries are drawn
-      // in percentages of the drawing.
-      const [, , width, height] = viewBoxOf(container).split(" ");
-      expect(canvas?.style.getPropertyValue("--frame-aspect")).toBe(`${width} / ${height}`);
+      /**
+       * Asserted as a *relation* to the `viewBox`, not as literals: these are the
+       * numbers that must never disagree, because the markers are positioned in
+       * percentages of the container while the countries are drawn in percentages
+       * of the drawing.
+       *
+       * Since TIW-14 the container's `aspect-ratio` is literally
+       * `var(--frame-w) / var(--frame-h)` and those two properties are the very
+       * values the `viewBox` is formatted from — the client component writes both
+       * from one rounded viewport — so this is now an equality rather than an
+       * approximation. That is what keeps the relation true at every zoom level
+       * and not only at the frame the build chose.
+       */
+      const [x, y, width, height] = viewBoxOf(container).split(" ");
+      expect(canvas?.style.getPropertyValue("--frame-x")).toBe(x);
+      expect(canvas?.style.getPropertyValue("--frame-y")).toBe(y);
+      expect(canvas?.style.getPropertyValue("--frame-w")).toBe(width);
+      expect(canvas?.style.getPropertyValue("--frame-h")).toBe(height);
     });
 
-    it("anchors the marker on its projected point", () => {
-      renderMap({ marks: [CENTRED_MARK] });
+    it("anchors the marker on its projected point, in world units", () => {
+      const { container } = renderMap({ marks: [CENTRED_MARK] });
 
       const [item] = screen.getAllByRole("listitem");
 
-      // The mark sits at the centre of the world, the frame is centred on it, so
-      // both percentages are exactly 50. Any drift here is the aspect-ratio bug.
-      expect(item?.style.getPropertyValue("--mark-left")).toBe("50%");
-      expect(item?.style.getPropertyValue("--mark-top")).toBe("50%");
+      /**
+       * **World units, not percentages** — the change TIW-14 made to this layer.
+       * A percentage is a fraction of one particular frame, and the reader now
+       * chooses the frame; the stylesheet re-derives the percentage from the four
+       * `--frame-*` values on the canvas, which is what moves sixty markers on a
+       * zoom without a byte of per-marker JavaScript.
+       *
+       * The mark sits at the centre of the world box, so it must come back out as
+       * the centre of the frame: asserted as the arithmetic the CSS performs,
+       * against the numbers really rendered, so any drift is caught wherever it
+       * comes from.
+       */
+      expect(item?.style.getPropertyValue("--mark-x")).toBe(String(CENTRED_MARK.point.x));
+      expect(item?.style.getPropertyValue("--mark-y")).toBe(String(CENTRED_MARK.point.y));
+
+      const canvas = mapSvg(container).parentElement;
+      const numberOf = (property: string) =>
+        Number(canvas?.style.getPropertyValue(property) ?? Number.NaN);
+      const markOf = (property: string) => Number(item?.style.getPropertyValue(property) ?? "");
+
+      expect(
+        ((markOf("--mark-x") - numberOf("--frame-x")) / numberOf("--frame-w")) * 100
+      ).toBeCloseTo(50, 6);
+      expect(
+        ((markOf("--mark-y") - numberOf("--frame-y")) / numberOf("--frame-h")) * 100
+      ).toBeCloseTo(50, 6);
     });
 
     it("names the link after the trip and its anchor place", () => {

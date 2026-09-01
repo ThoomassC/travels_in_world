@@ -1,10 +1,22 @@
 /* =============================================================================
-   World map — the whole component's styling, and its whole behaviour.
+   World map — the whole component's styling, and most of its behaviour.
 
-   There is no JavaScript for this map (TIW-13 ships 0 byte of it), so every
-   state below is a CSS state. Only existing tokens from `src/styles/tokens.css`
-   are used: no colour is declared here, which is what keeps the dark theme
-   working without this file knowing that it exists.
+   TIW-13 shipped this map with zero JavaScript, and this file was the whole of
+   its behaviour. TIW-14 added an interaction layer, and the division of labour
+   it chose is visible here rather than in the component: the client writes FIVE
+   values — the `<svg>`'s `viewBox` and `--frame-x/y/w/h` — and every visual
+   consequence is a declaration below. Most notably `.mark`, which recomputes
+   sixty marker positions from four numbers, in CSS, with no per-marker script.
+
+   The tooltip is entirely CSS (`:hover` / `:focus-visible`); so is the cursor,
+   the panel's two layouts and the whole distinction between "before hydration"
+   and "after" (`[data-interactive]`).
+
+   Only existing tokens from `src/styles/tokens.css` are used: no colour is
+   declared here, which is what keeps the dark theme working without this file
+   knowing that it exists. That rule is also why the panel is separated from the
+   page by a `>= 3:1` border rather than by a drop shadow, which would have meant
+   writing a colour.
    ============================================================================ */
 
 .figure {
@@ -28,6 +40,61 @@
    * edge marker.
    */
   padding-inline: var(--space-2);
+
+  /**
+   * The map's height cap, moved here from the home page's `.mapFrame` by TIW-14.
+   *
+   * The reasoning is the page's and is unchanged: the acceptance criterion is
+   * that the first screen carries a sentence, the map AND the visible start of
+   * the latest-trips block, so a map that fills the fold is a beautiful mute
+   * screen. 45 vh of map on a 1152 × 800 desktop is 360 px tall, so 691 px wide.
+   * On a phone `min(100%, …)` makes it a no-op: the frame's ratio is about 1.92,
+   * so at 320 px wide the map is 150 px tall and the block below is already on
+   * screen.
+   *
+   * It lives here now because the map owns a panel and three controls as well as
+   * a drawing: its box is its own business, and the page no longer computes a
+   * ratio for a stylesheet it does not own. `--world-aspect` is passed inline by
+   * the component — a number computed at build time has no other way into a CSS
+   * declaration — with the gentle failure the page recorded: under a future CSP
+   * with no `style-src 'unsafe-inline'` the property is undefined, the whole
+   * declaration is invalid, and the map is simply full width again.
+   */
+  inline-size: 100%;
+  max-inline-size: min(100%, calc(45vh * var(--world-aspect)));
+  margin-inline: auto;
+
+  /**
+   * The tooltip's containment, and the one thing this ticket had to clip.
+   *
+   * A marker's label becomes a bubble on hover and on focus (`.label` below). It
+   * is `position: absolute` and centred on its marker, so a marker near the left
+   * or right edge of a narrow viewport would push the bubble past the document's
+   * own edge and the page would gain a horizontal scrollbar — WCAG 1.4.10, the
+   * very defect `padding-inline` above exists to close for the markers.
+   *
+   * `overflow-x: clip` and not `hidden`: `clip` creates no scroll container, so
+   * `overflow-y` stays genuinely `visible` (with `hidden` or `auto` the other
+   * axis is forced to `auto`) and a bubble drawn ABOVE the map is not cut off.
+   * `overflow-clip-margin` then buys back the bleed the markers need — half a
+   * 44 px target plus its 4 px focus ring is 26 px, so 2 rem is comfortable.
+   *
+   * Accepted cost, stated because it is real: the bubble of a marker sitting at
+   * the very edge of the frame is clipped on its outer side. The text is not
+   * lost — it is the link's accessible name, which a screen reader and the
+   * status bar both still give in full.
+   */
+  overflow-x: clip;
+  overflow-clip-margin: 2rem;
+}
+
+/**
+ * The positioning context for everything the reader can act on: the canvas, the
+ * three zoom controls and the ephemeral wheel hint. Rendered by the client
+ * component, which is also the only thing that can put a control in it.
+ */
+.stage {
+  position: relative;
 }
 
 /**
@@ -39,11 +106,46 @@
  */
 .canvas {
   position: relative;
-  /* Exactly the `viewBox`'s ratio, passed in as a custom property by the
-     component. Any other value letterboxes the SVG and every marker drifts off
-     the country it names. */
-  aspect-ratio: var(--frame-aspect);
+  /**
+   * Exactly the `viewBox`'s ratio — and now literally the same four numbers,
+   * because the client component writes `--frame-w` and `--frame-h` from the
+   * very values it formats the `viewBox` from. Any other ratio letterboxes the
+   * SVG and every marker drifts off the country it names, which is the trap
+   * `frameAround` and `clampViewport` both keep their aspect arithmetic exact
+   * for.
+   */
+  aspect-ratio: var(--frame-w) / var(--frame-h);
   width: 100%;
+}
+
+/**
+ * Everything below is gated on `[data-interactive]`, which the client component
+ * adds after it mounts and the server never renders.
+ *
+ * That gate is the whole of the progressive enhancement, and it is here rather
+ * than in the component for the affordances: a `grab` cursor on a map that
+ * cannot be dragged is a lie, and `touch-action: pan-y` on a page with no script
+ * would DISABLE the browser's own pinch-zoom over the map for nothing in return.
+ * A reader without JavaScript keeps the ordinary page in every respect.
+ */
+.canvas[data-interactive] {
+  cursor: grab;
+  /**
+   * One finger scrolls the page, two move the map — the acceptance criterion,
+   * expressed where the browser can honour it. `pan-y` leaves vertical panning
+   * to the browser and hands us everything else, which is what lets the
+   * two-finger listener call `preventDefault()` on a gesture the page would
+   * otherwise have taken.
+   *
+   * The cost, and it is the reason for the `[data-interactive]` gate: pinch-zoom
+   * of the *page* no longer starts on the map. It still starts anywhere else,
+   * and the map has its own zoom with three named buttons.
+   */
+  touch-action: pan-y;
+}
+
+.canvas[data-dragging] {
+  cursor: grabbing;
 }
 
 .map {
@@ -138,10 +240,28 @@
   pointer-events: none;
 }
 
+/**
+ * **The one declaration that makes zooming cost no per-marker JavaScript.**
+ *
+ * `--mark-x` and `--mark-y` are the marker's position in the projected world,
+ * emitted once by the server (`worldPointOf`). `--frame-*` are the live window,
+ * written by the client component on the canvas. So the browser recomputes every
+ * marker's percentage itself, from four numbers, and a pan or a zoom re-renders
+ * no React node for a marker and touches no marker in the DOM.
+ *
+ * It is the same arithmetic `placeMarks` does at build time, which is why the
+ * initial render is identical to the pixel: `(x - frameX) / frameW * 100 %`.
+ *
+ * Division by a `var()` needs CSS Values 4 — a denominator that is any
+ * number-typed value rather than a literal — which every browser this project
+ * targets has had for years. If it were unsupported the declaration would be
+ * invalid and the markers would fall to `auto`, piling in the top-left corner,
+ * which is the failure `frameAround` describes for a `NaN` viewBox.
+ */
 .mark {
   position: absolute;
-  left: var(--mark-left);
-  top: var(--mark-top);
+  left: calc((var(--mark-x) - var(--frame-x)) / var(--frame-w) * 100%);
+  top: calc((var(--mark-y) - var(--frame-y)) / var(--frame-h) * 100%);
   /* The percentages place the marker's top-left corner; this pulls it back by
      half its own size so the drawn dot sits on the projected point. */
   transform: translate(-50%, -50%);
@@ -201,6 +321,65 @@
 }
 
 /**
+ * The marker's tooltip, and it is the SAME text node as its accessible name.
+ *
+ * The acceptance criterion is two-sided: the bubble appears on hover **and on
+ * keyboard focus**, and no information is available on hover alone. Both are met
+ * by construction here — the bubble *is* the link's name, so a screen reader has
+ * always had it and a mouse now sees it.
+ *
+ * **Hidden by `opacity: 0`, and the choice is load-bearing.** The three usual
+ * ways of hiding text all break one half of the job: `display: none` and
+ * `visibility: hidden` remove the node from the accessibility tree, so the link
+ * loses its name entirely, and `clip-path: inset(50%)` (what this span used until
+ * TIW-14) cannot be styled back into a bubble without restating every property
+ * of the hidden state in the visible one, and then again in the dismissed one.
+ * A transparent, absolutely positioned, pointer-transparent element is invisible,
+ * costs no layout and stays a text node — one span, one string, three states.
+ *
+ * `pointer-events: none` so the bubble cannot swallow a click meant for the
+ * marker under it, and so that showing it never moves the pointer out of the
+ * element that showed it.
+ */
+.label {
+  position: absolute;
+  /* Above the marker, slightly overlapping it, so the pointer never has to
+     travel through the bubble to reach the dot. */
+  inset-block-end: calc(100% - var(--space-2));
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  z-index: 1;
+  inline-size: max-content;
+  max-inline-size: 12rem;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-body);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.link:hover .label,
+.link:focus-visible .label {
+  opacity: 1;
+}
+
+/**
+ * Escape hides the tooltips — WCAG 1.4.13's "dismissible", which a bubble drawn
+ * over its neighbours does owe. The client component sets the attribute on the
+ * stage and clears it on the next keystroke, so dismissing one bubble does not
+ * silence the map for the rest of the visit.
+ */
+.stage[data-tips-hidden] .label {
+  opacity: 0;
+}
+
+/**
  * Real text, present in the accessibility tree, removed only from the visual
  * layout. `display: none` and `visibility: hidden` are excluded: both drop the
  * text from the tree, which would leave a link unnamed and a caption silent.
@@ -247,4 +426,218 @@
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text-body);
+}
+
+/* =============================================================================
+   The interaction layer's own chrome — TIW-14.
+
+   Everything below belongs to elements the CLIENT component renders, and it
+   renders them only after it has mounted. So none of it exists in the document a
+   reader without JavaScript receives, which is why none of it needs a disabled
+   state: a control that cannot work is not shown at all.
+   ============================================================================ */
+
+/**
+ * The zoom controls, over the top-right of the map. A sibling of `.canvas` and
+ * not a child of it, deliberately: the canvas carries the pan and click
+ * listeners, and a button inside it would start a drag on `pointerdown` and then
+ * have to be excluded by name.
+ */
+.controls {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-end: var(--space-2);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.control {
+  display: grid;
+  place-items: center;
+  /* 2.75rem = 44 px at the root size, the same WCAG 2.5.8 minimum the markers
+     use, and in `rem` for the same reason: it grows with the reader's own size. */
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-strong);
+  /* A `<button>` inherits neither font: the UA stylesheet gives it its own. */
+  font-family: inherit;
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.control:hover {
+  background: var(--accent-quiet);
+}
+
+/**
+ * The message the wheel earns when it is turned alone — the acceptance criterion
+ * "on desktop the wheel alone does not zoom, and an ephemeral message says which
+ * combination is expected".
+ *
+ * Over the bottom of the map rather than beside it, so the reader's eye is
+ * already there, and `pointer-events: none` so it can never be the thing under
+ * the cursor when the next notch arrives.
+ */
+.hint {
+  position: absolute;
+  inset-block-end: var(--space-3);
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  z-index: 4;
+  max-inline-size: min(92%, 26rem);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-body);
+  font-size: var(--text-sm);
+  text-align: center;
+  pointer-events: none;
+}
+
+/**
+ * The selection panel, in its two shapes.
+ *
+ * `position: fixed` at BOTH breakpoints, which is what lets one element be a
+ * sheet at the bottom of a phone and a panel down the side of a desktop with no
+ * layout reflow of the page and no second DOM position. It also means the map
+ * never shrinks when the panel opens — a side column would have re-laid out the
+ * drawing and moved every marker under the reader's finger.
+ *
+ * The element is portalled to `document.body` by the component, which is what
+ * makes `fixed` unconditionally safe: a `transform`, a `filter` or a `contain` on
+ * any ancestor would otherwise resolve `fixed` against that ancestor and trap the
+ * panel inside the map. Out of the tree there is no such ancestor to acquire —
+ * and the portal has two further reasons, recorded at its call site.
+ *
+ * NOT modal. The map stays operable beside the panel, which is the whole point
+ * of a side panel on a desktop, so there is no focus trap and no backdrop: the
+ * focus moves in on opening and comes back to the marker on closing, and Tab
+ * leaves the panel the way it leaves any region.
+ */
+.panel {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  /* The sheet's shape below 768 px: full width, off the bottom edge. */
+  inset-block-end: 0;
+  inset-inline: 0;
+  max-block-size: min(75vh, 32rem);
+  border-block-end: 0;
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
+  /* Follows a downward pull on the header; the component clamps it at 0. */
+  translate: 0 var(--sheet-shift, 0px);
+}
+
+/**
+ * 769 px and up: a lateral panel, as the criterion words it ("un panneau latéral
+ * au-delà de 768 px, une feuille glissante en dessous"). The breakpoint is the
+ * criterion's number, so it is written as `769px` rather than converted to `rem`
+ * — a `rem` breakpoint moves with the reader's font size, which would make the
+ * threshold something other than the 768 px the criterion names.
+ */
+@media (min-width: 769px) {
+  .panel {
+    inset-block: var(--space-4);
+    inset-inline-start: auto;
+    inset-inline-end: var(--space-4);
+    inline-size: min(24rem, 42vw);
+    max-block-size: none;
+    border-block-end: 1px solid var(--control-border);
+    border-radius: var(--radius-lg);
+    /* A pull-to-close gesture has no meaning with a pointer, and the component
+       only tracks `pointerType === "touch"` — this is the layout half. */
+    translate: none;
+  }
+}
+
+/**
+ * The header, which is also the sheet's grab handle: a downward pull closes the
+ * panel on a touch screen.
+ *
+ * The handle is the header and NOT the whole panel, because the card list below
+ * has to keep scrolling vertically — a swipe there is a scroll, and stealing it
+ * would trade one gesture for another. `touch-action: none` is what lets this
+ * strip receive the pointer events the browser would otherwise consume.
+ */
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border-block-end: 1px solid var(--border-subtle);
+  touch-action: none;
+}
+
+/** The visible affordance for that pull. Purely decorative, hence `aria-hidden`. */
+.panelGrip {
+  flex: 0 0 100%;
+  inline-size: 2.5rem;
+  block-size: 0.25rem;
+  margin-inline: auto;
+  border-radius: var(--radius-pill);
+  background: var(--control-border);
+}
+
+@media (min-width: 769px) {
+  /* No pull gesture with a pointer, so no affordance promising one. */
+  .panelGrip {
+    display: none;
+  }
+}
+
+.panelTitle {
+  font-size: var(--text-md);
+}
+
+.panelClose {
+  margin-inline-start: auto;
+  display: grid;
+  place-items: center;
+  /* The criterion's "at least 44 px", and the same square as the zoom controls. */
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-strong);
+  font-family: inherit;
+  font-size: var(--text-xl);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.panelClose:hover {
+  background: var(--accent-quiet);
+}
+
+/**
+ * The cards. A vertical column with `overflow-x: hidden`, so "several trips in
+ * the zone, all reachable without horizontal scrolling" is a property of the
+ * layout rather than of where a scrollbar happens to be.
+ */
+.panelBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* The list is the scroller, so a one-finger drag here is a scroll and not a
+     pull-to-close — the header owns that gesture. */
+  overscroll-behavior: contain;
 }
