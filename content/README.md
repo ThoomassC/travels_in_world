@@ -210,6 +210,10 @@ Elles ne sont pas décoratives : chacune correspond à une page cassée, ou cass
   `TP` — chacun avec le code à écrire à la place. Avant TIW-29 la validation les laissait
   tous passer et le build échouait ensuite au prérendu de `/fr`, avec un message qui
   renvoyait à la validation.
+- **`countryCode` désigne un pays que la carte sait _dessiner_**, ce qui n'est pas la même
+  exigence : `SG` est parfaitement valide et refusé quand même. C'est la restriction la plus
+  surprenante de ce fichier, donc elle a sa section — « Les pays que la carte ne dessine
+  pas », plus bas.
 - **Chaque photo a un texte alternatif et ses deux dimensions**, et son fichier existe
   vraiment dans `public/`.
 - **Les slugs sont uniques**, dans un voyage comme dans toute la collection : un slug est
@@ -225,6 +229,65 @@ Elles ne sont pas décoratives : chacune correspond à une page cassée, ou cass
 - **Un dossier de voyage sans `trip.yaml`, un lien symbolique cassé, un `.yaml` isolé à la
   racine** sont signalés. Seuls les noms commençant par un point sont ignorés (`.gitkeep`,
   `.DS_Store`).
+
+### Les pays que la carte ne dessine pas
+
+**75 des 249 codes ISO 3166-1 sont refusés alors qu'ils sont parfaitement valides.** Le fond de
+carte du site est `world-atlas` en résolution 110m, et à cette résolution il n'y a aucun
+micro-État : Singapour, Hong Kong, Macao, Malte, Monaco, Saint-Marin, le Vatican, Andorre, le
+Liechtenstein, l'île Maurice, les Maldives, les Seychelles, le Cap-Vert, la Barbade, Bahreïn,
+la Polynésie française, les Féroé, Guam… et les départements et collectivités d'outre-mer
+français (Guadeloupe, Martinique, Guyane, La Réunion, Mayotte).
+
+Ce n'est pas une faute de frappe et le message le dit. Écrire :
+
+```yaml
+countryCode: SG # Singapour
+```
+
+donne, **avant le build** :
+
+```
+trip.yaml:21:5 — places[1].countryCode : la ville « Singapour » porte le code pays « SG »,
+que l'ISO 3166-1 alpha-2 attribue bien — mais le fond de carte du site, « world-atlas 110m »,
+n'a aucune forme pour lui : à cette résolution il ne contient aucun micro-État
+→ retire le lieu du voyage, ou rattache-le à un pays que la carte dessine. […]
+```
+
+**Ce que tu peux faire, dans l'ordre de préférence :**
+
+1. **Rattacher le lieu au pays que la carte dessine à cet endroit.** Un séjour à Singapour
+   dans un voyage en Malaisie s'écrit `MY` ; La Réunion s'écrit `FR`. C'est ce que fait la
+   carte de toute façon : elle n'a qu'une forme à teindre, celle du pays dessiné.
+2. **Retirer le lieu du voyage.** Le récit et la frise restent, la ville disparaît de la
+   carte.
+3. **Changer de millésime**, si un jour la carte doit vraiment dessiner Singapour. Le 50m est
+   déjà livré par le paquet, mais il porte les tracés de 30,1 à 182,5 Ko brotli pour un
+   plafond de 34 Ko : c'est une décision de budget qui se prend en revue, pas une option de
+   contenu. Et elle ne réglerait rien pour la Guadeloupe, la Martinique, la Guyane, La
+   Réunion, Mayotte, Svalbard, Tokelau, les Cocos, Christmas, Bouvet et les Pays-Bas
+   caribéens : **aucun** millésime de `world-atlas` ne porte de forme pour ces onze-là.
+
+**Ce que le visiteur voit dans le cas 1.** Le marqueur du voyage reste posé aux coordonnées
+réelles — il est calculé depuis `lat`/`lon`, pas depuis le pays — donc le point est au bon
+endroit sur la carte. C'est la **teinte** du pays qui suit `countryCode` : avec `MY`, c'est la
+Malaisie qui est teintée, et le nom listé sous le voyage est « Malaisie ». Rien n'est faux à
+l'écran, mais le voyage est classé sous le pays voisin, ce qui se lit.
+
+**Et le piège du cas 1, à connaître avant de s'y engager : `npm run geocode` refusera cette
+ville.** La commande contre-vérifie le pays renvoyé par le service contre le `countryCode` du
+fichier, et pour « Singapour » le service répond `SG` là où tu as écrit `MY` : divergence, donc
+**rien n'est écrit pour cette ville** — les autres sont géocodées et enregistrées quand même,
+et la commande sort en 1. Ce n'est pas un bug, c'est la contre-vérification qui fait son
+travail : elle ne peut pas distinguer « rattachement délibéré » de « mauvais numéro tapé au
+prompt », et elle a été écrite pour attraper le second. Écris donc le bloc `coordinates:` de
+cette ville à la main, en vérifiant les deux nombres, puis relance `npm run geocode` : les
+lieux déjà pourvus ne sont plus redemandés.
+
+La liste des pays dessinables n'est pas écrite à la main : `src/basemap-coverage.ts` est généré
+depuis le jeu de données par `npm run basemap:coverage`, et deux gardes le comparent au vrai
+fond de carte — un test à chaque `npm test`, et le build lui-même. Un fichier généré qui ment
+serait pire que pas de fichier du tout.
 
 ### Corriger une faute peut en révéler d'autres
 
