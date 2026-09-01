@@ -370,6 +370,36 @@ appartient à TIW-14, qui aura le zoom pour les séparer vraiment. Et **l'accès
 clavier n'est jamais concerné** : tous les liens sont dans le flux de tabulation
 quel que soit leur recouvrement, ce qui fait du pointeur le seul mode dégradé.
 
+> **Note (TIW-14, 2026-09-01).** Ce paragraphe reste juste, et ce qu'il renvoyait
+> à TIW-14 est arrivé — en **deux** mécanismes distincts, qu'il vaut mieux ne pas
+> confondre en relisant cette section.
+>
+> **La séparation par le zoom est faite, et ce n'est pas un regroupement.**
+> `--mark-x` / `--mark-y` ne sont plus des pourcentages mais des **unités
+> monde**, et la feuille de style redérive le pourcentage à partir des quatre
+> valeurs `--frame-x/y/w/h` :
+> `left: calc((var(--mark-x) - var(--frame-x)) / var(--frame-w) * 100%)`. La
+> conversion — `worldPointOf`, dans `src/components/map/zones.ts` — est appliquée
+> **après** l'écartement des coïncidentes. Le décalage de 1,6 % décidé au build
+> devient donc une distance fixe sur la carte, qui grandit à l'écran à mesure que
+> le lecteur zoome. C'est bien « les séparer vraiment », et c'est obtenu sans
+> clustering.
+>
+> **`zonesOf` est l'autre moitié, et elle ne dépend pas du zoom.** Elle groupe
+> les balises qu'un même doigt couvre — rayon de 4 % de la largeur du cadre, soit
+> une cible de 44 px — et alimente le panneau de voyages qui les rend toutes
+> atteignables au pointeur. Ses zones sont calculées **une fois, au build, sur le
+> cadre rendu par le serveur**, et son commentaire dit pourquoi elles ne se
+> recalculent pas quand le lecteur zoome : une zone prérendue et adressable par
+> URL est ce qui permet au panneau d'être du HTML serveur. Deux rayons, deux
+> questions, un ordre de grandeur d'écart — 4 % de cadre pour le panneau, 1,6 %
+> de cellule pour l'écartement.
+>
+> Ce qui reste vrai sans réserve : le recouvrement à l'échelle du monde n'est
+> toujours pas résolu, et les chiffres de Paris–Rome ci-dessus n'ont pas bougé d'un
+> degré. Ce qui a changé, c'est que **le pointeur n'est plus le mode dégradé** :
+> le panneau lui rend ce que la tabulation avait déjà.
+
 **Ce qui invaliderait cette décision.**
 
 1. Un besoin de zoom ou de panoramique **continu**, qui demanderait de recalculer
@@ -385,3 +415,36 @@ quel que soit leur recouvrement, ce qui fait du pointeur le seul mode dégradé.
    liaison entre les nombres du build et le CSS.
 
 Aucun de ces signaux n'est présent aujourd'hui.
+
+> **Note (TIW-14, 2026-09-01).** Le signal 1 s'est produit, la phrase de clôture
+> ci-dessus est donc dépassée — et **la décision a tenu**. C'est la raison
+> d'écrire cette note : une prédiction qui se réalise et qu'une décision encaisse
+> en apprend plus qu'une décision jamais éprouvée.
+>
+> **Ce que le signal annonçait de juste.** Le zoom continu est arrivé, il a
+> demandé de recalculer le cadre côté client, et il a consommé un `'use client'`.
+>
+> **Ce qu'il annonçait de faux, et c'est la moitié intéressante.** « Le composant
+> deviendrait client » n'est pas ce qui s'est passé.
+> `src/components/map/world-map.tsx` **n'a toujours pas** de `'use client'` : le
+> dessin est resté serveur en entier. Le composant client ajouté,
+> `src/components/map/map-viewport.tsx`, se pose **au-dessus** et reçoit les 177
+> `<path>` et les nœuds de balises en `children`, déjà rendus. Il écrit
+> exactement cinq valeurs — le `viewBox` du `<svg>` et les quatre
+> `--frame-x/y/w/h`. Soixante balises se repositionnent donc à partir de quatre
+> nombres, sans un script par balise, et sans qu'un seul chemin, un seul nom de
+> pays ou un seul nœud de balise n'entre dans le bundle client.
+>
+> La prédiction supposait que « rendre le cadre interactif » et « rendre le
+> composant client » étaient la même chose. Elles ne le sont pas dès lors que le
+> dessin traverse la frontière en `children` : c'est le mécanisme qui a sauvé la
+> décision, et il est réutilisable ailleurs.
+>
+> **Ce que ça a coûté.** L'en-tête de `map-viewport.tsx` porte la mesure du
+> ticket : **+3,1 Ko brotli et un chunk sur `/fr`**, rien sur aucune autre route,
+> pour un total de 123,0 Ko sur 7 chunks — contre 119,9 Ko sur 6 avant le ticket.
+> Remesuré depuis sur le commit de fusion `5c5bf34` : **123,2 Ko**, 7 chunks,
+> soit **26,8 Ko** de marge sous le plafond de 150 Ko. Le budget de l'ADR 0009
+> tient, et c'est lui qui décide — pas cette note.
+>
+> Les signaux 2 et 3 restent absents.
