@@ -43,7 +43,13 @@
     "countriesEmpty": "Aucun pays sur la carte pour l’instant : le premier récit publié y posera sa balise.",
     "allTrips": "Voir tous les voyages, groupés par continent puis par pays",
     "markListLabel": "Voyages sur la carte, du plus récent au plus ancien",
-    "markLabel": "{title}, {place}"
+    "markLabel": "{title}, {place}",
+    "zoomIn": "Zoomer sur la carte",
+    "zoomOut": "Dézoomer la carte",
+    "zoomReset": "Revoir tout le cadrage d’origine",
+    "wheelHint": "Ctrl + molette pour zoomer, ou les boutons + et − de la carte.",
+    "panelHeading": "{count, plural, one {Le voyage à cet endroit} other {Les # voyages à cet endroit}}",
+    "panelClose": "Fermer le panneau du voyage"
   },
   "trip": {
     "metaDescription": "{title} — {duration}, {cities}.",
