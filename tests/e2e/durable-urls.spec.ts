@@ -74,6 +74,13 @@ test("an address that was never used is still a plain 404", async ({ request }) 
  * invariant 1. What is asserted here is everything else the criterion asks for — and
  * the status is asserted too, explicitly, so the day a genuine 410 becomes possible
  * this test is the one that has to change and says so.
+ *
+ * TIW-31 went back and re-measured both doors; neither opened. Next's fallback
+ * statuses are still the same closed set of three, on `canary` as on 16.3.1, and the
+ * one mechanism that could answer 410 — a `routes` rule in `vercel.json` — is read by
+ * the deployment platform and by nothing here. This suite runs `next start`, which
+ * never opens that file, so it could not assert such a rule even if one were
+ * configured. That is why the pin below stays 200 rather than becoming a skip.
  */
 test("the withdrawn address explains itself instead of 404ing", async ({ page }) => {
   const response = await page.goto(`/fr/voyages/${WITHDRAWN_TRIP}`);

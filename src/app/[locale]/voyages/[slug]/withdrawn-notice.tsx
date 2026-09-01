@@ -15,23 +15,43 @@ import styles from "./withdrawn-notice.module.css";
  * saying so — then offering the map and the latest trips — is the difference between
  * a dead end and a redirection of attention.
  *
- * **THE STATUS CODE IS 200 AND THE CRITERION ASKS FOR 410.** That gap is deliberate,
- * measured, and recorded here rather than in a commit message. Next 16.3.1 lets a
- * prerendered document carry 404 (`notFound()`), 401 and 403 (`unauthorized()`,
- * `forbidden()`) and has no equivalent for 410; a Route Handler *can* return 410,
- * and measured on this branch it stops being prerendered the moment it does — the
- * same handler returning 200 builds as `○`, returning 410 builds as `ƒ`, and the
- * `.meta` file Next writes next to a prerendered body has a `status` field it simply
- * declines to fill with anything but 200. So a real 410 costs a server function on
- * a URL that has no content to compute, against invariant 1 of AGENTS.md.
+ * **THE STATUS CODE IS 200 AND THE CRITERION ASKS FOR 410.** That gap is deliberate
+ * and measured. TIW-21 shut two doors on it; TIW-31 reopened both and came back with
+ * the line that closes each, so what follows is a citation and not a recollection.
+ *
+ * **Next has no 410 anywhere, and neither does its `canary`** (both read 2026-09-01).
+ * A page's status is whatever the render pipeline leaves on the response, and the
+ * pipeline's only non-200 exits are a redirect, a 500, and the access fallbacks —
+ * which are a closed set of three, `{ NOT_FOUND: 404, FORBIDDEN: 403, UNAUTHORIZED:
+ * 401 }`, in `next/dist/client/components/http-access-fallback/http-access-fallback.js:35-40`.
+ * A Route Handler *can* return 410, and the line that un-prerenders it the instant it
+ * does is `next/dist/export/routes/app-route.js:95` —
+ * `const isValidStatus = response.status < 400 || response.status === 404` — which
+ * sends every other 4xx down the `revalidate: 0` branch, i.e. `ƒ`. That is the whole
+ * of the measured `○`-becomes-`ƒ`, in one expression.
+ *
+ * And a correction to what this comment used to say, because it named the wrong
+ * culprit: the `.meta` file is **not** the obstacle. Next writes its `status` from
+ * `res.statusCode` for *any* status above 300
+ * (`next/dist/export/routes/app-page.js:129-142`), so the field would carry a 410
+ * without complaint. Nothing upstream of it can produce one.
+ *
+ * **The platform can, and it is still not taken.** A `routes` rule in `vercel.json`
+ * does accept a status with no redirect attached — `{ "src": "/legacy", "status":
+ * 404 }` is a documented example, and the docs now allow `routes` to sit beside the
+ * `headers` and `redirects` this project already uses, which is what used to make
+ * this a restructuring. What no document settles is the half that decides it here:
+ * whether such a rule answers 410 *with this page* or with an empty body. Nothing in
+ * this repository executes `vercel.json` — not `next build`, not `next start`, not
+ * Playwright — so the question has no answer short of a deployment, and guessing it
+ * wrong trades a reader who gets an explanation for a reader who gets three digits.
+ * `docs/deploiement.md` carries the rule, ready, for the day someone can measure it.
  *
  * What this page delivers instead is everything the criterion asks for except the
  * three digits: the reader's URL still resolves, it explains that the story is no
  * longer online, and it offers the map and the three latest trips. And it carries
  * `noindex, follow` — which is what actually removes the page from an index, where
- * a 410 is a *request* to. The follow-up ticket is the one place a genuine 410 is
- * cheap: a platform-level rule in `vercel.json`, or the day Next exposes a `gone()`
- * interrupt with a prerenderable document.
+ * a 410 is a *request* to.
  */
 
 export type WithdrawnNoticeProps = {
