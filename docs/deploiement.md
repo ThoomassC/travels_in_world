@@ -304,8 +304,53 @@ prérendue.
 
 Le critère du ticket demandait 410 ; le README explique, mesures à l'appui, pourquoi
 un 410 réel coûterait une route non prérendue et pourquoi le `noindex` fait le vrai
-travail de déréférencement. Si un jour ce 410 devient indispensable, la voie la moins
-chère est une règle au niveau de la plateforme, pas une route Next.
+travail de déréférencement.
+
+### Le 410 par une règle de plateforme : ce que TIW-31 a cherché
+
+La question laissée ouverte était précise : **une règle dans `vercel.json` peut-elle
+rendre un 410 sans qu'aucune route ne devienne `ƒ` ?** Le schéma officiel, celui que
+la première ligne du fichier référence déjà, répond **oui**. Un objet de `routes`
+porte un `status` entier (100–999) qui ne dépend pas de `dest`, et la documentation en
+donne l'exemple nu : `{ "src": "/legacy", "status": 404 }`. Deux points changent par
+rapport à TIW-21 : `routes` cohabite désormais avec `headers` et `redirects` — la
+documentation l'écrit noir sur blanc, là où les deux s'excluaient — donc adopter la
+règle ne demanderait pas de réécrire les en-têtes de sécurité de ce fichier ; et une
+règle de `routes` est évaluée par la couche de routage avant toute fonction, donc elle
+laisse la colonne de `next build` intacte. Le piège est ailleurs, et il est réel :
+`redirects` accepte bien un `statusCode`, mais son `destination` est **obligatoire**
+au schéma — un 410 n'est pas une redirection, et un `Location` vide n'en fait pas une.
+
+Ce qui reste **non tranché, et ne peut l'être qu'une fois déployé** : la règle rend-elle
+le 410 _avec la page d'explication_, ou avec un corps vide ? Aucun document Vercel ne le
+dit. La seule lecture disponible est la réimplémentation du routeur dans `vercel dev`
+(`packages/cli/src/util/dev/router.ts`), où un `status` sans `continue` garde le chemin
+demandé comme destination, et où `continue: true` enregistre le statut puis poursuit le
+routage. Deux comportements plausibles, aucun garanti, et le proxy de production n'est
+pas ce code. La règle est prête pour le jour où quelqu'un peut la mesurer sur un
+déploiement. La fonction `normalizeRoutes()` du paquet `@vercel/routing-utils`, celui-là
+même qui compile ces règles, l'accepte et rend `error: null` — ce qui prouve sa forme,
+et rien de son effet :
+
+```json
+{ "src": "^/fr/voyages/<slug>/?$", "status": 410, "continue": true }
+```
+
+Elle n'est pas posée, pour trois raisons qui s'additionnent. Le registre `withdrawn`
+est vide, donc il n'y a aucune adresse sur laquelle l'essayer. **Rien dans ce dépôt
+n'exécute `vercel.json`** — ni `next build`, ni `next start`, ni Playwright — donc la
+règle serait de la configuration que rien ne garde, exactement ce que les quatre gardes
+exécutables du projet existent pour refuser ; et `vercel.json` étant du JSON statique
+qui ne peut pas lire `src/i18n/slug-history.ts`, la liste des slugs retirés vivrait à
+deux endroits libres de diverger en silence. Enfin, si le pari sur le corps est faux,
+le lecteur perd la page et ne garde que trois chiffres : c'est le mauvais côté du
+compromis, échangé à l'aveugle.
+
+Côté Next, la porte est fermée et l'était encore le 2026-09-01 sur `canary` : les
+statuts qu'un document prérendu sait porter sont un ensemble clos de trois — 404, 403,
+401 — et un Route Handler qui rend 410 sort du prérendu à la ligne
+`export/routes/app-route.js:95`. Le détail, avec les `fichier:ligne`, est dans
+`src/app/[locale]/voyages/[slug]/withdrawn-notice.tsx`.
 
 **Ce qu'il ne faut pas faire, dans les deux cas :** réutiliser un ancien slug pour un
 autre voyage. L'entrée du registre redirigerait alors les lecteurs de l'ancien récit

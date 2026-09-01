@@ -1,0 +1,65 @@
+/* =============================================================================
+   "À propos" — the colophon. One column of prose and a list of links.
+
+   Only tokens from `src/styles/tokens.css`, like every other module here, which
+   is what keeps the dark theme working without this file knowing it exists. The
+   page's own column, its vertical rhythm and its `<h1>`/`<h2>`/`<p>` colours all
+   come from the base rules in that file; what is below is the little this page
+   adds to them.
+   ============================================================================ */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* `--text-display-sm` and not `--text-display-md`: the display size belongs to
+   the home page, whose `<h1>` is the name of the site. Same step as the listing's
+   title, because this page sits at the same level. */
+.title {
+  font-size: var(--text-display-sm);
+}
+
+.intro {
+  color: var(--text-muted);
+  font-size: var(--text-md);
+  /* A measure, not a width — past ~70 characters a line loses its reader between
+     the end of one and the start of the next. Same value and same reason as the
+     home page's intro. */
+  max-width: 60ch;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sectionTitle {
+  font-size: var(--text-xl);
+}
+
+.lead {
+  max-width: 65ch;
+}
+
+/**
+ * The five claims about how the site is built. Native markers kept — see the note
+ * in `page.tsx` — so this only sets the indent and the rhythm. `--space-5` for the
+ * indent because the browser default (40 px) is not on this project's 4 px grid.
+ */
+.choices {
+  margin: 0;
+  padding-inline-start: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 65ch;
+}
+
+/* The one line that is a remark about the list above rather than part of it. */
+.aside {
+  color: var(--text-muted);
+  max-width: 65ch;
+}
