@@ -79,6 +79,14 @@
       "foot": "À pied"
     }
   },
+  "photos": {
+    "openFullSize": "voir en grand",
+    "viewerHeading": "Visionneuse de photos",
+    "position": "Photo {index} sur {total}",
+    "previous": "Photo précédente",
+    "next": "Photo suivante",
+    "close": "Fermer la visionneuse"
+  },
   "notFound": {
     "title": "Page introuvable",
     "description": "Cette adresse ne correspond à aucune page du carnet.",

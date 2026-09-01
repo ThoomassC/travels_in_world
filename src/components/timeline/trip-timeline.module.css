@@ -180,6 +180,21 @@
   font-size: var(--text-sm);
 }
 
+/**
+ * A step's photos. `.body` already spaces its children by `--space-2`, which is
+ * right between two lines of text and too tight between a date and a row of
+ * photographs; this adds the difference rather than widening the gap for
+ * everything else in the block.
+ *
+ * `min-width: 0` for the reason `.body` carries it: the grid inside must be
+ * allowed to shrink, or a photo's intrinsic width widens the row and the page
+ * scrolls sideways at 320 px.
+ */
+.photos {
+  margin-block-start: var(--space-2);
+  min-width: 0;
+}
+
 .transport {
   display: inline-flex;
   align-items: center;

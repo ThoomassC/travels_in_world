@@ -18,27 +18,6 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
 
-  /**
-   * `.next`, unless `TIW_DIST_DIR` says otherwise — and it only ever does for one
-   * caller.
-   *
-   * The Playwright suite needs **two** production builds: one of the repository as
-   * it really is, where `content/trips` is empty and the home page shows its empty
-   * state (asserted, deliberately, by TIW-20's specs), and one over a fixture trip
-   * that has photographs, which is the only way to exercise the viewer against a
-   * production build. Two builds sharing `.next` would clobber each other, and the
-   * second would leave the *fixture* build sitting there for the next
-   * `npm run test:build` to measure — a footgun with no warning on it.
-   *
-   * So the fixture build goes to `.next-photos`, and `.next` keeps meaning what it
-   * has always meant. Unset everywhere else, including on the platform: this is
-   * one line of configuration and no behaviour change for anything that does not
-   * set the variable. See `playwright.config.ts` for the two `webServer` entries
-   * and what the second build costs.
-   */
-  ...(process.env.TIW_DIST_DIR === undefined || process.env.TIW_DIST_DIR.trim() === ""
-    ? {}
-    : { distDir: process.env.TIW_DIST_DIR }),
 
   /**
    * The `/` → `/fr` redirect, and the ONLY thing standing in for the

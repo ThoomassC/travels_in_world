@@ -4,6 +4,9 @@ import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { findTrip, tripStaticParams } from "@/content/trips";
 import type { TripDetail } from "@/content/trips";
+import { unplacedPhotos, viewerPhotos } from "@/components/photos/collection";
+import { PhotoGallery } from "@/components/photos/photo-gallery";
+import { PhotoViewer } from "@/components/photos/photo-viewer";
 import { TripHeader } from "@/components/timeline/trip-header";
 import { TripMiniMap } from "@/components/timeline/trip-mini-map";
 import type { MiniMapMark } from "@/components/timeline/trip-mini-map";
@@ -33,6 +36,25 @@ import styles from "./page.module.css";
  * creates no ISR cache entry, and reads no file. Do not remove it.
  */
 export const dynamicParams = false;
+
+/**
+ * The gallery grid's `id`. Named here rather than inside `PhotoGallery`, which
+ * renders several times per page — one grid per stay that has photos — and cannot
+ * invent a unique one for each.
+ */
+const GALLERY_ID = "galerie-du-voyage";
+
+/**
+ * The rendered width of a gallery photo, told to the browser so it picks the
+ * right rung of the derivative ladder.
+ *
+ * Derived from the layout and not guessed: the reading column is `68ch` — ~34 rem
+ * at the default font size — and the grid's `minmax(min(100%, 14rem), 1fr)` fits
+ * two tracks of ~17 rem in it, gap included. Below that it collapses to one track
+ * the width of the column, which on a phone is the viewport less `main`'s 1.5 rem
+ * of padding on each side. 480 px covers 17 rem at 1×, 960 px at 2×.
+ */
+const GALLERY_SIZES = "(min-width: 37rem) 17rem, calc(100vw - 3rem)";
 
 type TripPageParams = { locale: string; slug: string };
 
@@ -178,14 +200,21 @@ export default async function TripPage({ params }: TripPageProps) {
         ];
   });
 
-  /**
-   * The gallery's photos: every declared photo except the cover, which the header
-   * has already shown. Derived once, here, so the section's emptiness test and
-   * its contents cannot disagree — a trip whose only photo *is* its cover has an
-   * empty gallery, and the section is omitted rather than left holding a repeat.
-   */
   const cover = coverOf(trip);
-  const galleryPhotos = trip.photos.filter((photo) => photo.src !== cover?.src);
+
+  /**
+   * The page's photos, shared out three ways by one derivation.
+   *
+   * `viewerPhotos` decides which photos the viewer holds — every declared photo
+   * except the cover, which the header has already shown — in which order, and
+   * stamps each with the index its `<a>` hands to the viewer. `unplacedPhotos`
+   * then takes the subset that belongs to the trip's own gallery: a photo naming
+   * a place is shown inside that place's step instead, by `timelineSteps`, which
+   * calls the same two functions on the same trip and therefore cannot number a
+   * photo differently. See `collection.ts` for why the numbering lives there.
+   */
+  const viewer = viewerPhotos(trip);
+  const galleryPhotos = unplacedPhotos(viewer);
 
   return (
     /*
@@ -240,53 +269,62 @@ export default async function TripPage({ params }: TripPageProps) {
         </section>
 
         {/*
-         * The gallery is the trip's own `photos[]`, which is where every photo
-         * this content model has lives — they are declared on the trip, not on a
-         * step, so there is no per-step gallery to render. The section is omitted
-         * rather than shown empty: "no photos yet" on a finished trip promises
-         * something nobody has undertaken to deliver. See the ticket report on
-         * what TIW-17 owns here.
+         * The trip's gallery: the photos attached to no place. One that names a
+         * place has already appeared inside that place's step above, which is
+         * where a reader following the itinerary meets it, and showing it again
+         * here would put the same image twice on one page.
+         *
+         * The section is omitted rather than shown empty: "no photos yet" on a
+         * finished trip promises something nobody has undertaken to deliver. A
+         * trip whose every photo is attached to a place — or whose only photo
+         * *is* its cover — has no gallery at all, and the timeline carries the
+         * pictures.
          *
          * **The cover is excluded, and it was not.** `TripSchema` requires
          * `coverPhotoSrc` to be one of `photos[]`, so iterating the array whole
          * rendered that image twice — measured in the served HTML: the same `src`
          * appeared at the top and again in the gallery, and a screen reader
          * announced the same `alt` twice with nothing to say the two were one
-         * photo. With the reference trip, which declares a single photo *as* its
-         * cover, the section held nothing but the image already shown above.
-         *
-         * Excluded rather than given `alt=""` in the header: the cover is an
-         * editorial choice about layout, and the reader who meets it there has
-         * met the photo. Repeating it under a "Photos" heading says the trip has
-         * one more than it does.
+         * photo. That exclusion now lives in `viewerPhotos`, so it holds for the
+         * timeline and the viewer too and not only here.
          */}
         {galleryPhotos.length > 0 ? (
           <section className={styles.section} aria-labelledby="photos-du-voyage">
             <h2 className={styles.sectionHeading} id="photos-du-voyage">
               {t("photosHeading")}
             </h2>
-            <ul className={styles.gallery} role="list">
-              {galleryPhotos.map((photo) => (
-                <li key={photo.src} className={styles.galleryItem}>
-                  {/* A plain `<img>` for the same reason as the cover: this page
-                      ships no JavaScript, and `next/image` is a client
-                      component. `width`/`height` are mandatory in the schema, so
-                      the box is reserved before the bytes arrive. */}
-                  <img
-                    className={styles.photo}
-                    src={photo.src}
-                    alt={photo.alt}
-                    width={photo.width}
-                    height={photo.height}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </li>
-              ))}
-            </ul>
+            <PhotoGallery id={GALLERY_ID} photos={galleryPhotos} sizes={GALLERY_SIZES} />
           </section>
         ) : null}
       </article>
+
+      {/*
+       * The viewer: ONE per page, holding every photo of the trip, mounted after
+       * the article because a modal is interface and not part of the composition
+       * an `<article>` promises to be syndicatable on its own.
+       *
+       * One per page and not one per gallery, and the reason is the reader's:
+       * with a viewer per grid, the arrows would stop at the edge of whichever
+       * step or gallery the photo happened to be filed under, and « photo 2 sur
+       * 2 » would be said of a trip with eleven photographs. One viewer walks the
+       * trip. It is also one `<dialog>` in the top layer, one delegated listener
+       * and one piece of state instead of N of each.
+       *
+       * `scopeId` is the `<main>` and not the gallery, because the triggers are in
+       * two places — the timeline's stays and the gallery. `data-photo-index` is
+       * what selects them, so nothing else on the page is intercepted.
+       *
+       * Through `PhotoViewer`, the server shell that reads the catalogue and hands
+       * the client component six plain strings. Measured, and the reason that
+       * shell exists: calling `useTranslations` inside the client component put
+       * next-intl's client `IntlProvider` into the shared chunk of every
+       * `[locale]` route — 1.8 KB brotli on `/fr`, which has no viewer on it.
+       *
+       * Omitted entirely when the trip has no photo: the viewer would render an
+       * empty `<dialog>` nothing can ever open, and its JavaScript would be
+       * fetched for it.
+       */}
+      {viewer.length > 0 ? <PhotoViewer photos={viewer} scopeId={MAIN_CONTENT_ID} /> : null}
     </main>
   );
 }
