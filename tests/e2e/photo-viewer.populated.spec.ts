@@ -8,11 +8,19 @@ import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
  * The photo viewer, against a production build — which is the only place its
  * behaviour exists.
  *
- * **Why this file is `*.photos.spec.ts`.** It runs against the *second* server
- * `playwright.config.ts` declares, built over `tests/fixtures/e2e/photos`, because
- * the repository's own `content/trips` is empty until TIW-24 and `routing.spec.ts`
- * asserts that emptiness on purpose. The config explains the split and what the
- * second build costs.
+ * **Why this file is `*.populated.spec.ts`.** It runs under
+ * `playwright.content.config.ts`, the second run TIW-15 added, which serves a build
+ * of `tests/fixtures/content/home-map` instead of the repository's own (empty)
+ * `content/trips`. The viewer can only be exercised on a trip page that *has*
+ * photographs, and `routing.spec.ts` asserts the empty state of `/fr` on purpose
+ * because that is what production serves today.
+ *
+ * Reusing that run rather than adding a third build is the whole reason
+ * `japon-2024` gained four photographs: the fixture is already served by a build
+ * the suite pays for. TIW-15 had written "no photos, deliberately" in its README
+ * and the reason was `TripCard`'s substitute cover — so three of the four trips
+ * still have none, and both branches of that card are now exercised where before
+ * only one was. The README carries the amended reasoning.
  *
  * **What the unit suite cannot see, which is why every case below is here.** jsdom
  * implements `<dialog>` as an ordinary element: no `showModal`, no top layer, no
@@ -21,10 +29,10 @@ import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
  * a browser, and a green component test proves none of them.
  *
  * **One thing this cannot prove, stated rather than left to be discovered.**
- * `next start` serves the repository's own `public/`, not the fixture's, so the
- * photographs 404 here: every element, every box, every interaction is real, and
- * the decoding of an AVIF is not. That is asserted where it can be, against the
- * real encoder, in `tests/content/photo-files.test.ts`.
+ * `next start` serves the repository's own `public/`, not the fixture's, and no
+ * configuration moves it — so the photographs 404 here. Every element, every box
+ * and every interaction is real; the decoding of an AVIF is not. That is asserted
+ * where it can be, against the real encoder, in `tests/content/photo-files.test.ts`.
  */
 
 const TRIP = "/fr/voyages/japon-2024";

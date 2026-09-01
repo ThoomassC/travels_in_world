@@ -40,6 +40,23 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
  */
 const CONTENT_DIR = "tests/fixtures/content/home-map/trips";
 
+/**
+ * The fixture's own `public/`, which only `validate:content` reads — and it has to
+ * be given, since TIW-17, or the build fails before it starts.
+ *
+ * npm's `prebuild` hook runs `validate:content` before every `next build`. Without
+ * this variable it would validate against the repository's `public/`, where the
+ * fixture's photographs are not — so the hook would refuse the trip for a missing
+ * file while the build read it happily, and the whole config would stop at a
+ * message about a photo nobody had moved.
+ *
+ * `next start` never reads it: it serves the repository's own `public/`, and no
+ * configuration moves that. So the photographs 404 in the browser here, which
+ * `photo-viewer.populated.spec.ts` states at the top and works within — every
+ * element, box and interaction is real, and only the decoding of an AVIF is not.
+ */
+const PUBLIC_DIR = "tests/fixtures/content/home-map/public";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   /** The mirror of the `testIgnore` in `playwright.config.ts`: these specs only. */
@@ -62,7 +79,7 @@ export default defineConfig({
      * mysteriously green.
      */
     command:
-      `TIW_CONTENT_DIR=${CONTENT_DIR} npm run build && ` +
+      `TIW_CONTENT_DIR=${CONTENT_DIR} TIW_PUBLIC_DIR=${PUBLIC_DIR} npm run build && ` +
       `TIW_CONTENT_DIR=${CONTENT_DIR} npm run start -- --port ${PORT}`,
     url: BASE_URL,
     /** Same reason as the other config: attaching to a stranger costs the point. */
