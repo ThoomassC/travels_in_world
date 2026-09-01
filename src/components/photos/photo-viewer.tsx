@@ -11,19 +11,18 @@ import { PhotoLightbox } from "./photo-lightbox";
  * obvious shape was to call `useTranslations("photos")` inside `PhotoLightbox`
  * itself — next-intl's hook works in a client component, the provider is already
  * in the `[locale]` layout, and the runtime looks like something the route
- * already carries. It is not. Measured on a real production build (Next 16.3.1,
- * next-intl 4.13.7) of a trip with three photos, the same viewer rendered
- * identically both ways:
+ * already carries. It is not. Measured on two production builds of the same
+ * content (Next 16.3.1, next-intl 4.13.7, the `home-map` fixture), the same viewer
+ * rendered identically both ways — re-measured after TIW-14 merged, since a
+ * before/after across two different socles compares nothing:
  *
- *     labels from `useTranslations` in the client component
- *       /fr                       121.7 KB brotli, 7 chunks
- *       /fr/voyages/japon-2024    123.3 KB brotli, 8 chunks
+ *                                 labels from the hook     labels as props
+ *     /fr                         125.0 KB / 8 chunks      123.2 KB / 7
+ *     /fr/voyages                 121.8 KB / 7             120.0 KB / 6
+ *     /fr/voyages/japon-2024      123.4 KB / 8             121.5 KB / 7
  *
- *     labels passed in as props (this file)
- *       /fr                       119.9 KB brotli, 6 chunks
- *       /fr/voyages/japon-2024    121.4 KB brotli, 7 chunks
- *
- * **1.8 KB and one chunk, on `/fr`, for a page that renders no viewer at all.**
+ * **1.8 KB and one whole chunk on EVERY route of the site**, including the two
+ * that render no viewer at all.
  * The extra chunk is next-intl's client `IntlProvider`, and the growth in the
  * shared one is `useTranslations` with the slice of `MessageFormat` and the
  * formatters it needs. The cause is the same shape as TIW-28's: the `[locale]`
@@ -34,7 +33,11 @@ import { PhotoLightbox } from "./photo-lightbox";
  *
  * That is exactly the defect `docs/adr/0005-getpathname-sans-le-link-client.md`
  * refuses, at half the size: bytes shipped to a page for a feature it does not
- * have. So the hook stays on the server side of the frontier, and what crosses is
+ * have. TIW-14 hit the identical wall in the same week and resolved it the same
+ * way — 1.9 KB on `/fr` and 1.8 KB with a whole chunk on a route carrying no map.
+ * Two tickets, one cause, so the shape is worth naming rather than rediscovering:
+ * the first client consumer of `useTranslations` under the `[locale]` layout pays
+ * for every route beneath it. So the hook stays on the server side of the frontier, and what crosses is
  * six strings.
  *
  * The message keys stay in this folder rather than moving into the page: there is
