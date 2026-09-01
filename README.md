@@ -230,8 +230,15 @@ l'image étant rendue à la demande, elle sort de la frontière de publication q
 `draft: true` : `/fr/voyages/<brouillon>` répond **404** et
 `/fr/voyages/<brouillon>/opengraph-image` répond **200** avec un PNG de 20,6 Ko portant son
 titre. Ajouter `dynamicParams = false` sur la route d'image ne corrige rien : elle répond
-alors **404 pour tous les slugs**, publiés compris. Un voyage sans photo obtient donc une
-carte avec titre et description sans image, et `twitter:card` retombe sur `summary`.
+alors **404 pour tous les slugs**, publiés compris.
+
+Ce paragraphe a affirmé jusqu'ici qu'un voyage sans photo obtenait « une carte avec titre et
+description sans image, et `twitter:card` retombe sur `summary` ». C'était vrai quand TIW-21
+l'a écrit et faux depuis TIW-23 : la marque sert d'image de repli pour toute page qui n'a
+rien de mieux à montrer, la branche `summary` a été supprimée plutôt que laissée en code
+mort, et `tests/app/share.test.ts` l'atteste. Un voyage sans photo obtient donc une **grande
+carte portant la marque du site** — jamais le rectangle gris vide qu'un
+`summary_large_image` sans image produit.
 
 **`sitemap.xml` et `robots.txt` sont des Route Handlers prérendus** (`○` dans la colonne de
 build, un `.body` sur le disque). Le sitemap ne liste que les voyages **publiés**, et ce

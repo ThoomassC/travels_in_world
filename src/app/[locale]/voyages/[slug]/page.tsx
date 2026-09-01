@@ -172,12 +172,18 @@ function coverOf(trip: TripDetail) {
  *    does not fix it: measured, it then answers **404 for every slug**, published
  *    ones included.
  *
- * So the simple path, written down as the ticket asked. A trip with no photograph
- * gets a card with a title and a description and no picture, which is honest;
- * `twitter.card` drops to `summary` for it rather than asking a platform to draw a
- * large empty rectangle (see `src/app/share.ts`). The follow-up worth a ticket is a
- * build-time rasteriser writing real files into `public/`, which is the only shape
- * that gives a per-trip image AND keeps every route prerendered.
+ * So the simple path, written down as the ticket asked. Returning `undefined` here
+ * does NOT mean the card has no picture — and this comment claimed it did for two
+ * tickets. TIW-21 wrote it when a trip without a photograph really did get a card
+ * with no image and a `twitter.card` dropped to `summary`; TIW-23 then gave the site
+ * a brand image and `shareMetadata` falls back to it, so the `summary` branch was
+ * deleted rather than left as dead code (`tests/app/share.test.ts`, "the Twitter
+ * card"). What `undefined` means today is "this page has nothing of its own to
+ * show" — see `SITE_SHARE_IMAGE` in `src/app/share.ts` for what answers instead.
+ *
+ * The follow-up worth a ticket is unchanged: a build-time rasteriser writing real
+ * files into `public/`, which is the only shape that gives a per-trip image AND
+ * keeps every route prerendered.
  */
 function shareImageOf(trip: TripDetail) {
   const photo = coverOf(trip) ?? trip.photos[0];
