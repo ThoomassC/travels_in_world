@@ -171,6 +171,21 @@ fichier à y mettre.
 convention que personne n'a écrite, et le prochain module « transverse » ira
 naturellement s'y poser sans que rien ne le lui refuse.
 
+> **Note (TIW-33, 2026-09-01).** Ce qui était annoncé est arrivé, et vite : le
+> prochain module transverse s'y est posé au ticket suivant. `src/` porte
+> maintenant **deux** fichiers à sa racine — `iso-3166.ts` et
+> `basemap-coverage.ts` (TIW-30, généré), dont la décision est écrite dans
+> `docs/adr/0015-un-artefact-genere-traverse-une-frontiere.md`. C'est la même
+> décision prise deux fois, pour le même motif mesuré : une façade gardée ne peut
+> jamais servir un script Node.
+>
+> **Le compteur : deux sur trois.** Le signal 4 ci-dessous pose qu'« à un
+> fichier, c'est une exception ; à trois, c'est un dossier qu'on n'a pas nommé ».
+> Il reste donc **un** fichier de marge, et `AGENTS.md` porte l'avertissement en
+> clair sous le titre « Attention au troisième ». Le prochain module transverse ne
+> se pose pas à la racine de `src/` sans que la question du dossier soit tranchée
+> — ce qu'il garde, et ce qui a le droit de l'atteindre.
+
 **Rien n'interdit à un composant `'use client'` d'importer la table.** Aucun ne
 le fait aujourd'hui — vérifié : ses seuls consommateurs de production sont
 `src/content/validate.ts`, `src/map/dataset.ts` et `src/map/world.ts`. Mais
@@ -179,6 +194,17 @@ bruts partiraient dans un bundle client sans qu'aucune règle ne morde, et le
 budget de 150 Ko de l'ADR 0009 ne les verrait pas non plus — c'est un budget,
 il attrape ce qui est gros. Résidu assumé, écrit ici plutôt que découvert plus
 tard.
+
+> **Correction (TIW-33, 2026-09-01).** La liste de consommateurs ci-dessus est
+> fausse sur un point et incomplète sur un autre. `src/map/dataset.ts`
+> **n'importe pas** la table — il ne la nomme que dans un commentaire, et c'était
+> déjà vrai au commit où ce paragraphe a été écrit (`dac0c68`, vérifié). Et il
+> faut y ajouter `scripts/generate-basemap-coverage.ts` (TIW-30), qui importe
+> `NUMERIC_BY_ALPHA2` pour joindre les identifiants numériques du dataset aux
+> alpha-2. Relevé du jour : les consommateurs sont `src/content/validate.ts`,
+> `src/map/world.ts` et ce script. Le fond du paragraphe ne bouge pas — aucun
+> composant `'use client'` ne l'importe, et rien ne le lui interdirait — mais un
+> décompte se recompte plutôt qu'il ne se relit.
 
 **Deux transcriptions des 249 codes subsistent** — `src/iso-3166.ts` et
 `src/domain/continent.ts` — tenues en phase par un test et non par le typage. Le
