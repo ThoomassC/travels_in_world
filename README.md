@@ -443,6 +443,17 @@ React Query, bibliothèque de formulaires, Tailwind, bibliothèque d'icônes Rea
 composants client). Avec des Server Components et un contenu
 versionné, il n'y a ni état client à partager ni données à aller chercher.
 
+**Les liens de la page « À propos » vivent dans un seul fichier**, et trois y sont
+volontairement vides : `src/app/[locale]/a-propos/identity.ts`. Le portfolio, le compte
+Instagram et l'adresse de contact appartiennent à l'auteur et n'ont pas été inventés. Un
+lien absent n'est **pas rendu du tout** — jamais de `href="#"`, jamais de « lien à venir » —
+et un lien renseigné de travers **fait échouer le build**, avec la clé et la valeur dans le
+message, comme `src/app/site-url.ts` le fait pour l'origine du site. Pour en remplir un :
+remplacer le `null` par la valeur dans la forme que le commentaire du champ donne, puis
+`npm test`. Rien d'autre ne change dans le code. Deux tests passeront au rouge, et c'est
+voulu : ils sont écrits pour rendre ce remplissage visible dans un diff
+(`tests/app/identity-links.test.tsx`, `tests/e2e/about.spec.ts`).
+
 **`AGENTS.md` / `CLAUDE.md`.** Générés et réécrits par `next dev` (Next 16). Ils sont
 committés volontairement : les supprimer ne fait que salir l'arbre au prochain `next dev`.
 Pour s'en passer, `agentRules: false` dans `next.config.ts`.

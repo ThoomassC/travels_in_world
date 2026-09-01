@@ -129,16 +129,21 @@ describe("the header carries both the brand and the nav", () => {
 
     /**
      * A logo that is also the way home is not a navigation *entry*. Inside the
-     * `<ul>` it would make a screen reader announce three items and offer a third
-     * destination that is the same page as the first — "Carte" is `/fr` too. So
-     * the landmark stays a two-entry menu.
+     * `<ul>` it would make a screen reader announce one item more than there are
+     * destinations, and offer one that is the same page as the first — "Carte" is
+     * `/fr` too. So the landmark stays the list of the site's sections and nothing
+     * else.
      *
      * This is the assertion that goes red if someone "tidies up" by moving the
      * lock-up into the list, which renders identically to the eye.
+     *
+     * Three since TIW-25 added "À propos" — and the count is spelled out rather
+     * than loosened to `toBeGreaterThan`, because "one item too many" is exactly
+     * the failure being guarded.
      */
     const nav = screen.getByRole("navigation");
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
     expect(nav).not.toContainElement(
       screen.getByRole("link", { name: /^Travels in World\s*, retour/ })
     );
@@ -156,5 +161,22 @@ describe("the header carries both the brand and the nav", () => {
       .filter((link) => link.getAttribute("href") === `/${defaultLocale}`);
 
     expect(home).toHaveLength(2);
+  });
+
+  it("carries the colophon on every page, because the layout renders this nav", () => {
+    renderBrand(<SiteNav locale={defaultLocale} />);
+
+    /**
+     * TIW-25's "accessible depuis la navigation principale, sur toutes les pages".
+     * The "sur toutes les pages" half is structural — `SiteNav` is rendered by
+     * `src/app/[locale]/layout.tsx`, so every route under `[locale]` carries it —
+     * and `tests/e2e/about.spec.ts` checks it on the served routes. What is pinned
+     * here is the entry itself, locale-prefixed: a bare `/a-propos` would take a
+     * 307 through `next.config.ts` on every click from every page of the site.
+     */
+    expect(screen.getByRole("link", { name: frMessages.trips.navAbout })).toHaveAttribute(
+      "href",
+      `/${defaultLocale}/a-propos`
+    );
   });
 });

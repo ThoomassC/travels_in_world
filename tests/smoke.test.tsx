@@ -65,9 +65,10 @@ describe("toolchain smoke", () => {
 
   it("has a namespace for every part of the site that reads one", () => {
     expect(Object.keys(frMessages)).toEqual(
-      expect.arrayContaining(["metadata", "home", "trips", "map", "notFound"])
+      expect.arrayContaining(["metadata", "home", "trips", "map", "notFound", "about"])
     );
     expect(frMessages.home.intro).not.toBe("");
     expect(frMessages.trips.allHeading).not.toBe("");
+    expect(frMessages.about.heading).not.toBe("");
   });
 });

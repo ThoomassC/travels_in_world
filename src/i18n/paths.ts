@@ -47,3 +47,24 @@ export function tripPath(slug: string): string {
 export function tripsPath(): string {
   return `/${TRIP_SEGMENT}`;
 }
+
+/**
+ * The colophon — who made this site and how — and the third entry of the main
+ * navigation (TIW-25).
+ *
+ * French, and deliberately not `/about`: same reason as `TRIP_SEGMENT` above, this
+ * string is what a visitor reads and what a crawler indexes, and the site is
+ * French. It has no segment constant of its own because nothing else composes it —
+ * `tripPath` and `tripsPath` share `TRIP_SEGMENT` because they address an item and
+ * its collection; this page is one address.
+ *
+ * WHAT KEEPS IT AGREEING WITH THE FOLDER NAME, since a mismatch here is a 404 that
+ * nothing in `src/` would notice: `tests/build/durable-urls.test.ts` reads every
+ * prerendered document and compares its canonical with its own URL. The page builds
+ * its canonical from this function, so a value that stopped matching
+ * `src/app/[locale]/a-propos/` would make that suite red rather than ship a
+ * navigation entry pointing at nothing.
+ */
+export function aboutPath(): string {
+  return "/a-propos";
+}
