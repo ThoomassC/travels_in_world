@@ -20,17 +20,22 @@ dans l'ordre où elles ont été **consignées**.
 | [0011](0011-la-table-iso-hors-des-facades.md)             | La table ISO 3166-1 vit à la racine de `src/`, hors de toute façade       | TIW-29           |
 | [0012](0012-deux-renoncements-du-prerendu.md)             | Le prérendu se paie en deux renoncements : le 410 et l'image par voyage   | TIW-21           |
 | [0013](0013-la-marque-est-faite-de-fichiers-committes.md) | La marque est faite de fichiers committés, et on en vérifie les octets    | TIW-23           |
+| [0014](0014-les-derivees-d-images-sont-versionnees.md)    | Les dérivées d'images sont versionnées, pas construites                   | TIW-17           |
+| [0015](0015-un-artefact-genere-traverse-une-frontiere.md) | Un artefact généré traverse une frontière qu'un import ne peut pas        | TIW-30           |
 
 Les ADR 0006 à 0010 ont été écrites **après coup**, par TIW-27, pour des
 décisions déjà prises et déjà appliquées. Leur en-tête le dit, et le ticket
 d'origine ci-dessus est celui de la décision, pas celui de sa rédaction. Les ADR
 0011 à 0013 le sont aussi, par TIW-32, pour les décisions de TIW-21, TIW-23 et
 TIW-29 — dont les auteurs avaient chacun signalé qu'elles méritaient une ADR
-hors de leur périmètre.
+hors de leur périmètre. Les ADR 0014 et 0015 le sont par TIW-33, pour deux
+décisions du même jour — TIW-17 et TIW-30 — dont chacune a été prise dans le
+code et dans un commentaire, et nulle part dans un document qu'on relit avant de
+la défaire.
 
 ## Ce qu'une ADR contient ici
 
-La forme n'est pas un gabarit imposé, c'est ce que les treize documents ont en
+La forme n'est pas un gabarit imposé, c'est ce que les quinze documents ont en
 commun :
 
 - **le contexte réel**, pas une généralité — l'état du code, le ticket, la mesure
@@ -67,10 +72,25 @@ n'apprend rien ; une décision qui rencontre le signal qu'elle avait elle-même
 nommé, et qui tient, dit exactement ce qui la rendait solide — ici, que le dessin
 traverse la frontière client en `children` déjà rendus.
 
+L'ADR 0002 en porte désormais une de la même espèce, datée de TIW-33 : son
+troisième signal d'invalidation s'est produit, la frontière n'a pas bougé, et la
+moitié instructive est que le signal désignait le mauvais consommateur. Une
+prédiction qui se réalise **de travers** enseigne davantage qu'une prédiction
+juste — c'est pourquoi ces notes disent toujours ce que le signal annonçait de
+faux.
+
 > **Correction (TIW-32).** Ce paragraphe disait « les ADR 0003 et 0004 en portent
 > deux chacune ». C'était faux au moment où il a été écrit : l'ADR 0003 n'en
 > portait alors **aucune**, et les deux du couple étaient 0002 et 0004. Compté
 > plutôt que relu.
+
+> **Correction (TIW-33, 2026-09-01).** Le compte a de nouveau bougé, et cette
+> phrase ne dit plus la vérité non plus. Recompté sur le dossier — en incluant
+> les notes indentées dans une liste, que le premier comptage avait manquées :
+> **0002 en porte trois**, 0003 deux, 0004 deux, 0011 deux et 0009 une. Cinq ADR
+> sur quinze, dix notes en tout. Le constat qu'appelle la troisième reprise de
+> ce paragraphe : un compte écrit en prose se périme à chaque ticket, et il n'y a
+> ici rien qui l'exécute. Le laisser comme repère de lecture, pas comme un fait.
 
 Une décision entièrement remplacée garde son fichier et gagne un renvoi ; la
 nouvelle porte un champ **Remplace**. C'est le cas de 0003 → 0005.
@@ -81,7 +101,7 @@ qui empêche de refaire l'erreur.
 
 ## Écrire la suivante
 
-Numéro suivant : **0014**. Nom de fichier en minuscules sans accent,
+Numéro suivant : **0016**. Nom de fichier en minuscules sans accent,
 `NNNN-titre-court.md`. En-tête :
 
 ```markdown
