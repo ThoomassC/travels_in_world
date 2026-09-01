@@ -1,3 +1,4 @@
+import { tripsPath } from "./paths";
 import type { Locale } from "./routing";
 import { routing } from "./routing";
 
@@ -133,4 +134,19 @@ export function localePathname({ href, locale }: { href: string; locale: Locale 
  */
 export function homePathname(): string {
   return localePathname({ href: "/", locale: routing.defaultLocale });
+}
+
+/**
+ * The 404's second way out — the full listing — resolved the same way and for the
+ * same reason as {@link homePathname}.
+ *
+ * The acceptance criterion of TIW-21 asks the 404 for a link to the map **and** one
+ * to the list, which is the difference between a reader who knows what they were
+ * looking for and one who does not. A named export rather than the expression
+ * inline, for the reason above it: the hardcoded default locale is a known
+ * limitation of having one global 404, and both of its occurrences are greppable
+ * here instead of scattered over a page that must not read anything ambient.
+ */
+export function tripsPathname(): string {
+  return localePathname({ href: tripsPath(), locale: routing.defaultLocale });
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { findTrip, tripStaticParams } from "@/content/trips";
+import { findTrip, listTripSummaries, tripStaticParams } from "@/content/trips";
 import type { TripDetail } from "@/content/trips";
 import { unplacedPhotos, viewerPhotos } from "@/components/photos/collection";
 import { PhotoGallery } from "@/components/photos/photo-gallery";
@@ -15,11 +15,14 @@ import { timelineSteps } from "@/components/timeline/steps";
 import { tripWordCount } from "@/components/timeline/reading";
 import { estimateReadingMinutes, visitedPlaces } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
-import { tripsPath } from "@/i18n/paths";
+import { tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
+import { readSlugHistory } from "@/i18n/slug-history";
 import { buildWorldGeometry, projectPoint } from "@/map";
+import { shareMetadata } from "../../../share";
 import { MAIN_CONTENT_ID } from "../../main-content";
+import { WithdrawnNotice } from "./withdrawn-notice";
 import styles from "./page.module.css";
 
 /**
@@ -38,7 +41,19 @@ import styles from "./page.module.css";
 export const dynamicParams = false;
 
 /**
- * The gallery grid's `id`. Named here rather than inside `PhotoGallery`, which
+ * The addresses of trips taken offline on purpose, read **once at module load** —
+ * which is build time on this route.
+ *
+ * They are prerendered like any other slug rather than left to 404, and
+ * `dynamicParams = false` above is what makes that a closed set: an address that is
+ * neither published nor withdrawn is still an immediate 404 with no file read. See
+ * `./withdrawn-notice.tsx` for what is served, and for the measured reason it
+ * answers 200 where the criterion asks for 410.
+ */
+const withdrawnSlugs: ReadonlySet<string> = new Set(readSlugHistory(process.env).withdrawn);
+
+/**
+* The gallery grid's `id`. Named here rather than inside `PhotoGallery`, which
  * renders several times per page — one grid per stay that has photos — and cannot
  * invent a unique one for each.
  */
@@ -69,7 +84,27 @@ type TripPageProps = {
  * by the number of locales twice over.
  */
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
-  return [...(await tripStaticParams())];
+  const published = await tripStaticParams();
+
+  /**
+   * A slug cannot be published and withdrawn at once, and the build says so
+   * instead of picking one. Both branches below would then be reachable for one
+   * URL, and which of them rendered would depend on the order of two `if`s — a
+   * withdrawn notice served over a live story, or the reverse, with nothing failing.
+   *
+   * The register cannot check this on its own: `src/i18n/slug-history.ts` is loaded
+   * by `next.config.ts` and knows nothing about the content. This is the first place
+   * that holds both, so it is the place that refuses.
+   */
+  for (const { slug } of published) {
+    if (withdrawnSlugs.has(slug)) {
+      throw new Error(
+        `Le slug « ${slug} » est déclaré retiré dans src/i18n/slug-history.ts alors qu'un voyage publié le porte : supprime l'entrée « withdrawn » ou dépublie le voyage.`
+      );
+    }
+  }
+
+  return [...published, ...[...withdrawnSlugs].map((slug) => ({ slug }))];
 }
 
 /**
@@ -127,7 +162,63 @@ function coverOf(trip: TripDetail) {
   return trip.photos.find((photo) => photo.src === trip.coverPhotoSrc) ?? null;
 }
 
-async function loadTrip(params: Promise<TripPageParams>) {
+/**
+ * The picture a messaging app shows when this URL is pasted: the declared cover,
+ * the first photo if no cover was chosen, and nothing at all if the trip has no
+ * photo yet.
+ *
+ * **WHY IT IS A PHOTO AND NOT AN IMAGE GENERATED FROM THE TITLE, THE COUNTRIES AND
+ * THE DATES.** The generated image is the robust answer on paper — it works for a
+ * trip with no photograph, and it is what the acceptance criterion offers as the
+ * alternative. It was built and measured on this branch (Next 16.3.1), as an
+ * `opengraph-image.tsx` under this very segment, and it was refused for three
+ * findings, in increasing order of seriousness:
+ *
+ * 1. Without its own `generateStaticParams`, the route builds as
+ *    `ƒ /[locale]/voyages/[slug]/opengraph-image` — a server function per shared
+ *    link, which invariant 1 refuses.
+ * 2. WITH `generateStaticParams` the build column says `●` — and the column is
+ *    wrong. No PNG is written under `.next/server/app`, no `.body`/`.meta` pair
+ *    exists for any slug, and `prerender-manifest.json` lists the route under
+ *    `dynamicRoutes` with `fallback: null` and **not one** of the concrete images
+ *    under `routes`. So the image is generated on demand and cached, and
+ *    `npm run test:build` — which derives its route list from `routes` — never
+ *    weighs it either. The one guard the project has is blind to it precisely
+ *    because the human-readable column looks fine.
+ * 3. And the leak that settles it. Because the image is rendered on demand, it is
+ *    outside the publication frontier `dynamicParams = false` closes on this page.
+ *    Measured against `next start` with a `draft: true` trip present:
+ *    `/fr/voyages/<draft>` answers **404** while
+ *    `/fr/voyages/<draft>/opengraph-image` answers **200** with a 20.6 KB PNG
+ *    carrying that trip's title. Adding `dynamicParams = false` to the image route
+ *    does not fix it: measured, it then answers **404 for every slug**, published
+ *    ones included.
+ *
+ * So the simple path, written down as the ticket asked. A trip with no photograph
+ * gets a card with a title and a description and no picture, which is honest;
+ * `twitter.card` drops to `summary` for it rather than asking a platform to draw a
+ * large empty rectangle (see `src/app/share.ts`). The follow-up worth a ticket is a
+ * build-time rasteriser writing real files into `public/`, which is the only shape
+ * that gives a per-trip image AND keeps every route prerendered.
+ */
+function shareImageOf(trip: TripDetail) {
+  const photo = coverOf(trip) ?? trip.photos[0];
+  if (photo === undefined) {
+    return undefined;
+  }
+
+  return { url: photo.src, alt: photo.alt, width: photo.width, height: photo.height };
+}
+
+/**
+ * The two states this route has, as one value rather than two code paths that each
+ * remember to check the locale and set the request locale.
+ */
+type TripPageState =
+  | { readonly kind: "published"; readonly locale: Locale; readonly trip: TripDetail }
+  | { readonly kind: "withdrawn"; readonly locale: Locale; readonly slug: string };
+
+async function loadTrip(params: Promise<TripPageParams>): Promise<TripPageState> {
   const { locale, slug } = await params;
 
   if (!hasLocale(routing.locales, locale)) {
@@ -136,20 +227,62 @@ async function loadTrip(params: Promise<TripPageParams>) {
 
   setRequestLocale(locale);
 
+  /**
+   * The register is consulted BEFORE the content, and the order is the whole
+   * behaviour: a withdrawn trip has no `trip.yaml` left, so `findTrip` answers
+   * `undefined` and the 404 below would fire — turning a deliberate withdrawal back
+   * into "this address is wrong". `generateStaticParams` has already refused the
+   * case where both could answer.
+   */
+  if (withdrawnSlugs.has(slug)) {
+    return { kind: "withdrawn", locale, slug };
+  }
+
   const trip = await findTrip(slug);
   if (trip === undefined) {
     notFound();
   }
 
-  return { locale, trip };
+  return { kind: "published", locale, trip };
 }
 
 export async function generateMetadata({ params }: TripPageProps): Promise<Metadata> {
-  const { locale, trip } = await loadTrip(params);
+  const state = await loadTrip(params);
+  const { locale } = state;
+  const site = await getTranslations({ locale, namespace: "metadata" });
+
+  if (state.kind === "withdrawn") {
+    const gone = await getTranslations({ locale, namespace: "withdrawn" });
+
+    /**
+     * `indexable: false` — `noindex, follow`. It is the request a 410 would make,
+     * expressed in the one channel a prerendered document has: the story is gone,
+     * the links out of the page are not. See `./withdrawn-notice.tsx`.
+     */
+    return shareMetadata({
+      locale,
+      path: localePathname({ href: tripPath(state.slug), locale }),
+      title: gone("metaTitle"),
+      description: gone("metaDescription"),
+      siteName: site("title"),
+      type: "website",
+      indexable: false,
+    });
+  }
+
+  const { trip } = state;
   const t = await getTranslations({ locale, namespace: "trip" });
   const list = new Intl.ListFormat(locale, { style: "long", type: "conjunction" });
 
-  return {
+  return shareMetadata({
+    locale,
+    /**
+     * The canonical is built from `tripPath(trip.slug)` — the slug the trip is
+     * published under — and never from the slug in the URL. They are the same
+     * string today, and that is the point of stating it: the day the two can
+     * differ, this line is what keeps one address canonical instead of two.
+     */
+    path: localePathname({ href: tripPath(trip.slug), locale }),
     title: trip.title,
     description: t("metaDescription", {
       title: trip.title,
@@ -159,11 +292,39 @@ export async function generateMetadata({ params }: TripPageProps): Promise<Metad
       }),
       cities: list.format(visitedPlaces(trip).map((place) => place.name)),
     }),
-  };
+    siteName: site("title"),
+    /**
+     * `"article"`, unlike the map and the listing: a trip has a subject, a date and
+     * an author, which is what makes an unfurled card say "a story" rather than "a
+     * site". The two index pages stay `"website"`.
+     */
+    type: "article",
+    image: shareImageOf(trip),
+  });
 }
 
 export default async function TripPage({ params }: TripPageProps) {
-  const { locale, trip } = await loadTrip(params);
+  const state = await loadTrip(params);
+
+  /**
+   * The withdrawn branch returns early, and it renders its own `<main>` with the
+   * same `id` and the same `tabIndex={-1}` as every other page of the site — the
+   * layout's skip link targets `#contenu` on every route, and a page without the
+   * target sends it nowhere. `tests/e2e/durable-urls.spec.ts` asserts it here too,
+   * for the reason `routing.spec.ts` gives: the `id` belongs to the page, so it is
+   * exactly the kind of thing that ships on one route and not on the next.
+   */
+  if (state.kind === "withdrawn") {
+    const trips = await listTripSummaries();
+
+    return (
+      <main id={MAIN_CONTENT_ID} tabIndex={-1} className={styles.page}>
+        <WithdrawnNotice locale={state.locale} trips={trips} />
+      </main>
+    );
+  }
+
+  const { locale, trip } = state;
   const t = await getTranslations({ locale, namespace: "trip" });
 
   /**

@@ -1,0 +1,131 @@
+/* =============================================================================
+   The header lock-up — no colour of its own, like every module here.
+
+   It reads FOUR tokens and no literal: `--logo-ink`, `--logo-accent`,
+   `--accent-quiet` and the spacing scale. The first two are the contract
+   `src/styles/tokens.css` declares for exactly this file: they are redeclared in
+   all three theme states, so a visitor in dark mode gets the light ink and the
+   bright accent without this file knowing that dark mode exists — and a page can
+   override either one locally without a fork of the component.
+   ============================================================================ */
+
+/**
+ * The whole lock-up is one link, and it is the site's way home from every page.
+ *
+ * `min-block-size: 2.75rem` = 44 px at the root size, the WCAG 2.2 target size
+ * (minimum), in `rem` so it grows with a reader's larger default. Same value and
+ * same reason as `.link` in `./site-nav.module.css` and `.skip` in the layout's
+ * module — three targets in the chrome, one number.
+ *
+ * The negative inline-start margin cancels this element's own padding so the
+ * mark's left edge lands on `main`'s measure rather than 8 px inside it: the
+ * padding exists for the hover pill, not for the layout.
+ */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 2.75rem;
+  margin-inline-start: calc(var(--space-2) * -1);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-pill);
+  color: var(--logo-ink);
+  /* No underline: this is a logo, and the mark plus the pill below carry the
+     affordance. The same argument `./site-nav.module.css` makes for the two nav
+     entries — a link that is the site's identity is chrome, not prose. */
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.brand:hover {
+  background: var(--accent-quiet);
+}
+
+/**
+ * The mark.
+ *
+ * `height` and not `block-size`, and that is not a lapse: `tokens.css` sets
+ * `img, svg { height: auto }`, and a logical property is a *different* property
+ * that cascades independently — declaring `block-size` here would leave `height:
+ * auto` standing, with the winner decided by stylesheet order rather than by
+ * specificity. A class beating an element selector is decided by neither.
+ *
+ * 2 rem is a floor as much as a size: the trajectory is a row of 3-unit dots in a
+ * 32-unit box, so at 2 rem each dot is 3 px with 3 px of air. Take the mark much
+ * below that and the dots stop reading as dots — which is the whole reason the
+ * favicon (`src/app/icon.svg`) drops the trajectory and keeps the comet alone.
+ */
+.mark {
+  height: 2rem;
+  width: auto;
+  /* Nothing in this SVG is interactive, and the anchor above owns the pointer. */
+  pointer-events: none;
+}
+
+.comet {
+  fill: var(--logo-ink);
+}
+
+.track {
+  stroke: var(--logo-accent);
+}
+
+/**
+ * Windows high-contrast mode replaces author colours on text and borders, but NOT
+ * `fill` and `stroke` on an SVG — so without this the mark keeps a palette colour
+ * on a forced background it was never measured against, and can vanish. Mapped to
+ * `LinkText` because it lives inside a link: the mark then matches the name next
+ * to it, whatever the reader's chosen scheme.
+ */
+@media (forced-colors: active) {
+  .comet {
+    fill: LinkText;
+  }
+
+  .track {
+    stroke: LinkText;
+  }
+}
+
+/**
+ * The wordmark. Real text, in the site's own font stack — which is what makes it
+ * selectable, translatable, searchable and readable by a screen reader, and what
+ * makes the provisional mark replaceable without a font file.
+ *
+ * `--text-md` and `--weight-semibold` off the scale in `tokens.css`; the only
+ * value not from a token is the letter-spacing, and a logotype set at the stack's
+ * default tracking reads as a sentence rather than as a name. `line-height: 1`
+ * because a single line of display type has no leading to distribute, and the
+ * anchor's `align-items: center` is what puts it beside the mark.
+ */
+.word {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.012em;
+  line-height: 1;
+  /* "Travels in World" is a name: breaking it across two lines makes it two
+     things. It fits beside the mark at 320 px, the narrowest layout `tokens.css`
+     supports, and the header wraps the nav below it rather than this. */
+  white-space: nowrap;
+}
+
+/**
+ * "…, retour à l'accueil" — announced, never drawn.
+ *
+ * The hiding is the pattern `src/components/map/world-map.module.css` records at
+ * length: a 1 px box with `clip-path`, never `display: none` nor
+ * `visibility: hidden`, both of which would take the text out of the
+ * accessibility tree and so out of the accessible name — which is the entirety of
+ * what this element is for.
+ */
+.destination {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

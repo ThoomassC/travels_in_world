@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 import { routing } from "./src/i18n/routing";
+import { readSlugHistory, tripRenameRedirects } from "./src/i18n/slug-history";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -38,13 +39,31 @@ const nextConfig: NextConfig = {
    *   with its locale prefix by `@/i18n/navigation`, so this only affects
    *   hand-typed or externally mangled URLs — which land on the 404 page.
    */
+  /**
+   * …and, since TIW-21, the renamed trip addresses.
+   *
+   * **Why the aliases are here and not in a page.** They must answer *before* the
+   * filesystem, with a status code, on a URL that has no page any more — which is
+   * precisely what `redirects()` is and what a prerendered page cannot be. Being
+   * config, they are compiled into the platform's routing layer: the old address
+   * costs no server function, and `/fr/voyages/<new>` stays `●` in the build
+   * column. A proxy could do the same job and would put a Node invocation in front
+   * of every HTML request on the site to serve a handful of renames.
+   *
+   * `readSlugHistory` validates the register and **throws** on an entry that
+   * cannot mean what it says, so a bad alias fails `next build` here rather than
+   * becoming a redirect that silently matches nothing.
+   */
   async redirects() {
+    const history = readSlugHistory(process.env);
+
     return [
       {
         source: "/",
         destination: `/${routing.defaultLocale}`,
         permanent: false,
       },
+      ...tripRenameRedirects(history, routing.locales),
     ];
   },
 };

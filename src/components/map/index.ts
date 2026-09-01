@@ -36,3 +36,6 @@
 export { WorldMap } from "./world-map";
 export type { MapCountry, WorldMapProps } from "./world-map";
 export type { TripMark } from "./marks";
+export { VisitedCountries } from "./visited-countries";
+export type { VisitedCountriesProps } from "./visited-countries";
+export type { CountingTrip, CountryLabels, VisitedCountryTally } from "./countries";

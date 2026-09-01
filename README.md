@@ -195,6 +195,62 @@ langue mais introduit une route dynamique `ƒ` et rend `<html id="__next_error__
 L'alarme est le test unitaire « declares exactly one active locale » : il passe au rouge dès
 qu'une seconde locale est déclarée, et son commentaire liste ce qu'il faut traiter d'abord.
 
+**Adresses durables et aperçus de partage.** Le slug d'un voyage publié est **définitif**.
+Le renommer est autorisé et coûte une entrée dans `src/i18n/slug-history.ts`, pour toujours :
+`next.config.ts` en dérive une redirection **301** (`statusCode: 301`, et non
+`permanent: true` qui émet un 308 que plusieurs dérouleurs de liens refusent de suivre).
+Le registre porte aussi les voyages **retirés volontairement**, dont l'adresse reste une
+page qui explique que le récit n'est plus en ligne et propose la carte et les trois
+derniers voyages. Le vrai cas n'est pas la suppression, c'est le renommage silencieux :
+transformer `japon-2024` en `japon-printemps-2024` casse tous les liens déjà envoyés, dans
+des conversations que personne ne peut rééditer, et rien ne le signale. Le registre refuse
+au build une entrée qui ne peut pas vouloir dire ce qu'elle dit — slug malformé,
+renommage sur lui-même, même ancienne adresse deux fois, slug à la fois renommé et retiré,
+chaîne de redirections.
+
+**Le 410 n'est pas rendu, et c'est mesuré.** Une page retirée répond **200** avec
+`noindex, follow` là où le critère demande 410. Next 16.3.1 sait porter 404, 401 et 403 sur
+un document prérendu (`notFound()`, `unauthorized()`, `forbidden()`) et n'expose rien pour
+410 ; un Route Handler y arrive, et cesse d'être prérendu dès qu'il le fait — le même
+handler rend `○` en 200 et `ƒ` en 410, alors que le fichier `.meta` écrit à côté d'un corps
+prérendu porte bien un champ `status`. Un vrai 410 coûte donc une fonction serveur sur une
+URL qui n'a rien à calculer, contre l'invariant 1. Le détail complet est dans
+`src/app/[locale]/voyages/[slug]/withdrawn-notice.tsx`.
+
+**L'origine du site vit dans un seul fichier**, `src/app/site-url.ts` : `TIW_SITE_URL` s'il
+est posé, sinon `VERCEL_PROJECT_PRODUCTION_URL` que Vercel fournit à chaque build, sinon la
+constante `FALLBACK_SITE_URL`. Le jour où un vrai domaine est ajouté, il n'y a **rien** à
+modifier dans le dépôt : Vercel sert le nouveau domaine par la deuxième entrée. `VERCEL_URL`
+est délibérément ignorée — c'est l'URL du _déploiement_, avec un suffixe différent à chaque
+poussée, donc une canonique qui nomme une adresse que personne ne relira jamais. Une valeur
+présente mais inutilisable fait **échouer le build** au lieu de retomber sur le défaut : une
+canonique fausse partout avec un build vert est exactement la casse silencieuse que ce dépôt
+refuse.
+
+**Image de partage : la photo de couverture, pas une image générée** — décision mesurée, pas
+par facilité. Un `opengraph-image.tsx` sous `[slug]` a été construit et pesé : sans
+`generateStaticParams` il rend `ƒ` ; **avec**, la colonne de build affiche `●` et se trompe —
+aucun PNG n'est écrit sous `.next/server/app`, aucune paire `.body`/`.meta`, et
+`prerender-manifest.json` ne liste aucune des images concrètes sous `routes`, donc
+`npm run test:build` (qui dérive sa liste de `routes`) ne les pèse pas non plus. Surtout :
+l'image étant rendue à la demande, elle sort de la frontière de publication que
+`dynamicParams = false` ferme sur la page. Mesuré contre `next start` avec un voyage
+`draft: true` : `/fr/voyages/<brouillon>` répond **404** et
+`/fr/voyages/<brouillon>/opengraph-image` répond **200** avec un PNG de 20,6 Ko portant son
+titre. Ajouter `dynamicParams = false` sur la route d'image ne corrige rien : elle répond
+alors **404 pour tous les slugs**, publiés compris. Un voyage sans photo obtient donc une
+carte avec titre et description sans image, et `twitter:card` retombe sur `summary`.
+
+**`sitemap.xml` et `robots.txt` sont des Route Handlers prérendus** (`○` dans la colonne de
+build, un `.body` sur le disque). Le sitemap ne liste que les voyages **publiés**, et ce
+n'est pas un filtre écrit là : il appelle `listTripSummaries()`, la même porte que la page
+d'accueil et la liste, donc il n'existe pas de seconde règle de publication qui puisse
+diverger de la première. `robots.txt` ne `Disallow` rien — pas même les adresses retirées : un
+robot interdit de récupérer une page ne peut jamais y lire le `noindex`, donc l'entrée
+_conserverait_ le référencement qu'elle prétend retirer. Sur un déploiement de
+prévisualisation (`VERCEL_ENV` présent et différent de `production`), il refuse en revanche
+tout le monde.
+
 **Validation du contenu.** Les voyages sont des `content/trips/<slug>/trip.yaml` écrits à
 la main ; `content/README.md` en donne la structure. `npm run validate:content` les valide
 avec le **même `TripSchema`** que les pages (une règle métier a un seul endroit où vivre) et
@@ -258,6 +314,48 @@ global, `src/styles/tokens.css`, qui porte les jetons ; le style par composant s
 Modules à côté du composant. La palette est volontairement identique à celle du portfolio :
 toute modification de couleur doit y être répercutée.
 
+**La marque est provisoire, et remplaçable sans toucher au code.** Le logotype est une
+comète en `--logo-ink` — une seule masse connexe — accompagnée d'une trajectoire en
+pointillé en `--logo-accent`, et du nom composé dans la pile de polices du site. C'est une
+marque **typographique**, assumée comme telle : il n'y a ni police propre, ni dessin de
+lettres. Cinq fichiers, et une seule source de vérité :
+
+| Fichier                                     | Ce qu'il porte                                       |
+| ------------------------------------------- | ---------------------------------------------------- |
+| `src/components/site/brand-art.ts`          | **la géométrie** — chemins, boîtes, transformations  |
+| `src/app/icon.svg`                          | le favicon, thème embarqué (copie du chemin, gardée) |
+| `src/app/apple-icon.png`                    | 180 × 180, opaque, sur la plaque `--logo-bg`         |
+| `public/opengraph-default.png`              | 1200 × 630, l'image de partage par défaut du site    |
+| `src/components/site/site-brand.module.css` | les tailles et les états du verrouillage d'en-tête   |
+
+Pour substituer un dessin définitif : remplacer les chaînes de `brand-art.ts`, recopier le
+même `d` dans `icon.svg`, régénérer les deux PNG. Aucun composant, aucun test et aucune
+feuille de style n'a besoin d'être modifié. **Ce qui casse si les proportions changent** : le
+`viewBox` du verrouillage décide de la largeur de la marque pour une hauteur de `2rem` (la
+boîte est plus large que haute, c'est ce qui l'empêche de dominer le nom) ; la plaque de
+l'icône Apple porte la seule couleur en dur du lot, parce qu'un PNG ne suit aucun thème ; et
+l'image de partage **doit** rester en 1200 × 630, sans quoi `og:image:width` /
+`og:image:height` mentent et la carte se réagence après le chargement.
+`tests/build/brand.test.ts` refuse ce dernier cas en lisant l'en-tête du PNG.
+
+Deux contraintes de dessin sont mesurées et ne se contournent pas. **Encre contre accent ne
+vaut que 1,99:1 en clair et 1,35:1 en sombre** : aucune forme ne peut donc reposer sur cette
+frontière, et c'est pourquoi la comète et la trajectoire sont deux objets séparés par du fond
+nu — chacun se lit contre la page (encre 10,54:1 clair et 16,73:1 sombre, accent 5,30:1 et
+12,40:1) et jamais contre l'autre. **Le favicon abandonne la trajectoire** : à 16 px ses
+points et leurs vides passent sous le pixel, alors que la masse de la comète tient (10,31:1
+au pire sur les huit gris de barres d'onglets de Chrome, Firefox et Safari, tous thèmes
+confondus).
+
+Enfin, `src/app/icon.svg` est un document **XML**, pas du HTML, et il a cassé trois fois
+avant d'être juste — chaque fois en silence, parce qu'un SVG en ligne dans une page se répare
+tout seul alors que le même fichier chargé comme favicon meurt sans un mot. Ses règles :
+jamais deux tirets consécutifs dans un commentaire XML, la feuille de style dans une section
+`CDATA` (sinon le moindre `<` d'un commentaire CSS termine le fichier), et jamais la séquence
+qui referme cette section ailleurs qu'à la fin. `tests/components/site/brand-art.test.ts`
+compte les délimiteurs dans les octets, parce que le `DOMParser` de jsdom a accepté un
+fichier que `xmllint` et Chromium refusaient.
+
 **La carte du monde.** Un `<svg>` **entièrement inerte** — `aria-hidden`, sans `tabindex`,
 sans `:hover`, `pointer-events: none` — surmonté d'un calque HTML de `<a>` positionnés en
 pourcentages. Zéro octet de JavaScript : le zoom et le panneau de survol sont TIW-14, qui
@@ -291,6 +389,43 @@ que `--border-subtle` mesurait 1,37:1 et que la forme du monde est l'objet graph
 nécessaire à la compréhension ; la distinction visité / non visité est portée par un contour
 en `--text-accent` **et par son épaisseur**, parce qu'aucune valeur de remplissage ne dépasse
 3:1 en thème clair et qu'un canal non coloré est nécessaire.
+
+**L'équivalent textuel de la carte est un composant à part, pas un bloc masqué**
+(`src/components/map/visited-countries.tsx`, TIW-15) : sous la carte, les pays
+atteints par les voyages publiés avec le nombre de voyages de chacun, chaque pays
+étant un lien. Quatre choses à savoir avant d'y toucher :
+
+1. **Il lit les voyages, jamais la géométrie.** C'est ce qui rend le critère « carte
+   en échec » atteignable : `buildWorldGeometry` **jette** pour un code déclaré
+   qu'il ne sait pas dessiner, donc un état sans forme de pays est un état sans code
+   déclaré — et une liste alimentée par le sous-ensemble teinté aurait été vide
+   exactement dans les états où le dessin manque. Une panne, deux canaux perdus.
+2. **Il relie, il ne duplique pas.** `/voyages` est déjà l'inventaire complet de
+   « quels voyages, où ». Ce qui manquait était le **compte par pays**, qui
+   n'existait dans aucun canal. Le lien d'une ligne va vers ce qui existe à coup
+   sûr : **le voyage lui-même** quand le pays n'en porte qu'un, la liste complète
+   sinon. Jamais un fragment. La première version pointait
+   `/voyages#pays-<code>` et **ça pendait dans le vide** — `buildCatalogue` classe
+   un voyage sous son **pays de première arrivée** seulement, donc un pays
+   seulement _traversé_ n'a aucune section, et `#pays-bo` ne correspondait à rien
+   (mesuré sur un build de production). Un fragment sans cible n'échoue pas : il
+   dépose le lecteur en haut d'une longue page.
+3. **La légende ne promet plus le monde quand le cadre est recadré.** `frameAround`
+   plancher un cadre à 30 % de la largeur du monde, donc avec **un** voyage publié
+   la carte montrait un continent sous « Carte du monde : 1 voyage, 1 pays ». Deux
+   clés (`map.summary`, `map.summaryCropped`) et un test qui assère le libellé
+   **contre le `viewBox` rendu**. Le recadrage porte sur les **balises** — une par
+   voyage, sur la première arrivée — et non sur les pays teintés, d'où
+   « recadrée sur les voyages publiés » et pas « sur les pays visités ».
+4. **Aucun cadre vide.** Sans géométrie, le `<svg>` était une boîte au rapport
+   verrouillé contenant du vide, sans une erreur ni une ligne de console.
+   `WorldMap` ne rend alors pas la boîte du tout : une phrase prend sa place.
+
+L'énumération masquée des pays visités qui vivait dans le `<figcaption>` a été
+**retirée** : un `<figcaption>` est le **nom accessible** du `<figure>` (HTML-AAM),
+et quarante noms de pays dans un nom accessible n'est pas un libellé. La liste
+visible la remplace sur tous les plans. `docs/adr/0003-carte-svg-inerte-et-balises-html.md`
+en décrit encore l'ancienne version : à reprendre avec TIW-27.
 
 **Dépendances écartées** (délibérément, ne pas les rajouter sans ticket) : bibliothèque de
 carte côté client (Leaflet, MapLibre), gestionnaire d'état (Redux, Zustand), client HTTP ou
@@ -336,6 +471,34 @@ Pour s'en passer, `agentRules: false` dans `next.config.ts`.
   dédié (`E2E_PORT`, 3277 par défaut) avec `reuseExistingServer: false`. Les deux comptent :
   sur le port 3000 et avec la réutilisation, la suite s'accrochait au `next dev` du poste et
   passait au vert contre du HTML de développement, sans aucun build.
+- **`npm run test:e2e` lance Playwright deux fois, séquentiellement, et fait donc deux
+  builds.** `playwright.content.config.ts` d'abord (port 3278, le contenu de
+  `tests/fixtures/content/home-map` via `TIW_CONTENT_DIR`, les specs `*.populated.spec.ts`),
+  puis `playwright.config.ts` (port 3277, le `content/trips` du dépôt, tout le reste). Les
+  deux états sont réels et aucun ne couvre l'autre : le dépôt est vide jusqu'à TIW-24, donc
+  l'accueil n'y a aucune balise, aucun pays et aucun compte à vérifier — or l'équivalent
+  textuel de la carte (TIW-15) existe précisément pour donner le nombre de voyages par pays.
+  Les specs peuplées comptent ; celles du dépôt vérifient le bloc de repli. Deux serveurs
+  dans une seule config a été essayé puis écarté : deux `next build` concurrents dans un même
+  `.next` s'écrasent, et donner un `distDir` au second ajoute à la racine un répertoire de
+  build que `eslint .` parcourt — ESLint ne lit pas `.gitignore`. **L'ordre compte** : la
+  config peuplée passe en premier, donc le `.next` qui reste sur le disque est celui du
+  contenu réel, ce que `npm run test:build` attend. **Corollaire à connaître** :
+  `npm run test:e2e:content` lancé **seul** laisse un `.next` bâti sur les fixtures, et
+  `npm run test:build` mesurerait alors le budget de pages de fixtures en restant vert —
+  il dérive ses routes du manifeste, pas d'une liste attendue. Relancer `npm run build`
+  avant `npm run test:build` dans ce cas.
+- **L'audit d'accessibilité est automatisé** (`tests/e2e/support/axe.ts`) : axe-core est
+  injecté dans la page servie et interrogé sur les tags WCAG 2.2 AA, dans les deux thèmes —
+  chaque couleur venant d'un jeton redéclaré sous `prefers-color-scheme: dark`, une faute de
+  contraste peut n'exister que dans l'un des deux. `axe-core` est une `devDependency`
+  explicite, promue depuis la dépendance transitive de `eslint-plugin-jsx-a11y` : aucun
+  téléchargement, deux lignes de `package-lock.json`, zéro octet côté client. Une seule
+  violation est tolérée, nommée et confinée — `target-size` sur les **balises** de la carte,
+  qui se recouvrent dès que deux voyages sont proches à l'échelle du rendu. Elle est
+  préexistante (mesurée à l'identique sur la branche de base), documentée dans
+  `docs/adr/0003-carte-svg-inerte-et-balises-html.md` et attribuée à TIW-14 ; l'exception ne
+  couvre que cette règle, et seulement tant que tous ses nœuds sont dans le `<figure>`.
 - `tests/setup.ts` neutralise le `localStorage` natif de Node 25, qui masque celui de jsdom.
   Ne pas le supprimer sans lire le commentaire. `tests/storage.test.ts` verrouille le
   contrat du stub (accès par propriété nommée, énumération, conversion des clés, absence de

@@ -3,10 +3,12 @@ import { useTranslations } from "next-intl";
 import { localePathname } from "@/i18n/pathname";
 import { tripsPath } from "@/i18n/paths";
 import type { Locale } from "@/i18n/routing";
+import { SiteBrand } from "./site-brand";
 import styles from "./site-nav.module.css";
 
 /**
- * The site's main navigation: the map and the full listing, at the same level.
+ * The site's header: the brand lock-up on one side, the main navigation — the map
+ * and the full listing, at the same level — on the other.
  *
  * **No `'use client'`, and no JavaScript at all.** Two `<a href>` in a `<nav>` is
  * the whole component; the milestone's two client boundaries belong to the map's
@@ -43,6 +45,19 @@ export function SiteNav({ locale }: { readonly locale: Locale }): ReactElement {
 
   return (
     <header className={styles.header}>
+      {/*
+        The lock-up lives here rather than in the layout so that "the chrome" is
+        one component with one stylesheet deciding how its two halves share a
+        line. It is the link home from every page — `SiteBrand` records why it is
+        a plain anchor and why the SVG is inline.
+
+        OUTSIDE the `<nav>`, deliberately. A logo that is also a link home is not
+        a navigation *entry*: putting it in the list would make a screen reader
+        announce "3 éléments" and offer the reader a third destination that is the
+        same page as the first one ("Carte" is `/fr`). The landmark stays a
+        two-entry menu, and the way home stays where every site puts it.
+      */}
+      <SiteBrand locale={locale} />
       {/*
         Labelled, because `<nav>` is a landmark and an unlabelled one is
         announced as "navigation" with nothing to tell it from the next. There is

@@ -5,7 +5,9 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { TripCatalogue } from "@/components/trips/trip-catalogue";
 import { listTripSummaries } from "@/content/trips";
 import { localePathname } from "@/i18n/pathname";
+import { tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
+import { shareMetadata } from "../../share";
 import { MAIN_CONTENT_ID } from "../main-content";
 import styles from "./page.module.css";
 
@@ -62,11 +64,28 @@ export async function generateMetadata({
    * in silence. Same reasoning, at length, in `src/app/not-found.tsx`.
    */
   const t = await getTranslations({ locale, namespace: "trips" });
+  const site = await getTranslations({ locale, namespace: "metadata" });
 
-  return {
+  /**
+   * `shareMetadata` rather than the two fields this used to return. The canonical
+   * is mandatory on every page — the layout's canonical is the *home page's*, so
+   * inheriting it would ask a crawler to drop this one in its favour — and the Open
+   * Graph block has to repeat `siteName` and `locale`, because Next replaces the
+   * parent's `openGraph` wholesale instead of merging into it. See
+   * `src/app/share.ts`.
+   *
+   * No share image, deliberately: this page is an index, and the only pictures the
+   * project holds are the trips' own photos. Promoting one of them here would put a
+   * single trip's picture on the card of the whole collection.
+   */
+  return shareMetadata({
+    locale,
+    path: localePathname({ href: tripsPath(), locale }),
     title: t("metaTitle"),
     description: t("metaDescription"),
-  };
+    siteName: site("title"),
+    type: "website",
+  });
 }
 
 export default async function AllTripsPage({ params }: { params: Promise<LocaleParams> }) {

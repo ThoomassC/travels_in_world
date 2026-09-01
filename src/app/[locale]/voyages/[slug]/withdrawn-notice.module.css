@@ -1,0 +1,42 @@
+/* =============================================================================
+   The address of a trip taken offline: what is left at a URL whose story is gone.
+   ============================================================================ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface);
+  /* `--control-border` and not `--border-subtle`, which its own declaration in
+     `tokens.css` marks `decorative only` at 1.37:1. This box carries the only
+     explanation on the page; its edge has to be perceivable. */
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+}
+
+.title {
+  font-size: var(--text-display-sm);
+}
+
+.body {
+  color: var(--text-muted);
+  /* A measure, not a width — the same reading limit as the listing's empty block. */
+  max-width: 55ch;
+}
+
+.link {
+  /* 44 px of target (WCAG 2.2, 2.5.8) in `rem`, so it grows with a reader's
+     larger default size. */
+  min-block-size: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  font-weight: var(--weight-medium);
+}

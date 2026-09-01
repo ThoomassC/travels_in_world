@@ -205,10 +205,11 @@
  * layout. `display: none` and `visibility: hidden` are excluded: both drop the
  * text from the tree, which would leave a link unnamed and a caption silent.
  *
- * Used twice — for a marker's accessible name, and for the list of visited
- * countries under the caption. Out of flow, so it changes neither the 44 px box
- * of a marker nor the height of the caption, and `white-space: nowrap` inside a
- * 1 px box cannot scroll anything.
+ * Used once, for a marker's accessible name. It served the caption's hidden
+ * enumeration of visited countries too until TIW-15 replaced that with the
+ * visible `VisitedCountries` list. Out of flow, so it changes neither the 44 px
+ * box of a marker nor the height of the caption, and `white-space: nowrap` inside
+ * a 1 px box cannot scroll anything.
  */
 .visuallyHidden {
   position: absolute;
@@ -225,4 +226,25 @@
 .caption {
   color: var(--text-muted);
   font-size: var(--text-sm);
+}
+
+/**
+ * The sentence that replaces the drawing when there is no geometry to draw.
+ *
+ * It is styled as a real block and not as fine print, because it stands where a
+ * picture was expected: `--surface` and the `>= 3:1` border are the same plate
+ * the `<svg>` itself uses, so the figure keeps its shape on the page instead of
+ * collapsing to two lines of grey. What it must never be is an empty box, which
+ * is why the text is here and not in a hidden note.
+ *
+ * No `aspect-ratio`: the height is the text's own. Giving it the frame's ratio
+ * would reproduce exactly the empty rectangle this branch exists to avoid.
+ */
+.unavailable {
+  margin: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-body);
 }
