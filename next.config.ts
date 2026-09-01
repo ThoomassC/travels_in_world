@@ -19,7 +19,6 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
 
-
   /**
    * The `/` → `/fr` redirect, and the ONLY thing standing in for the
    * `next-intl` proxy (ex-`src/proxy.ts`, deleted).
