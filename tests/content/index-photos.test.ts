@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { Buffer } from "node:buffer";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import {
   BLUR_DATA_URL_PATTERN,
@@ -37,6 +37,20 @@ import type { PhotoWorkspace } from "./photo-support";
  * `photo-files.test.ts` gives at length: everything that can be wrong here is a
  * question about bytes.
  */
+
+/**
+ * These suites drive a **real image encoder** over real files, which is CPU-bound
+ * and therefore machine-dependent: ~14 s of test time on this workstation, and
+ * enough more on a GitHub runner that Vitest's 5 s default expired mid-encode.
+ * Measured there, and the failure was doubly misleading — a timed-out test never
+ * runs its `finally`, so one slow case also left a directory read-only and made
+ * the teardown fail with `EACCES` on the next one.
+ *
+ * Raised here and not in `vitest.config.ts`: the rest of the suite is pure logic
+ * where 5 s is the right alarm, and a global raise would let a genuinely hung test
+ * sit for half a minute.
+ */
+vi.setConfig({ testTimeout: 30_000 });
 
 let workspace: PhotoWorkspace | undefined;
 

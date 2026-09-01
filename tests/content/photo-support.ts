@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parse } from "yaml";
@@ -95,7 +103,26 @@ export async function photoWorkspace(options: WorkspaceOptions): Promise<PhotoWo
       }
     },
     sizeOf: (src) => statSync(resolve(src)).size,
-    cleanup: () => rmSync(root, { recursive: true, force: true }),
+    /**
+     * Made writable again before it is removed.
+     *
+     * One case chmods the trip's directory to `0o500` to reach the `write-failed`
+     * outcome, and restores it in a `finally`. A test that *times out* never runs
+     * its `finally` — measured on CI, where the image encoding is slower than the
+     * timeout allowed: the mode stayed at `0o500` and this `afterEach` failed with
+     * `EACCES`, turning one slow test into a second, unrelated-looking failure.
+     *
+     * So the teardown restores the mode itself rather than trusting the test to.
+     * Best effort: a failure to tidy up must not mask the real failure.
+     */
+    cleanup: () => {
+      try {
+        chmodSync(path.join(contentDir, slug), 0o700);
+      } catch {
+        // Already gone, or never chmodded — nothing to say either way.
+      }
+      rmSync(root, { recursive: true, force: true });
+    },
   };
 }
 
