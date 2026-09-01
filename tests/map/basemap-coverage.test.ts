@@ -78,7 +78,9 @@ describe("the generated coverage of the shipped basemap", () => {
   });
 
   it("covers every vintage the package ships, so nothing is silently ignored", () => {
-    expect([BASEMAP_VINTAGE, ...FINER_BASEMAP_VINTAGES].sort()).toEqual([...DATASET_VINTAGES].sort());
+    expect([BASEMAP_VINTAGE, ...FINER_BASEMAP_VINTAGES].sort()).toEqual(
+      [...DATASET_VINTAGES].sort()
+    );
   });
 
   /**
@@ -172,6 +174,23 @@ describe("a coverage artefact that no longer matches the dataset", () => {
 
     expect(build).toThrow(/JP/);
     expect(build).toThrow(/basemap:coverage/);
+  });
+
+  /**
+   * The half a single `toThrow()` hides, and the bug this case was written from.
+   *
+   * The check is memoised — it compares 174 codes and the build calls it once per
+   * page — and the first version memoised *that it had run* rather than *what it
+   * found*. The first page of the build failed and every page after it was
+   * cleared: a guard that stops guarding the moment it fires, which is strictly
+   * worse than no memo. Caught here, by asserting twice on the same fault.
+   */
+  it("keeps refusing on every call, not only on the first", async () => {
+    const build = await buildWith([...DRAWABLE_COUNTRY_CODES, "SG"]);
+
+    expect(build).toThrow();
+    expect(build).toThrow();
+    expect(build).toThrow(/SG/);
   });
 
   it("draws normally when the list matches", async () => {

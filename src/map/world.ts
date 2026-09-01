@@ -1,3 +1,10 @@
+import {
+  BASEMAP_VINTAGE,
+  DRAWABLE_COUNTRY_CODES,
+  FINER_BASEMAP_VINTAGES,
+  FINER_VINTAGE_COUNTRY_CODES,
+  REGENERATE_COMMAND,
+} from "@/basemap-coverage";
 import type { CountryCode } from "@/domain/geo";
 import { NUMERIC_BY_ALPHA2 } from "@/iso-3166";
 import {
@@ -211,6 +218,8 @@ function localisedWorld(locale: string): LocalisedWorld {
     return shape;
   });
 
+  assertCoverageMatchesDataset(byCode);
+
   const world: LocalisedWorld = Object.freeze({
     countries: Object.freeze(countries),
     byCode,
@@ -218,6 +227,92 @@ function localisedWorld(locale: string): LocalisedWorld {
   localisedWorlds.set(locale, world);
 
   return world;
+}
+
+/**
+ * The verdict of the coverage comparison, computed at most once: `undefined`
+ * until it has run, `null` once it has run clean, the message otherwise.
+ *
+ * **The memo holds the verdict, never merely the fact that the check ran.** The
+ * first version of this stored a boolean and returned early on the second call,
+ * which meant a stale artefact failed the first page of the build and then
+ * cleared every page after it — a guard that stops guarding once it has fired.
+ * Caught by its own test, which asserted twice on the same call and saw the
+ * second assertion pass.
+ *
+ * Kept out of the two caches above deliberately: both are documented as
+ * optimisations that may be removed, and a correctness check that quietly stops
+ * running when someone deletes a `Map` is a failure mode this repository has
+ * already paid for twice.
+ */
+let coverageVerdict: string | null | undefined;
+
+/**
+ * The build-time half of the freshness guard on `src/basemap-coverage.ts`.
+ *
+ * That file is generated, committed, and read by `src/content/validate.ts` to
+ * refuse a country the map cannot draw *before* the build. It is the only way the
+ * content layer can know that answer — `travels-in-world/map-entry-point` keeps
+ * `world-atlas`, `d3-*` and `topojson-*` out of every module of `src/**` outside
+ * `src/map/**`, and the `@/map` façade is unresolvable from the plain Node the
+ * validator runs on. See the header of the generated file.
+ *
+ * The cost of a generated answer is that it can go stale, and a stale list is
+ * worse than none: it would refuse content that draws perfectly, or clear content
+ * the prerender then dies on. `tests/map/basemap-coverage.test.ts` recomputes it
+ * from the packaged TopoJSON on every `npm test`, which is the fast signal. This
+ * is the other one, and it is here because **this** module is the only place that
+ * holds the shapes the site is actually about to draw.
+ *
+ * Thrown, not warned. A `console.warn` in the middle of a prerender is a line
+ * nobody reads in a log nobody keeps, and the whole point of TIW-30 is that the
+ * silent version of this fault already cost a ticket.
+ */
+function assertCoverageMatchesDataset(byCode: ReadonlyMap<string, CountryShape>): void {
+  coverageVerdict ??= coverageProblem(byCode) ?? null;
+
+  if (coverageVerdict !== null) {
+    throw new Error(coverageVerdict);
+  }
+}
+
+/** The comparison itself, `undefined` when the artefact still describes the map. */
+function coverageProblem(byCode: ReadonlyMap<string, CountryShape>): string | undefined {
+  /**
+   * Checked before the lists, and it is not the same fault: two vintages can
+   * happen to draw the same countries and still be different files, so an
+   * agreeing list is no proof the artefact was generated from what is imported.
+   */
+  if (BASEMAP_VINTAGE !== DATASET_RESOLUTION) {
+    return (
+      `src/basemap-coverage.ts décrit le millésime ${quoteCode(BASEMAP_VINTAGE)} et src/map/dataset.ts importe ` +
+      `le ${quoteCode(DATASET_RESOLUTION)} : lance ${quoteCode(REGENERATE_COMMAND)}.`
+    );
+  }
+
+  const missing = [...byCode.keys()].sort().filter((code) => !DRAWABLE_COUNTRY_CODES.has(code));
+  const surplus = [...DRAWABLE_COUNTRY_CODES].sort().filter((code) => !byCode.has(code));
+
+  if (missing.length === 0 && surplus.length === 0) {
+    return undefined;
+  }
+
+  const differences = [
+    missing.length === 0
+      ? ""
+      : `absents de la liste alors que la carte les dessine : ${missing.join(", ")}`,
+    surplus.length === 0
+      ? ""
+      : `annoncés par la liste alors que la carte n'a pas leur forme : ${surplus.join(", ")}`,
+  ].filter((part) => part !== "");
+
+  return (
+    `src/basemap-coverage.ts ne décrit plus ${quoteCode(DATASET_MODULE)} — ` +
+    `${differences.join(" ; ")}. ` +
+    `Ce fichier est généré : lance ${quoteCode(REGENERATE_COMMAND)}, relis le diff, et committe-le. ` +
+    `Tant qu'il diverge, « npm run validate:content » refuse des pays que la carte sait dessiner, ` +
+    `ou en laisse passer dont elle n'a aucune forme.`
+  );
 }
 
 /**
@@ -318,18 +413,38 @@ function bypassNote(): string {
  * A real country the map cannot draw at this resolution. Very different news
  * from the above: nothing is misspelled, and the author has a budget decision to
  * make rather than a typo to fix — so the way out is spelled out, with its cost.
+ *
+ * **Two ways out, not one, and which applies is measured rather than assumed.**
+ * Of the 75 assigned codes the 110m vintage cannot draw, 64 are drawn by a finer
+ * vintage of the same package and 11 are drawn by none of them — BQ, BV, CC, CX,
+ * GF, GP, MQ, RE, SJ, TK, YT. Offering "switch vintage" for Martinique would be
+ * offering 152 KB of paths that still would not draw it, which is the same shape
+ * of dead end TIW-29 fixed one layer up. `FINER_VINTAGE_COUNTRY_CODES` is what
+ * tells the two apart.
+ *
+ * **And since TIW-30 this message carries {@link bypassNote} too.** It used not
+ * to, correctly: at the time no earlier gate refused this fault, so there was no
+ * bypass to report. `src/content/validate.ts` now refuses it with the file, the
+ * line and the field, and `prebuild` runs that before every `npm run build` — so
+ * a reader of this sentence is, again, looking at a build that skipped its gate.
  */
 function undrawableCodeProblem(code: string, numeric: string, locale: string): string {
   const label = regionNamesFor(locale).of(code) ?? code;
+
+  const wayOut = FINER_VINTAGE_COUNTRY_CODES.has(code)
+    ? `Trois issues : rattache le lieu à un pays que la carte sait dessiner, retire-le du contenu, ` +
+      `ou fais passer src/map/dataset.ts sur ${quoteCode(RICHER_DATASET_MODULE)}, déjà livré par le paquet et qui contient ce pays. ` +
+      `Cette dernière option porte les tracés de 30,1 Ko à 182,5 Ko brotli (mesuré, voir le commentaire de src/map/dataset.ts) : ` +
+      `c'est une décision de budget, et le plafond de 34 Ko du test de poids la refusera tant qu'il n'est pas relevé sciemment.`
+    : `Changer de millésime n'y ferait rien : aucun des millésimes livrés par world-atlas ` +
+      `(${DATASET_RESOLUTION}, ${FINER_BASEMAP_VINTAGES.join(", ")}) ne porte de forme pour ce code. ` +
+      `Deux issues : rattache le lieu à un pays que la carte sait dessiner, ou retire-le du contenu.`;
 
   return (
     `le pays ${quoteCode(label)} (code ${quoteCode(code)}, ISO 3166-1 numérique ${numeric}) existe, ` +
     `mais le fond de carte ${quoteCode(DATASET_MODULE)} en résolution ${DATASET_RESOLUTION} ne le contient pas : ` +
     `aucun micro-État n'y figure — ni Singapour, ni Monaco, ni Malte, ni Saint-Marin. ` +
-    `Trois issues : rattache le lieu à un pays que la carte sait dessiner, retire-le du contenu, ` +
-    `ou fais passer src/map/dataset.ts sur ${quoteCode(RICHER_DATASET_MODULE)}, déjà livré par le paquet et qui contient ce pays. ` +
-    `Cette dernière option porte les tracés de 30 Ko à environ 180 Ko brotli (mesuré, voir le commentaire de src/map/dataset.ts) : ` +
-    `c'est une décision de budget, et le plafond de 34 Ko du test de poids la refusera tant qu'il n'est pas relevé sciemment.`
+    `${wayOut} ${bypassNote()}`
   );
 }
 
