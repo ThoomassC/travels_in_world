@@ -71,9 +71,20 @@ export function weighFiles(files: readonly WeighedFile[]): WeightSummary {
   };
 }
 
-/** `12,3 Mo` — the same spelling `index-photos` uses, for the same reasons. */
-function formatMegabytes(bytes: number): string {
-  return `${(bytes / 1_000_000).toFixed(1).replace(".", ",")} Mo`;
+/**
+ * `12,3 Mo`, or `84 Ko` under a megabyte — the same spelling and the same switch
+ * as `index-photos-report.ts`, for the same measured reason.
+ *
+ * The kilobyte branch is not cosmetic here either: the repository carries exactly
+ * one tracked image today (`public/opengraph-default.png`, TIW-23) and one decimal
+ * of a megabyte printed it as « 0,0 Mo » — a line whose only job is to say what
+ * the repository weighs, saying nothing. The megabyte stays for the total once
+ * real photographs land, which is what the 150 Mo threshold is compared against.
+ */
+function formatWeight(bytes: number): string {
+  return bytes < 1_000_000
+    ? `${Math.round(bytes / 1000)} Ko`
+    : `${(bytes / 1_000_000).toFixed(1).replace(".", ",")} Mo`;
 }
 
 /**
@@ -84,13 +95,13 @@ function formatMegabytes(bytes: number): string {
  * reasoning as `test:build` printing its measurements beside its budgets.
  */
 export function formatWeightReport(summary: WeightSummary): readonly string[] {
-  const limit = formatMegabytes(PHOTO_WEIGHT_LIMIT_BYTES);
+  const limit = formatWeight(PHOTO_WEIGHT_LIMIT_BYTES);
 
   if (summary.fileCount === 0) {
     return [`Aucune image suivie par git pour l'instant — rien à peser (seuil : ${limit}).`];
   }
 
-  const headline = `${summary.fileCount} image${summary.fileCount > 1 ? "s" : ""} suivie${summary.fileCount > 1 ? "s" : ""} par git, ${formatMegabytes(summary.totalBytes)} sur un seuil de ${limit}.`;
+  const headline = `${summary.fileCount} image${summary.fileCount > 1 ? "s" : ""} suivie${summary.fileCount > 1 ? "s" : ""} par git, ${formatWeight(summary.totalBytes)} sur un seuil de ${limit}.`;
 
   if (!summary.overLimit) {
     return [headline];
@@ -100,7 +111,7 @@ export function formatWeightReport(summary: WeightSummary): readonly string[] {
     headline,
     "Chaque clone et chaque build paient ce poids, et l'historique git ne le rend pas : une photo supprimée aujourd'hui y reste demain.",
     "Les plus lourdes :",
-    ...summary.heaviest.map((file) => `  ${file.path} — ${formatMegabytes(file.bytes)}`),
+    ...summary.heaviest.map((file) => `  ${file.path} — ${formatWeight(file.bytes)}`),
     "Au-delà de ce seuil, les images passent sur un stockage externe : le champ « src » devient une URL absolue.",
     "C'est un changement de contenu et non de structure — ni le schéma ni les pages n'ont à bouger",
   ];

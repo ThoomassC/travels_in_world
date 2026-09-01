@@ -83,6 +83,21 @@ describe("the report", () => {
   });
 
   /**
+   * The repository carries exactly one tracked image today — TIW-23's default
+   * share card — and one decimal of a megabyte printed the whole report as
+   * « 0,0 Mo », which is a line saying nothing on the one subject it exists for.
+   */
+  it("counts in kilobytes below a megabyte, so a small repository is still legible", () => {
+    const lines = formatWeightReport(weighFiles([file("public/share.png", 84_000)])).join("\n");
+
+    expect(lines).toContain("84 Ko");
+    // Not `not.toContain("0,0 Mo")`: the limit itself prints as « 150,0 Mo »,
+    // which carries that substring. What must not appear is the *total* rounded
+    // to nothing, so the assertion is on the phrase that states it.
+    expect(lines).not.toMatch(/,\s*0,0 Mo sur/);
+  });
+
+  /**
    * The way out the ticket names, said in the message rather than left in a
    * ticket nobody will find in a year: « au-delà, les images passent sur un
    * stockage externe — le champ source devient une URL absolue, ce qui est un
