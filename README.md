@@ -145,11 +145,13 @@ pages (3/3)`, et le HTML servi est identique — seul `.next/server/app/fr.html`
 `.next/prerender-manifest.json` et exige `/fr` et `/_not-found`. Elle exige un build avant
 elle et ne le fait pas à votre place (branchée en CI par TIW-22). Le même fichier porte le
 budget de charge utile, désormais appliqué aux **deux** routes prérendues et non à `/fr`
-seule : 35,8 Ko brotli de HTML sur `/fr` — les tracés du planisphère, en ligne dans le
-document — et 1,1 Ko sur `/_not-found`, pour un plafond de 100 Ko ; et pour un plafond de 150 Ko de JS
-initial, 119,9 Ko sur `/fr` (6 chunks) et 111,1 Ko sur `/_not-found` (5 chunks) — chunk
+seule : 37,3 Ko brotli de HTML sur `/fr` — les tracés du planisphère, en ligne dans le
+document — et 1,3 Ko sur `/_not-found`, pour un plafond de 100 Ko ; et pour un plafond de 150 Ko de JS
+initial, 123,2 Ko sur `/fr` (7 chunks) et 111,2 Ko sur `/_not-found` (5 chunks) — chunk
 `noModule` exclu, c'est le bundle de compatibilité que jamais aucun navigateur moderne
-n'exécute et il vaut 35 Ko à lui seul.
+n'exécute et il vaut 34 Ko à lui seul. Chiffres relevés sur `develop` @ `5c5bf34`, après
+que TIW-14 a posé le premier des deux composants `'use client'` du jalon : son chunk de
+carte interactive vaut 3,2 Ko des 123,2.
 
 Ne mesurer que `/fr` a coûté exactement ce que ce genre d'angle mort coûte : le `Link`
 client de next-intl dormait dans le bundle initial de `/_not-found`, la seule route que rien
@@ -228,8 +230,15 @@ l'image étant rendue à la demande, elle sort de la frontière de publication q
 `draft: true` : `/fr/voyages/<brouillon>` répond **404** et
 `/fr/voyages/<brouillon>/opengraph-image` répond **200** avec un PNG de 20,6 Ko portant son
 titre. Ajouter `dynamicParams = false` sur la route d'image ne corrige rien : elle répond
-alors **404 pour tous les slugs**, publiés compris. Un voyage sans photo obtient donc une
-carte avec titre et description sans image, et `twitter:card` retombe sur `summary`.
+alors **404 pour tous les slugs**, publiés compris.
+
+Ce paragraphe a affirmé jusqu'ici qu'un voyage sans photo obtenait « une carte avec titre et
+description sans image, et `twitter:card` retombe sur `summary` ». C'était vrai quand TIW-21
+l'a écrit et faux depuis TIW-23 : la marque sert d'image de repli pour toute page qui n'a
+rien de mieux à montrer, la branche `summary` a été supprimée plutôt que laissée en code
+mort, et `tests/app/share.test.ts` l'atteste. Un voyage sans photo obtient donc une **grande
+carte portant la marque du site** — jamais le rectangle gris vide qu'un
+`summary_large_image` sans image produit.
 
 **`sitemap.xml` et `robots.txt` sont des Route Handlers prérendus** (`○` dans la colonne de
 build, un `.body` sur le disque). Le sitemap ne liste que les voyages **publiés**, et ce
