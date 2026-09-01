@@ -1,0 +1,38 @@
+# Un pays que l'ISO attribue bien, et que le fond de carte ne dessine pas (TIW-30).
+#
+# « SG » est le code officiel de Singapour. Il passe la forme, il passe le
+# registre ISO — et le millésime 110m de « world-atlas » ne porte aucune forme
+# pour lui : aucun micro-État n'y figure. Avant TIW-30 ce fichier passait
+# « npm run validate:content » et faisait échouer « npm run build » au prérendu
+# de /fr, dans « buildWorldGeometry ».
+slug: asie-du-sud-est-2025
+title: Asie du Sud-Est, hiver 2025
+startDate: 2025-01-10
+endDate: 2025-01-14
+places:
+  - slug: kuala-lumpur
+    name: Kuala Lumpur
+    countryCode: MY
+    coordinates:
+      lat: 3.1516
+      lon: 101.6942
+  - slug: singapour
+    name: Singapour
+    countryCode: SG
+    coordinates:
+      lat: 1.2897
+      lon: 103.8501
+steps:
+  - kind: stay
+    placeSlug: kuala-lumpur
+    startDate: 2025-01-10
+    endDate: 2025-01-12
+  - kind: move
+    fromSlug: kuala-lumpur
+    toSlug: singapour
+    mode: train
+    date: 2025-01-12
+  - kind: stay
+    placeSlug: singapour
+    startDate: 2025-01-12
+    endDate: 2025-01-14
