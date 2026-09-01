@@ -33,8 +33,10 @@ segment de locale est perdu. Une règle ESLint le refuse partout sauf dans
 
 **3. Server Components par défaut.**
 Le jalon 1 n'autorise que deux composants `'use client'` : l'interaction de la carte et la
-visionneuse photo. Tout autre `'use client'` se justifie en revue. `src/domain/**` reste du
-TypeScript pur — ni React, ni Next, ni `fs`, ni `d3`.
+visionneuse photo. **La seconde est dépensée** — `src/components/photos/photo-lightbox.tsx`,
+livrée par TIW-17 ; il n'en reste donc qu'une, celle de la carte (TIW-14). Tout autre
+`'use client'` se justifie en revue. `src/domain/**` reste du TypeScript pur — ni React, ni
+Next, ni `fs`, ni `d3`, ni `sharp`.
 
 `src/map/**` s'atteint par sa façade `@/map`, **seul** module du dossier à porter
 `import "server-only"` : le build casse si un composant client l'atteint. Les quatre modules
@@ -123,7 +125,20 @@ les deux gardes.
 Aucun Tailwind (CSS nu avec custom properties). Aucune bibliothèque de carte : la carte est
 du SVG calculé au build par d3-geo, **0 Ko de bibliothèque côté client**. Aucun gestionnaire
 d'état, aucun client HTTP ni React Query, aucune bibliothèque de formulaires, aucun
-CSS-in-JS. Avant d'ajouter une dépendance, vérifie le budget : `npm run test:build` mesure
+CSS-in-JS. Aucune bibliothèque de lightbox ni d'animation : la visionneuse photo est un
+`<dialog>` natif, dont le piège de focus, l'`Échap` et le `::backdrop` sont gratuits.
+
+**`sharp` est déclaré depuis TIW-17, et il a coûté zéro paquet.** Il était déjà sur le disque
+à chaque installation : `next@16.3.1` le porte en dépendance _optionnelle_ pour son propre
+optimiseur d'images, donc `npm ls sharp` le montrait dédupliqué sous `next` avant ce ticket.
+Le déclarer a ajouté **0 paquet** et fait passer `node_modules` de 575 à 576 Mo — le bump
+0.35.3 → 0.35.4, rien d'autre. Ce que la déclaration achète, c'est l'honnêteté : dépendre
+d'une dépendance transitive, c'est dépendre de quelque chose qui peut disparaître dans un
+patch d'autre chose. Il ne vit que dans `src/content/photo-files.ts`, que seul
+`scripts/index-photos.ts` atteint, et la règle `content-facade` rend ça structurel — donc il
+ne pèse jamais sur un bundle client, ce que le relevé ci-dessous vérifie de fait.
+
+Avant d'ajouter une dépendance, vérifie le budget : `npm run test:build` mesure
 le JS initial, à **123,2 Ko brotli sur `/fr` pour un plafond de 150 Ko** — il reste
 **26,8 Ko** (mesuré sur `develop` @ `5c5bf34`, après TIW-14). La marge qui compte est celle
 de la route la plus lourde, pas la moyenne : `/_not-found` en est à 111,2 Ko et sa marge de
@@ -154,21 +169,33 @@ du compilateur, ce qui casse `typescript-eslint` **et** le typecheck intégré d
 À lever quand `typescript-eslint` publiera une majeure acceptant `>=7`.
 **Node 24.x** (`.nvmrc`, `engines`) pour l'alignement avec Vercel.
 
-## Les quatre gardes exécutables
+## Les cinq gardes exécutables
 
-Quatre invariants de ce projet ne se défendent ni par le typage ni par une revue de code :
+Cinq invariants de ce projet ne se défendent ni par le typage ni par une revue de code :
 ils se cassent en silence, avec un build vert. Chacun a donc un test qui lit un artefact
 réel, et chacun a été prouvé par un échec volontaire. **Ne les désactive pas.**
 
-| Commande             | Ce qu'elle garde                                       | Ce qui se passe sans elle                                         |
-| -------------------- | ------------------------------------------------------ | ----------------------------------------------------------------- |
-| `npm run test:build` | `/fr` et `/_not-found` sont bien prérendus             | le prérendu disparaît, `next build` sort en 0                     |
-| `npm run test:build` | aucun voyage `draft: true` n'est prérendu              | un brouillon part en ligne, et personne n'en est averti           |
-| `npm run test:lint`  | la frontière de pureté de `src/domain` mord vraiment   | la règle existe et ne refuse plus rien                            |
-| `npm run test:lint`  | `@/content/trips` reste la seule porte vers le contenu | le lecteur de disque non gardé s'importe de partout dans `src/**` |
+| Commande                     | Ce qu'elle garde                                       | Ce qui se passe sans elle                                         |
+| ---------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------- |
+| `npm run test:build`         | `/fr` et `/_not-found` sont bien prérendus             | le prérendu disparaît, `next build` sort en 0                     |
+| `npm run test:build`         | aucun voyage `draft: true` n'est prérendu              | un brouillon part en ligne, et personne n'en est averti           |
+| `npm run test:lint`          | la frontière de pureté de `src/domain` mord vraiment   | la règle existe et ne refuse plus rien                            |
+| `npm run test:lint`          | `@/content/trips` reste la seule porte vers le contenu | le lecteur de disque non gardé s'importe de partout dans `src/**` |
+| `npm run check:photo-weight` | les images suivies par git restent sous 150 Mo         | le dépôt grossit d'un commit à l'autre, et git ne rend rien       |
 
-Les quatre exigent une étape préalable — `test:build` a besoin d'un build, `test:lint` de
-charger tout le graphe de configuration d'ESLint — et vivent donc hors de `npm run test`.
+Les quatre premières exigent une étape préalable — `test:build` a besoin d'un build,
+`test:lint` de charger tout le graphe de configuration d'ESLint — et vivent donc hors de
+`npm run test`. `check:photo-weight` n'exige rien : il interroge `git ls-files`, coûte ~0,2 s,
+et vit hors de `npm run test` pour une autre raison — c'est une propriété du _dépôt_ et non du
+code, et elle n'a rien à faire dans une suite unitaire.
+
+Histoire du **poids du dépôt** : c'est le seul budget de ce projet qui grossit sans que
+personne décide de le dépenser. Chaque clone le paie, chaque job d'intégration continue le
+paie, et la plateforme le paie **encore** à chaque build, parce qu'un build part d'un clone.
+Prouvé par échec volontaire : un fichier de 160 Mo indexé sous `public/photos/` fait sortir la
+commande en 1 en nommant le fichier. Au-delà du seuil, la réponse est le stockage externe et un
+`src` en URL absolue — un changement de contenu, pas de structure — ce qui est précisément
+pourquoi ce garde peut se permettre de refuser plutôt que d'avertir.
 
 **Elles sont branchées, depuis TIW-22** — et cette ligne a dit successivement le contraire de
 la vérité dans les deux sens, ce qui est la raison de la préciser plutôt que de l'abréger.

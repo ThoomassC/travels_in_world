@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { PhotoGallery } from "@/components/photos/photo-gallery";
 import { formatDay, formatDayRange, machineDate } from "./dates";
 import type { TimelineMove, TimelineStay, TimelineStep } from "./steps";
 import { TransportIcon } from "./transport-icon";
@@ -48,20 +49,58 @@ function headingText(step: TimelineStep, t: ReturnType<typeof useTranslations<"t
     : t("moveHeading", { from: step.from.name, to: step.to.name });
 }
 
+/**
+ * The rendered width of a photo inside a step, told to the browser so it picks
+ * the right rung of the derivative ladder.
+ *
+ * Derived, not guessed: the reading column is `68ch` — ~34 rem at the default
+ * font size — the marker gutter and its gap take 3 rem of it, and the grid's
+ * `minmax(min(100%, 14rem), 1fr)` then fits two tracks of ~15 rem in the 31 rem
+ * that are left. Below that the grid collapses to one track the width of the
+ * column, which on a phone is the viewport less `main`'s 1.5 rem of padding on
+ * each side and the gutter. 480 px covers 15 rem at 1×, 960 px at 2×.
+ */
+const STAY_PHOTO_SIZES = "(min-width: 37rem) 15rem, calc(100vw - 6rem)";
+
 function StayBody({ step, locale }: { step: TimelineStay; locale: string }): ReactElement {
   const t = useTranslations("trip");
   const range = formatDayRange(step.startDate, step.endDate, locale);
 
   return (
-    <p className={styles.meta}>
-      {t.rich("stayMeta", {
-        start: range.start,
-        end: range.end,
-        nights: step.nights,
-        from: (chunks) => <time dateTime={machineDate(step.startDate)}>{chunks}</time>,
-        to: (chunks) => <time dateTime={machineDate(step.endDate)}>{chunks}</time>,
-      })}
-    </p>
+    <>
+      <p className={styles.meta}>
+        {t.rich("stayMeta", {
+          start: range.start,
+          end: range.end,
+          nights: step.nights,
+          from: (chunks) => <time dateTime={machineDate(step.startDate)}>{chunks}</time>,
+          to: (chunks) => <time dateTime={machineDate(step.endDate)}>{chunks}</time>,
+        })}
+      </p>
+
+      {/*
+        The photos taken here, inside the step rather than in the trip's gallery
+        at the bottom of the page — which is the whole point of a photo declaring
+        a `placeSlug`. Omitted rather than rendered empty: most stays have none,
+        and an empty grid would add a `list, 0 items` announcement to every one of
+        them.
+
+        Same component as the trip's gallery, and the same numbering: each `<a>`
+        carries its index in the page's single viewer, so the arrows walk from a
+        step's photo into the gallery's without a seam. See `collection.ts`.
+      */}
+      {step.photos.length > 0 ? (
+        <div className={styles.photos}>
+          <PhotoGallery
+            /* `anchor` is unique per step by construction (`stepAnchors`), so no
+               two grids on the page can share an `id`. */
+            id={`${step.anchor}-photos`}
+            photos={step.photos}
+            sizes={STAY_PHOTO_SIZES}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
 

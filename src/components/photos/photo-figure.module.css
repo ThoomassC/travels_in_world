@@ -1,0 +1,26 @@
+/* =============================================================================
+   The `<picture>` wrapper, and nothing else.
+
+   Everything visible about a photo — its aspect ratio, its cap, its radius —
+   belongs to the layout that renders it and arrives through `className`. This
+   file exists for one declaration.
+   ============================================================================ */
+
+/**
+ * `display: contents`, so the `<picture>` disappears from the box tree and the
+ * `<img>` stays the element its parent lays out.
+ *
+ * This is not cosmetic. The cover sits in a flex column (`trip-header`), where
+ * the direct child is blockified: before the `<picture>` existed, the `<img>`
+ * *was* that flex item. Wrapping it in a normal box would make the wrapper the
+ * flex item and turn the image back into an inline replaced element inside it —
+ * which brings back the baseline gap under the image and makes `max-block-size:
+ * 38vh` on the `<img>` cap the wrong element's height.
+ *
+ * `<source>` is metadata and never generates a box, so nothing is orphaned by
+ * removing the wrapper's own: `display: contents` on a `<picture>` promotes
+ * exactly one child, the `<img>`.
+ */
+.picture {
+  display: contents;
+}

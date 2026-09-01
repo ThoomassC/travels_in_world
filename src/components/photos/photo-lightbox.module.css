@@ -1,0 +1,190 @@
+/* =============================================================================
+   The photo viewer.
+
+   A full-viewport `<dialog>` in the top layer: the platform draws it above
+   everything and makes the page behind it inert, so nothing here fights a
+   z-index.
+
+   Only tokens from `src/styles/tokens.css`.
+   ============================================================================ */
+
+/**
+ * The dialog paints its own ground, and `::backdrop` is deliberately left alone.
+ *
+ * `::backdrop` used to inherit from nothing at all rather than from its
+ * originating element, so `var(--site-background)` inside it resolved to the
+ * initial value in browsers that have not shipped the newer inheritance rule —
+ * a transparent scrim with no error anywhere. A full-viewport dialog with an
+ * opaque background of its own has no such dependency: the scrim IS this
+ * element.
+ *
+ * The `max-width` / `max-height` resets are not optional: a `<dialog>` ships
+ * with UA limits of `calc(100% - 6px - 2em)` on both axes, so a viewer sized in
+ * `vw`/`vh` is quietly inset by a few pixels of margin on every side.
+ */
+.dialog {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  max-inline-size: none;
+  max-block-size: none;
+  background: var(--site-background);
+  color: var(--text-body);
+}
+
+.viewer {
+  block-size: 100%;
+  display: grid;
+  /* Bar, photo, controls — the photo takes whatever is left, which is what keeps
+     the two rows of chrome in the same place from one photo to the next. */
+  grid-template-rows: auto 1fr auto;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  /* A short fade, so the top layer does not appear as a hard cut. Neutralised
+     below for a reader who asked for less motion. */
+  animation: photo-viewer-in 160ms ease-out;
+}
+
+@keyframes photo-viewer-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.position {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  /* The count must not reflow the bar as the digits change — "1 sur 12" and
+     "11 sur 12" are the same width with tabular figures. */
+  font-variant-numeric: tabular-nums;
+}
+
+.frame {
+  margin: 0;
+  min-block-size: 0;
+  display: grid;
+  place-items: center;
+  /**
+   * The horizontal axis belongs to the swipe, the vertical one stays the
+   * browser's: `pan-y` keeps a scroll a scroll, and `pinch-zoom` keeps the one
+   * gesture nobody should have to give up to look closely at a photograph.
+   */
+  touch-action: pan-y pinch-zoom;
+}
+
+.image {
+  /* `contain`, never `cover`: this is the one place the whole photograph must be
+     visible, crop included — the reader opened it to see it. */
+  object-fit: contain;
+  max-inline-size: 100%;
+  max-block-size: 100%;
+  /* The intrinsic `width`/`height` attributes are still on the element, so
+     `inline-size: auto` is what lets the two caps above decide the box. */
+  inline-size: auto;
+  block-size: auto;
+  border-radius: var(--radius-sm);
+}
+
+.steps {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+/**
+ * The three controls — cross, previous, next — share one class: they are the same
+ * affordance at the same size, and a second declaration would be a second place
+ * for the 44 px target to drift out of.
+ */
+.control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 44 px at the root size — WCAG 2.2 target size (minimum). */
+  min-inline-size: 2.75rem;
+  min-block-size: 2.75rem;
+  padding: 0;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-accent);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.control:hover {
+  border-color: var(--accent);
+  background: var(--accent-quiet);
+}
+
+/**
+ * `aria-disabled` and not `disabled` — see the component for why focus must not
+ * be taken away inside a modal. The styling has to be written by hand precisely
+ * because `:disabled` does not match.
+ */
+.control[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.control[aria-disabled="true"]:hover {
+  border-color: var(--control-border);
+  background: var(--surface);
+}
+
+.glyph {
+  /* The glyphs are 1.4 rem of chrome, not body text: sized here rather than
+     inherited, so the three controls match whatever the reader's root size is. */
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+/**
+ * Motion, neutralised locally as well as globally.
+ *
+ * `tokens.css` already carries a blanket `prefers-reduced-motion` block with
+ * `!important`, and it does cover both declarations below. This block is here
+ * anyway, and the duplication is deliberate: the global rule collapses durations
+ * to 0.01 ms, which is a *simulation* of no motion and depends on a
+ * `*`-selector rule staying in a file this component does not own. Saying it
+ * where the animation is declared makes the intent local and reviewable.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .viewer {
+    animation: none;
+  }
+
+  .control {
+    transition: none;
+  }
+}
+
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  /* `clip-path`, never `display: none` nor `visibility: hidden`: those two remove
+     the text from the accessibility tree and the buttons go back to being
+     unnamed glyphs. */
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

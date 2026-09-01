@@ -5,6 +5,7 @@ import { escapeControls, quoted } from "@/content/finding";
 import { validateContent } from "@/content/validate";
 import type { ContentFinding, ContentValidation } from "@/content/validate";
 import { describeField } from "@/content/report";
+import { BLUR_PLACEHOLDER } from "../domain/fixtures";
 import { temporaryContent, tripYaml } from "./support";
 import type { TemporaryContent } from "./support";
 
@@ -351,13 +352,24 @@ describe("the summary does not contradict itself", () => {
 
 /* ------------------------------------------------------------------ helpers -- */
 
+/**
+ * A photo declaration, deliberately **narrower than the first derivative rung**.
+ *
+ * Every test using this helper is about resolving the `src` — case, URL escapes,
+ * path traversal — and a 1600 px width would have each of them also report three
+ * missing AVIF derivatives. The one test that asserts `findings` is empty would
+ * then fail for a reason that has nothing to do with what it is checking. The
+ * derivative check has its own fixture (`photo-without-derivatives`) and its own
+ * cases in `tests/content/validate.test.ts`.
+ */
 function photosBlock(source: string): string {
   return [
     "photos:",
     `  - src: ${source}`,
     "    alt: Une ruelle de Shinjuku sous la pluie",
-    "    width: 1600",
-    "    height: 1067",
+    "    width: 400",
+    "    height: 267",
+    `    blurDataUrl: ${BLUR_PLACEHOLDER}`,
   ].join("\n");
 }
 
