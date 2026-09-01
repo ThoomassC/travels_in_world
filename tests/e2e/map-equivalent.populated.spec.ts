@@ -143,6 +143,12 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
         href: active?.getAttribute("href") ?? null,
         insideSvg: Boolean(active?.closest("svg")),
         inMap: Boolean(active?.closest("figure")),
+        /**
+         * A marker, told apart from the three zoom controls TIW-14 added to the
+         * same `<figure>`. Both are "in the map"; only one is a trip.
+         */
+        isMarker: Boolean(active?.matches("a[data-trip]")),
+        isControl: Boolean(active?.closest("figure") && active?.matches("button")),
         inEquivalent: Boolean(active?.closest("section[aria-labelledby='pays-visites']")),
       };
     });
@@ -170,9 +176,45 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
   // 1. The first stop is the skip link — the document's own entry point.
   expect(journey[0]?.text).toBe(frMessages.trips.skipToContent);
 
-  // 2. The map's four markers are on the way, one per published trip.
-  const markerStops = journey.filter((stop) => stop.inMap);
+  /**
+   * 2a. TIW-14's three zoom controls come BEFORE the markers, and that ordering
+   * is a deliberate decision rather than an accident of the DOM: with sixty
+   * published trips, controls placed after the marker list would be sixty tab
+   * stops away, so a reader on a keyboard would have to walk the whole map to
+   * reach the button that makes the map smaller. They are rendered first and
+   * positioned over the map's corner by CSS.
+   */
+  const controlStops = journey.filter((stop) => stop.isControl);
+  expect(controlStops).toHaveLength(3);
+  /**
+   * `endsWith` and not equality: a control's text node is its visible glyph
+   * followed by its visually hidden name — "+Zoomer sur la carte" — which is the
+   * shape the markers use too (a dot, then real text). The glyph is deliberately
+   * not asserted here; it is a rendering choice, and the name is the contract.
+   */
+  expect(controlStops.map((stop) => stop.text.endsWith(frMessages.map.zoomIn))).toEqual([
+    true,
+    false,
+    false,
+  ]);
+  expect(controlStops.map((stop) => stop.text.endsWith(frMessages.map.zoomOut))).toEqual([
+    false,
+    true,
+    false,
+  ]);
+  expect(controlStops.map((stop) => stop.text.endsWith(frMessages.map.zoomReset))).toEqual([
+    false,
+    false,
+    true,
+  ]);
+
+  // 2b. Then the map's four markers, one per published trip.
+  const markerStops = journey.filter((stop) => stop.isMarker);
   expect(markerStops).toHaveLength(4);
+
+  const lastControl = journey.reduce((last, stop, index) => (stop.isControl ? index : last), -1);
+  const firstMarker = journey.findIndex((stop) => stop.isMarker);
+  expect(firstMarker).toBeGreaterThan(lastControl);
 
   /**
    * 3. The four countries follow, in order, each announcing its own count. This is
@@ -186,7 +228,7 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
   // 4. The countries come after the markers: the equivalent is *under* the map in
   //    the tab order as well as on the screen.
   const firstCountry = journey.findIndex((stop) => stop.inEquivalent);
-  const lastMarker = journey.reduce((last, stop, index) => (stop.inMap ? index : last), -1);
+  const lastMarker = journey.reduce((last, stop, index) => (stop.isMarker ? index : last), -1);
   expect(firstCountry).toBeGreaterThan(lastMarker);
 
   /**

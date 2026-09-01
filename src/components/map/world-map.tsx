@@ -1,19 +1,32 @@
-import type { CSSProperties, ReactElement } from "react";
+import { Fragment, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { frameAround, type WorldBox } from "./frame";
+import { MapViewport, type MapViewportZone } from "./map-viewport";
 import { placeMarks, spreadCoincident, type TripMark } from "./marks";
+import { worldPointOf, zonesOf } from "./zones";
 import styles from "./world-map.module.css";
 
 /**
  * The world map: 177 country shapes rendered once at build time, with one marker
  * per published trip laid over them.
  *
- * **No `'use client'`, and the omission is the feature.** Everything this
- * component does — crop, tint, place, count — is arithmetic over data the build
- * already has, so it ships as HTML and CSS and costs 0 byte of JavaScript. The
- * measured budget is 120.2 KB brotli of initial JS against a 150 KB ceiling;
- * this ticket spends none of the remaining 30 KB. Zoom, hover panel and trip
- * selection are TIW-14, which owns the map's single sanctioned client boundary.
+ * **Still no `'use client'` here, and that is the point of the split.** Everything
+ * this component does — crop, tint, place, group, count — is arithmetic over data
+ * the build already has, so all of it ships as HTML and CSS. TIW-14 added an
+ * interaction layer *over* this output rather than inside it: `./map-viewport.tsx`
+ * is the one client component, it receives the 177 `<path>` elements and the
+ * marker list as already-rendered React nodes, and it writes exactly five values
+ * — the `<svg>`'s `viewBox` and four custom properties. So a zoom moves the frame
+ * and sixty markers without a single path, a single country name or a single
+ * marker node entering the client bundle. The measured cost is in that file's
+ * header and in the ticket's report.
+ *
+ * **What a reader without JavaScript still gets, unchanged:** this whole
+ * component. The `<svg>` is rendered with the frame `frameAround` chose, every
+ * marker is a real `<a href>` to its trip, and `VisitedCountries` lists the
+ * destinations beside it. The criterion "the map stays shown in a frozen version
+ * and the list of destinations stays usable" was already met before this ticket;
+ * nothing here is a fallback built for the occasion.
  *
  * Translations come from `useTranslations`, not `getTranslations`: the former
  * works in a *synchronous* Server Component, which is what keeps the whole
@@ -83,20 +96,47 @@ export type WorldMapProps = {
   readonly marks: readonly TripMark[];
   /** The projected world box — `{ width: 960, height: 500 }` in production. */
   readonly world: WorldBox;
+  /**
+   * The body of a trip's row in the selection panel, keyed by slug and **rendered
+   * by the page** — a `TripCard` with its cover, its dates and its duration.
+   *
+   * A `ReactNode` and not trip data, which is the decision that keeps this layer
+   * where `docs/adr/0003-carte-svg-inerte-et-balises-html.md` put it. A card needs
+   * `Intl` date formatting, the `trips` message namespace and a locale-prefixed
+   * href; receiving it already rendered means `src/components/map/**` still
+   * imports neither façade, still renders under jsdom from a seven-shape fixture,
+   * and still has no second definition of what a trip looks like. It also means
+   * the cards travel in the flight payload as markup rather than as code: the
+   * client component displays one, and never builds one.
+   *
+   * Optional, because a map with no panel is a valid map — the component test
+   * renders it that way, and a marker then keeps its plain navigation.
+   */
+  readonly tripCards?: ReadonlyMap<string, ReactNode>;
 };
 
 /**
  * A custom property is the only channel a build-time number has into CSS, and
- * naming the three of them in the type is what lets the object literal be
- * written without a cast: React's `CSSProperties` is closed (its index signature
- * was removed on purpose), so `style={{ "--mark-left": … }}` alone does not
- * typecheck and the usual workaround is an `as CSSProperties` that silences
- * every other typo in the same literal.
+ * naming them in the type is what lets the object literal be written without a
+ * cast: React's `CSSProperties` is closed (its index signature was removed on
+ * purpose), so `style={{ "--mark-x": … }}` alone does not typecheck and the usual
+ * workaround is an `as CSSProperties` that silences every other typo in the same
+ * literal.
+ *
+ * **`--mark-x` / `--mark-y` are world units, not percentages, and that is the
+ * change TIW-14 made to this layer.** A percentage is a fraction of one
+ * particular frame; the reader now chooses the frame, so a marker's position has
+ * to be expressed in the space the frame is cut out of, and the stylesheet
+ * re-derives the percentage from the four `--frame-*` values the client component
+ * writes. `worldPointOf` is the conversion, and it is applied *after* the
+ * coincidence spread — so the nudge that separates two trips leaving the same
+ * city becomes a fixed distance on the map and grows as the reader zooms in,
+ * which is the real fix the ADR assigned to this ticket.
  */
-type MarkStyle = CSSProperties & Record<"--mark-left" | "--mark-top" | "--mark-order", string>;
+type MarkStyle = CSSProperties & Record<"--mark-x" | "--mark-y" | "--mark-order", string>;
 
-/** Same reasoning, for the one value the container needs. */
-type CanvasStyle = CSSProperties & Record<"--frame-aspect", string>;
+/** Same reasoning, for the ratio the figure's height cap is derived from. */
+type FigureStyle = CSSProperties & Record<"--world-aspect", string>;
 
 /**
  * React needs a key per shape, and `code` alone cannot be it: three entries of
@@ -110,7 +150,13 @@ type CanvasStyle = CSSProperties & Record<"--frame-aspect", string>;
 const shapeKey = (country: MapCountry, index: number): string =>
   `${country.code ?? "unassigned"}-${index}`;
 
-export function WorldMap({ countries, visited, marks, world }: WorldMapProps): ReactElement {
+export function WorldMap({
+  countries,
+  visited,
+  marks,
+  world,
+  tripCards,
+}: WorldMapProps): ReactElement {
   const t = useTranslations("map");
 
   // The frame is derived, not received: the component is the only place that
@@ -129,23 +175,34 @@ export function WorldMap({ countries, visited, marks, world }: WorldMapProps): R
   const placed = spreadCoincident(placeMarks(marks, frame), frame);
 
   /**
-   * The container's aspect ratio must be the frame's, *exactly*. Any other ratio
-   * makes `preserveAspectRatio` letterbox the SVG inside its box, and since the
-   * markers are positioned in percentages of the box rather than of the drawing,
-   * every one of them then drifts off the country it names.
-   *
-   * `frame.width` and `frame.height` are the very numbers `frame.viewBox` is
-   * formatted from — both already rounded to one decimal by `frameAround` — so
-   * the two cannot disagree. Using `world` here instead would be the bug.
+   * Which markers a reader would take for one place, and therefore which trips
+   * one activation has to offer. Computed here, at build time, on the frame the
+   * server rendered — `zonesOf` records why it is not re-clustered as the reader
+   * zooms, and what that buys.
    */
-  const canvasStyle: CanvasStyle = { "--frame-aspect": `${frame.width} / ${frame.height}` };
+  const zones = zonesOf(placed, frame);
+  const zoneOfTrip = new Map(
+    zones.flatMap((zone) => zone.marks.map((entry) => [entry.mark.slug, zone.id] as const))
+  );
+
+  /**
+   * The figure's height cap, which used to live in `src/app/[locale]/page.tsx`'s
+   * stylesheet as `.mapFrame`.
+   *
+   * It moved here for a structural reason and not for tidiness: the panel and the
+   * zoom controls are part of the map, so the map is now the thing that owns its
+   * own box. `world.width / world.height` is the ratio the cap needs — the *frame's*
+   * ratio belongs to the canvas, and the client component writes it — and the page
+   * no longer has to pass a number it computed for a stylesheet it does not own.
+   */
+  const figureStyle: FigureStyle = { "--world-aspect": String(world.width / world.height) };
 
   /**
    * **Whether there is a drawing at all**, and the one state that would render an
    * empty frame if it were not asked.
    *
    * With no geometry the `<svg>` is a ratio-locked box containing nothing: a
-   * bordered rectangle of sea, sized by `--frame-aspect`, with a counter under
+   * bordered rectangle of sea, sized by the frame's ratio, with a counter under
    * it. No error, nothing in the console — `buildWorldGeometry` throwing would at
    * least fail the build, but an empty `countries` array is a perfectly valid
    * value that renders as a blank plate. "Never an empty frame" is an acceptance
@@ -177,134 +234,204 @@ export function WorldMap({ countries, visited, marks, world }: WorldMapProps): R
    */
   const showsWholeWorld = frame.width >= world.width && frame.height >= world.height;
 
-  return (
-    <figure className={styles.figure}>
-      {drawable ? (
-        <div className={styles.canvas} style={canvasStyle}>
-          {/*
-              Inert by construction rather than by a list of CSS rules. 177 country
-              shapes have nothing to say to a screen reader — the names live in
-              `VisitedCountries`, next to this figure — and hiding the whole SVG is
-              what makes the acceptance criterion "the other countries are neutral,
-              not focusable and have no hover state" true without relying on anyone
-              remembering to leave out a `tabindex` or a `:hover`.
-              `pointer-events: none` on the element completes it: a tint is
-              information, not an affordance.
-            */}
-          <svg className={styles.map} viewBox={frame.viewBox} aria-hidden="true" focusable="false">
-            <g className={styles.land}>
-              {countries.map((country, index) => (
-                <path key={shapeKey(country, index)} d={country.path} />
-              ))}
-            </g>
-            {/*
-                The visited countries are drawn *again* on top rather than tinted in
-                place. Splitting the loop would mean testing `visited` membership per
-                shape — a lookup the content façade has already done — and the second
-                pass is what keeps a tinted border from being overpainted by a
-                neighbour drawn after it.
-              */}
-            <g className={styles.visited}>
-              {visited.map((country, index) => (
-                <path key={shapeKey(country, index)} d={country.path} />
-              ))}
-            </g>
-          </svg>
+  /**
+   * The marker overlay, **rendered here and handed to the client component as a
+   * node**. Sixty `<a href>` elements with their accessible names, their dot and
+   * their world coordinates, in the flight payload rather than in the bundle;
+   * the interaction is one delegated listener on the canvas above them.
+   */
+  const overlay =
+    placed.length > 0 ? (
+      <ul
+        className={styles.marks}
+        aria-label={t("markListLabel")}
+        /*
+          `role="list"` is redundant markup that is NOT redundant in practice:
+          `list-style: none` strips the list role in Safari with VoiceOver, and
+          a list that has lost its role also loses the `aria-label` above and
+          its item count — exactly what a reader landing among sixty links
+          needs. jsdom keeps the role either way, so no unit test can see this.
+        */
+        role="list"
+      >
+        {placed.map((entry, index) => {
+          const { mark } = entry;
+          /**
+           * DOM order is `marks` order — `startDate` descending, then `slug` — so
+           * the most recent trip is the first tab stop. `--mark-order` inverts
+           * that for painting: absolutely positioned siblings paint in DOM order,
+           * which would put the first-tabbed marker *under* every later one. The
+           * reader would then click the oldest trip of an overlapping pair while
+           * the keyboard reached the newest first.
+           *
+           * `--mark-x` / `--mark-y` are **world** units. See the note on
+           * `MarkStyle`: the reader now chooses the frame, so a percentage of one
+           * frame is no longer a position, and the stylesheet re-derives the
+           * percentage from the live `--frame-*` values.
+           */
+          const point = worldPointOf(entry, frame);
+          const markStyle: MarkStyle = {
+            "--mark-x": String(point.x),
+            "--mark-y": String(point.y),
+            "--mark-order": String(placed.length - index),
+          };
 
-          {/*
-            An empty list is worse than no list: a labelled `<ul>` with nothing in
-            it announces "trips on the map, list, 0 items" for a map that is simply
-            not populated yet. The caption below already states the truth.
-          */}
-          {placed.length > 0 ? (
-            <ul
-              className={styles.marks}
-              aria-label={t("markListLabel")}
-              /*
-                `role="list"` is redundant markup that is NOT redundant in practice:
-                `list-style: none` strips the list role in Safari with VoiceOver, and
-                a list that has lost its role also loses the `aria-label` above and
-                its item count — exactly what a reader landing among sixty links
-                needs. jsdom keeps the role either way, so no unit test can see this.
-              */
-              role="list"
+          return (
+            /*
+              `id="voyage-<slug>"` is the fragment the trip page already links
+              back to. Before it existed, `/fr/#voyage-japon-2024` — verified in
+              the served HTML — matched nothing and the reader landed at the top
+              of the home page: a promise the URL made and the document did not
+              keep. It is also why TIW-14 put its own state in the **query
+              string** and not in the fragment: one syntax, one meaning.
+
+              On the `<li>` and not on the `<a>`, so the browser's sequential
+              navigation starting point lands on the marker rather than past it:
+              after following the fragment, the next Tab reaches this trip's own
+              link. Uniqueness comes from `mark.slug`, which is the content
+              façade's primary key for a trip — one marker per trip, so no
+              duplicate `id` is possible.
+            */
+            <li
+              key={mark.slug}
+              id={`voyage-${mark.slug}`}
+              className={styles.mark}
+              style={markStyle}
             >
-              {placed.map(({ mark, leftPercent, topPercent }, index) => {
-                /**
-                 * DOM order is `marks` order — `startDate` descending, then `slug`
-                 * — so the most recent trip is the first tab stop. `--mark-order`
-                 * inverts that for painting: absolutely positioned siblings paint
-                 * in DOM order, which would put the first-tabbed marker *under*
-                 * every later one. The reader would then click the oldest trip of
-                 * an overlapping pair while the keyboard reached the newest first.
-                 */
-                const markStyle: MarkStyle = {
-                  "--mark-left": `${leftPercent}%`,
-                  "--mark-top": `${topPercent}%`,
-                  "--mark-order": String(placed.length - index),
-                };
+              {/*
+                `mark.href` is rendered as-is, in a bare `<a>`, and **it stays a
+                link**. That is the decision TIW-14 had to take and not dodge:
+                with no JavaScript this navigates to the trip, and with the
+                interaction layer running a plain activation opens the panel
+                instead — whose own card carries this very href. A modified click
+                is never intercepted, so "open in a new tab" still works.
 
-                return (
-                  /*
-                    `id="voyage-<slug>"` is the fragment the trip page already
-                    links back to. Before it existed, `/fr/#voyage-japon-2024` —
-                    verified in the served HTML — matched nothing and the reader
-                    landed at the top of the home page: a promise the URL made and
-                    the document did not keep.
+                `data-trip` and `data-zone` are the whole interface between this
+                server-rendered list and the client component: one delegated
+                listener reads them from `event.target.closest("a[data-trip]")`,
+                so no marker needs a React node, a handler or a byte of bundle.
+                `aria-haspopup` is added on mount and never rendered here — a
+                reader without the script must not be told about a dialog that
+                cannot open.
+              */}
+              <a
+                className={styles.link}
+                href={mark.href}
+                data-trip={mark.slug}
+                data-zone={zoneOfTrip.get(mark.slug)}
+              >
+                <span className={styles.dot} aria-hidden="true" />
+                {/*
+                  Real text, and **one** text node doing two jobs: it is the
+                  link's accessible name, and it is the tooltip the acceptance
+                  criterion asks for on hover *and* on keyboard focus. Not an
+                  `aria-label`, for the reason TIW-13 recorded — an attribute is a
+                  string a translator never sees in context and no tool finds in
+                  the DOM.
 
-                    On the `<li>` and not on the `<a>`, so the browser's sequential
-                    navigation starting point lands on the marker rather than past
-                    it: after following the fragment, the next Tab reaches this
-                    trip's own link. Uniqueness comes from `mark.slug`, which is
-                    the content façade's primary key for a trip — one marker per
-                    trip, so no duplicate `id` is possible.
+                  It is hidden by `opacity: 0` rather than by `clip-path` now, and
+                  the change is deliberate: `clip-path`, `display: none` and
+                  `visibility: hidden` all make the text unusable as a bubble
+                  (the last two remove it from the accessibility tree outright),
+                  while a transparent, absolutely positioned, pointer-transparent
+                  element is invisible, costs no layout, and stays a text node in
+                  the accessibility tree. So there is no second copy of the label
+                  to keep in step, which is what a separate tooltip span would
+                  have cost.
+                */}
+                <span className={styles.label}>
+                  {t("markLabel", { title: mark.title, place: mark.placeName })}
+                </span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    ) : null;
 
-                    This is the whole of what this component does about the
-                    fragment: it costs no JavaScript and it invents no URL, which
-                    is what keeps `docs/adr/0003-carte-svg-inerte-et-balises-html.md`
-                    intact. The `voyage-` prefix is duplicated by hand between here
-                    and whatever builds those links — `src/i18n/paths.ts` has no
-                    helper for a fragment today — so the test in
-                    `tests/components/map/world-map.test.tsx` is what pins the
-                    spelling on this side.
-                  */
-                  <li
-                    key={mark.slug}
-                    id={`voyage-${mark.slug}`}
-                    className={styles.mark}
-                    style={markStyle}
-                  >
-                    {/*
-                      `mark.href` is rendered as-is, in a bare `<a>`. The locale
-                      prefix is the page's job (`@/i18n/navigation`); this
-                      component builds no URL, which is also why importing
-                      `next/link` here would be both banned and pointless.
-                    */}
-                    <a className={styles.link} href={mark.href}>
-                      <span className={styles.dot} aria-hidden="true" />
-                      {/*
-                        Real text, visually hidden — not an `aria-label` on an
-                        empty link. The reason is NOT voice control: the text is
-                        not visible either way, so nobody can pronounce what they
-                        see. It is that an `aria-label` is an attribute, and an
-                        attribute is a string a translator never sees in context
-                        and a tool cannot find in the DOM. This stays a text node
-                        that comes from the message catalogue.
+  /**
+   * One panel per zone, its cards already rendered by the page. A zone with no
+   * card at all — the state a caller that passes no `tripCards` produces — is
+   * dropped, so the client component finds no zone for that marker and leaves its
+   * link alone rather than swallowing the activation.
+   */
+  const panelZones: readonly MapViewportZone[] =
+    tripCards === undefined
+      ? []
+      : zones.flatMap((zone) => {
+          const cards = zone.marks.flatMap((entry) => {
+            const card = tripCards.get(entry.mark.slug);
 
-                        The hiding uses `clip-path`, never `display: none` nor
-                        `visibility: hidden`: those two remove the text from the
-                        accessibility tree and the link goes back to being unnamed.
-                      */}
-                      <span className={styles.visuallyHidden}>
-                        {t("markLabel", { title: mark.title, place: mark.placeName })}
-                      </span>
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-        </div>
+            return card === undefined ? [] : [<Fragment key={entry.mark.slug}>{card}</Fragment>];
+          });
+
+          return cards.length === 0
+            ? []
+            : [
+                {
+                  id: zone.id,
+                  // Resolved here, on the server, ICU plural included: the client
+                  // component takes no translator — see `MapViewportLabels`.
+                  heading: t("panelHeading", { count: cards.length }),
+                  body: cards,
+                },
+              ];
+        });
+
+  return (
+    <figure className={styles.figure} style={figureStyle}>
+      {drawable ? (
+        /*
+          The client boundary, and the only one this map has. Everything below is
+          rendered here, on the server, and travels as nodes: `children` is the
+          drawing, `overlay` is the marker list, and each zone's `body` is a stack
+          of trip cards. `MapViewport` adds the `<svg>` tag whose `viewBox` it
+          owns, four custom properties, three buttons and a panel shell — see its
+          header for why that is the whole of the client's job.
+        */
+        <MapViewport
+          initialFrame={frame}
+          world={world}
+          overlay={overlay}
+          zones={panelZones}
+          labels={{
+            zoomIn: t("zoomIn"),
+            zoomOut: t("zoomOut"),
+            zoomReset: t("zoomReset"),
+            wheelHint: t("wheelHint"),
+            panelClose: t("panelClose"),
+          }}
+        >
+          {/*
+            Inert by construction rather than by a list of CSS rules. 177 country
+            shapes have nothing to say to a screen reader — the names live in
+            `VisitedCountries`, next to this figure — and hiding the whole SVG is
+            what makes the acceptance criterion "the other countries are neutral,
+            not focusable and have no hover state" true without relying on anyone
+            remembering to leave out a `tabindex` or a `:hover`.
+            `pointer-events: none` on the element completes it: a tint is
+            information, not an affordance. Zooming changed none of that: the
+            client writes the `viewBox` attribute and nothing else about the
+            drawing.
+          */}
+          <g className={styles.land}>
+            {countries.map((country, index) => (
+              <path key={shapeKey(country, index)} d={country.path} />
+            ))}
+          </g>
+          {/*
+            The visited countries are drawn *again* on top rather than tinted in
+            place. Splitting the loop would mean testing `visited` membership per
+            shape — a lookup the content façade has already done — and the second
+            pass is what keeps a tinted border from being overpainted by a
+            neighbour drawn after it.
+          */}
+          <g className={styles.visited}>
+            {visited.map((country, index) => (
+              <path key={shapeKey(country, index)} d={country.path} />
+            ))}
+          </g>
+        </MapViewport>
       ) : (
         /*
           The failed-drawing branch, and the whole of what "never an empty frame"

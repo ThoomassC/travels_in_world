@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -9,6 +8,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { VisitedCountries, WorldMap, type TripMark } from "@/components/map";
 import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { LatestTrips } from "@/components/trips/latest-trips";
+import { TripCard } from "@/components/trips/trip-card";
 import { listTripSummaries } from "@/content/trips";
 import { buildWorldGeometry, projectPoint } from "@/map";
 import { localePathname } from "@/i18n/pathname";
@@ -20,15 +20,6 @@ import styles from "./page.module.css";
 type HomePageProps = {
   params: Promise<{ locale: string }>;
 };
-
-/**
- * React's `CSSProperties` is closed — its index signature was removed on purpose
- * — so a custom property does not typecheck in an object literal without being
- * named. Naming it in the type rather than casting the literal is what keeps
- * every *other* typo in the same object an error; identical note in
- * `src/components/map/world-map.tsx`.
- */
-type MapFrameStyle = CSSProperties & Record<"--world-aspect", string>;
 
 /**
  * The home page: one sentence saying what this is, the world map, and the start
@@ -96,6 +87,9 @@ export default async function HomePage({ params }: HomePageProps) {
           {
             slug: trip.slug,
             title: trip.title,
+            // Read only by `zonesOf`, which sorts a zone's panel by date
+            // descending rather than trusting the order this list arrives in.
+            startDate: trip.startDate,
             placeName: trip.firstArrival.name,
             href: localePathname({ href: tripPath(trip.slug), locale }),
             point,
@@ -103,9 +97,35 @@ export default async function HomePage({ params }: HomePageProps) {
         ];
   });
 
-  const mapFrameStyle: MapFrameStyle = {
-    "--world-aspect": String(world.width / world.height),
-  };
+  /**
+   * The body of each trip's row in the map's selection panel (TIW-14).
+   *
+   * **Built here, and handed to the map as rendered nodes.** A card needs `Intl`
+   * date formatting, the `trips` namespace and a locale-prefixed href — none of
+   * which `src/components/map/**` may reach without ending its own rule that the
+   * whole layer renders under jsdom from a seven-shape fixture
+   * (`docs/adr/0003-carte-svg-inerte-et-balises-html.md`). This page is already
+   * the one file holding both façades and both narrowed types, so it is the
+   * right place for the join. The map decides *which* card goes in *which*
+   * panel; it never decides what a card looks like.
+   *
+   * `TripCard` and not a second card written for the panel: it is exactly the
+   * criterion's list — cover, title, dates, duration and a read affordance — and
+   * a copy would be a second place for the date format to drift. `headingLevel:
+   * 3` sits under the panel's own `<h2>`.
+   *
+   * The cards live in the flight payload whether a panel opens or not. Measured
+   * on the four-trip fixture, that is the cost recorded in this ticket's report;
+   * the alternative — serialising trip data and building the card in the browser
+   * — would have put the formatting, the namespace and the markup in the client
+   * bundle, which is the budget this ticket must not spend.
+   */
+  const tripCards = new Map(
+    trips.map((trip) => [
+      trip.slug,
+      <TripCard key={trip.slug} trip={trip} locale={locale} headingLevel={3} />,
+    ])
+  );
 
   return (
     /*
@@ -120,22 +140,30 @@ export default async function HomePage({ params }: HomePageProps) {
         <h1 className={styles.title}>{t("title")}</h1>
         <p className={styles.intro}>{t("intro")}</p>
 
-        <div className={styles.mapFrame} style={mapFrameStyle}>
-          <WorldMap
-            countries={world.countries}
-            visited={world.visited}
-            marks={marks}
-            world={{ width: world.width, height: world.height }}
-          />
-        </div>
+        {/*
+          No wrapper any more: the height cap that used to live in this page's
+          `.mapFrame` moved into the map's own stylesheet with TIW-14. The map now
+          owns a panel and three controls as well as a drawing, so its box is its
+          own business — and this page no longer computes a ratio for a stylesheet
+          it does not own.
+        */}
+        <WorldMap
+          countries={world.countries}
+          visited={world.visited}
+          marks={marks}
+          world={{ width: world.width, height: world.height }}
+          tripCards={tripCards}
+        />
 
         {/*
-          The map's textual equivalent (TIW-15), and it sits *outside* `.mapFrame`
-          on purpose. That wrapper caps the map at `45vh × aspect` — about 691 px
-          on a 1152 px desktop — so a list rendered inside it would be a centred
-          column two thirds of the page wide, with its `h2` out of line with the
-          "Derniers voyages" `h2` right below. The reading order is what the
-          acceptance criterion asks for ("sous la carte"), and DOM order gives it.
+          The map's textual equivalent (TIW-15), and it sits *outside* the map's
+          own box on purpose. The map caps itself at `45vh × aspect` — about
+          691 px on a 1152 px desktop — so a list rendered inside it would be a
+          centred column two thirds of the page wide, with its `h2` out of line
+          with the "Derniers voyages" `h2` right below. The reading order is what
+          the acceptance criterion asks for ("sous la carte"), and DOM order gives
+          it. (Until TIW-14 the cap was this page's `.mapFrame`; the wrapper is
+          gone and the sibling relation is unchanged.)
 
           **`trips` and not `world.visited`.** The equivalent is derived from the
           content, never from the geometry beside it: `buildWorldGeometry` throws
