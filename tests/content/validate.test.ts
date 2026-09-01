@@ -150,6 +150,76 @@ describe("a country code of the right shape that no country bears", () => {
   });
 });
 
+/**
+ * TIW-30, and the case TIW-29 left open on purpose.
+ *
+ * `SG` is not `XK`. Nothing is misspelled and nothing is unassigned: ISO 3166-1
+ * gives Singapore `SG` and numeric `702`, and this validator's registry check
+ * clears it. What refuses it is the *basemap*, which at the 110m vintage carries
+ * no micro-state at all — measured, 75 of the 249 assigned codes have no shape —
+ * so `buildWorldGeometry` threw in the middle of the prerender of `/fr`.
+ *
+ * The map's message was already good (it never sent the author back here, which
+ * was TIW-29's actual defect); it was simply the wrong *moment*. This block is
+ * the moment moved earlier.
+ */
+describe("a country the ISO assigns but the shipped basemap cannot draw", () => {
+  const validation = validateContent(fixtureRoots("undrawable-country-code"));
+  const finding = single(validation);
+
+  it("fails the validation instead of leaving it to the prerender", () => {
+    expect(validation).toMatchObject({ tripCount: 1, validCount: 0, failedCount: 1 });
+  });
+
+  it("names the field, in the form the author has to find in the file", () => {
+    expect(describeField(finding.field)).toBe("places[1].countryCode");
+  });
+
+  it("names the file, the line and the column the code is written on", () => {
+    expect(finding.file).toBe(
+      "tests/fixtures/content/undrawable-country-code/trips/asie-du-sud-est-2025/trip.yaml"
+    );
+    expect(finding.location).toEqual({ line: 21, column: 5 });
+  });
+
+  /**
+   * The whole difficulty of the ticket, in one assertion: the author has to be
+   * told that the code is *right* and the map is what is missing. Told "this code
+   * is assigned to no country" — the `XK` sentence — they would go looking for a
+   * typo that is not there.
+   */
+  it("says the code is valid and the basemap is what lacks the shape", () => {
+    expect(finding.problem).toContain("Singapour");
+    expect(finding.problem).toContain("SG");
+    expect(finding.problem).toContain("110m");
+    expect(finding.problem).not.toMatch(/n'attribue|aucun pays/);
+  });
+
+  it("does not tell the author to run the validator that just refused them", () => {
+    expect(finding.action).not.toContain("validate:content");
+    expect(finding.command ?? "").not.toContain("validate:content");
+  });
+
+  it("gives a way out rather than only a refusal", () => {
+    expect(finding.action).toMatch(/retire|rattache/);
+  });
+
+  /**
+   * The escape route is a budget decision, so it is quoted with its price. A
+   * finer vintage of the same package does draw Singapore — measured 182.5 KB
+   * brotli of paths against a 34 KB ceiling — and an action that mentioned the
+   * switch without the number would be an invitation to blow the budget.
+   */
+  it("prices the finer vintage rather than merely naming it", () => {
+    expect(finding.action).toContain("50m");
+    expect(finding.action).toMatch(/34|182/);
+  });
+
+  it("never leaks the schema's own English message", () => {
+    expect(`${finding.problem} ${finding.action}`).not.toMatch(/Expected|Invalid|invalid_/);
+  });
+});
+
 describe("an endDate before the startDate (acceptance criterion 4)", () => {
   const validation = validateContent(fixtureRoots("end-date-before-start-date"));
   const finding = single(validation);

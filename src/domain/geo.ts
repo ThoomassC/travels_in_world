@@ -23,10 +23,35 @@ export const SlugSchema = z
 
 /**
  * Shape only, deliberately: this validates that the code *looks* like ISO
- * 3166-1 alpha-2, not that it exists. Checking against a registry would put a
- * copy of the ISO list in the domain and date it; the map renderer is where an
- * unknown code has a visible consequence, and it is the layer that owns the
- * list of features it can draw.
+ * 3166-1 alpha-2, not that it exists, and not that anything can draw it.
+ * Checking against a registry would put a copy of the ISO list in the domain and
+ * date it — `docs/adr/0001-domain-purity.md`, and `docs/adr/0011` for the
+ * symmetric case of `src/domain/continent.ts`, which may carry its table
+ * precisely because it *refuses* nothing.
+ *
+ * **The decision has not moved; its justification has.** The second half of this
+ * comment used to say that the map renderer is where an unknown code first has a
+ * visible consequence, and that it owns the list of features it can draw. Neither
+ * is true any more. The question is now answered in three notches:
+ *
+ * | notch    | answered by                                     | refuses     |
+ * | -------- | ----------------------------------------------- | ----------- |
+ * | shape    | this schema                                     | `jp`, `JPN` |
+ * | assigned | `isAssignedCountryCode` (`@/iso-3166`)          | `XK`, `UK`  |
+ * | drawable | `DRAWABLE_COUNTRY_CODES` (`@/basemap-coverage`) | `SG`, `MC`  |
+ *
+ * The last two are enforced by `src/content/validate.ts` — *before* the build
+ * since TIW-29 and TIW-30, not by the renderer during it, which is the defect
+ * those two tickets exist to fix. And neither list is owned by `src/map` any
+ * more: the ISO table left for `src/iso-3166.ts` (ADR 0011), and the basemap's
+ * coverage is the generated `src/basemap-coverage.ts`.
+ *
+ * What keeps this decision *mechanical* rather than documentary is neither of
+ * those files: `travels-in-world/domain-purity` forbids every `@/*` import from
+ * `src/domain/**`, measured, so this module **cannot** reach either table even if
+ * a later reader decided it should. The domain judges the shape, `@/iso-3166`
+ * knows which codes exist, `@/basemap-coverage` knows which of them the map can
+ * draw, and refusing content belongs to `src/content`.
  */
 export const CountryCodeSchema = z
   .string()

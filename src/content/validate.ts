@@ -1,4 +1,10 @@
 import path from "node:path";
+import {
+  BASEMAP_VINTAGE,
+  DRAWABLE_COUNTRY_CODES,
+  FINER_BASEMAP_VINTAGES,
+  FINER_VINTAGE_COUNTRY_CODES,
+} from "@/basemap-coverage";
 import { CountryCodeSchema } from "@/domain/geo";
 import { derivativeSources } from "@/domain/photo";
 import { TripSchema } from "@/domain/schema";
@@ -36,7 +42,8 @@ export type { ContentFinding, ContentValidation } from "./finding";
  *   checking it means reaching for `fs`, which the domain must not do;
  * - **the real world**: `CountryCodeSchema` validates the *shape* of a country
  *   code and refuses to carry the ISO registry, so a well-formed code no country
- *   bears reached the map and threw there — see {@link countryCodeFindings};
+ *   bears — and, since TIW-30, one no basemap can draw — reached the map and threw
+ *   there; see {@link countryCodeFindings};
  * - **the wording**: the domain reports in paths and English sentences, and the
  *   deliverable of TIW-9 is a French line that names a file, a field and a
  *   command.
@@ -460,14 +467,23 @@ const UNASSIGNED_CODE_NOTES = new Map<string, { readonly why: string; readonly a
 ]);
 
 /**
- * A country code of the right shape that ISO 3166-1 assigns to nobody — the fault
- * this whole script was silent about until TIW-29, and the one it was most
- * expected to catch.
+ * A country code the map cannot turn into a shape — in two distinct ways, and the
+ * distinction is the whole content of this function.
  *
  * `CountryCodeSchema` checks `/^[A-Z]{2}$/` and deliberately stops there
  * (`docs/adr/0001-domain-purity.md`: a registry in the domain would be a dated
- * copy of an external list). `buildWorldGeometry` is what refuses the code, and it
- * refuses it *during* `next build`, in the prerender of `/fr` — measured:
+ * copy of an external list). Everything past the shape is judged here, in three
+ * notches, each answering a different question and each with its own sentence:
+ *
+ * | notch     | asked by                     | fails for | fixed by |
+ * | --------- | ---------------------------- | --------- | -------- |
+ * | shape     | `CountryCodeSchema`          | `jp`      | TIW-9    |
+ * | assigned  | `isAssignedCountryCode`      | `XK`      | TIW-29   |
+ * | drawable  | `DRAWABLE_COUNTRY_CODES`     | `SG`      | TIW-30   |
+ *
+ * The last two used to fail the same way, and it was the wrong way: they reached
+ * `buildWorldGeometry`, which threw *during* `next build`, in the prerender of
+ * `/fr`. Measured on `XK` before TIW-29:
  *
  * ```
  * $ TIW_CONTENT_DIR=… npm run validate:content
@@ -479,9 +495,18 @@ const UNASSIGNED_CODE_NOTES = new Map<string, { readonly why: string; readonly a
  * ```
  *
  * The map's message was pointing at *this* command, which had just cleared the
- * file. So the check belongs here, next to the two others no schema can make: the
+ * file. So both checks belong here, next to the two others no schema can make: the
  * uniqueness of a slug across the whole collection, and the existence of a photo
  * on disk. This is the layer allowed to know the real world.
+ *
+ * **Why the third notch needs a generated file.** Whether ISO assigns a code is a
+ * table (`src/iso-3166.ts`); whether a *map* can draw it is a property of the
+ * TopoJSON, and `travels-in-world/map-entry-point` keeps `world-atlas`, `d3-*` and
+ * `topojson-*` out of every module of `src/**` outside `src/map/**` — the `@/map`
+ * façade being unreachable too, since `server-only` fails at resolution under the
+ * plain Node this script runs on. `src/basemap-coverage.ts` is that answer,
+ * precomputed by a command and cross-checked against the real dataset in two
+ * places. Its header carries the argument in full.
  *
  * **The shape is checked first, and the order is load-bearing.** Only a value
  * `CountryCodeSchema` accepts is examined here, so `jp`, `JPN`, an empty value and
@@ -514,7 +539,7 @@ function countryCodeFindings(
      */
     const parsed = CountryCodeSchema.safeParse(valueAt(trip.value, field));
 
-    if (!parsed.success || isAssignedCountryCode(parsed.data)) {
+    if (!parsed.success || DRAWABLE_COUNTRY_CODES.has(parsed.data)) {
       return;
     }
 
@@ -525,24 +550,80 @@ function countryCodeFindings(
       name === undefined
         ? `le lieu ${describeField(["places", index])}`
         : `la ville ${quoted(name)}`;
-    const note = UNASSIGNED_CODE_NOTES.get(code);
 
     findings.push({
       file,
       field,
       ...locationOf(trip, field),
-      problem:
-        note === undefined
-          ? `${label} porte le code pays ${quoted(code)}, que l'ISO 3166-1 alpha-2 n'attribue à aucun pays : la carte n'a donc aucune forme à lui associer`
-          : `${label} porte le code pays ${quoted(code)} : ${note.why}, et la carte n'a donc aucune forme à lui associer`,
-      action:
-        note === undefined
-          ? `écris les deux lettres majuscules que l'ISO 3166-1 alpha-2 attribue au pays (${quoted("JP")} pour le Japon), ou retire le lieu du voyage`
-          : note.action,
+      ...(isAssignedCountryCode(code) ? undrawableCode(label, code) : unassignedCode(label, code)),
     });
   });
 
   return findings;
+}
+
+/** A code ISO 3166-1 assigns to nobody: a typo, a retired code, or `XK`. */
+function unassignedCode(label: string, code: string): Pick<ContentFinding, "problem" | "action"> {
+  const note = UNASSIGNED_CODE_NOTES.get(code);
+
+  return {
+    problem:
+      note === undefined
+        ? `${label} porte le code pays ${quoted(code)}, que l'ISO 3166-1 alpha-2 n'attribue à aucun pays : la carte n'a donc aucune forme à lui associer`
+        : `${label} porte le code pays ${quoted(code)} : ${note.why}, et la carte n'a donc aucune forme à lui associer`,
+    action:
+      note === undefined
+        ? `écris les deux lettres majuscules que l'ISO 3166-1 alpha-2 attribue au pays (${quoted("JP")} pour le Japon), ou retire le lieu du voyage`
+        : note.action,
+  };
+}
+
+/**
+ * **TIW-30: a real country the shipped basemap has no shape for.** The third
+ * notch of the chain, and the one that is hardest to word.
+ *
+ * Nothing is wrong with the code. `SG` is Singapore, ISO 3166-1 numeric 702, and
+ * every check upstream of here clears it — the schema's `/^[A-Z]{2}$/`, then
+ * `isAssignedCountryCode`. What refuses it is `world-atlas` at the 110m vintage,
+ * which carries no micro-state at all: measured, 75 of the 249 assigned codes
+ * have no geometry, Hong Kong, Malta, Mauritius and French Polynesia among them.
+ *
+ * So the sentence must not read like the one above it. Told "this code is
+ * assigned to no country" the author goes hunting for a typo that is not there,
+ * which is the shape of dead end TIW-29 spent a ticket removing. It says instead
+ * that the code is right and the map is what is missing, and it names the vintage
+ * so the claim is checkable.
+ *
+ * **The way out is priced, and it is not the same way out for every code.** 64 of
+ * the 75 are drawn by a finer vintage the package already ships; 11 — the French
+ * overseas départements and a few dependencies — are drawn by none of them. The
+ * finer vintage costs 182.5 KB brotli of paths against a 34 KB ceiling, measured,
+ * so it is quoted with its number rather than suggested: an action that said
+ * "switch vintage" and stopped there would be an invitation to blow a budget the
+ * author cannot see. And for the eleven, saying it at all would be sending them
+ * to buy 152 KB that still would not draw their country.
+ *
+ * **What it deliberately does not say.** Not "run `npm run validate:content`" —
+ * this *is* that command. Not a substitute country either: the map draws no shape
+ * there, and picking a neighbour on the author's behalf is a geopolitical opinion
+ * a validator has no business holding.
+ */
+function undrawableCode(label: string, code: string): Pick<ContentFinding, "problem" | "action"> {
+  const wayOut = FINER_VINTAGE_COUNTRY_CODES.has(code)
+    ? `retire le lieu du voyage, ou rattache-le à un pays que la carte dessine. ` +
+      `Le millésime ${quoted(FINER_BASEMAP_VINTAGES[0])} du même paquet le dessinerait, mais il porte les tracés ` +
+      `de 30,1 à 182,5 Ko brotli pour un plafond de 34 Ko : c'est une décision de budget, pas une option de contenu`
+    : `retire le lieu du voyage, ou rattache-le à un pays que la carte dessine. ` +
+      `Changer de millésime n'y ferait rien : aucun de ceux que world-atlas livre ` +
+      `(${[BASEMAP_VINTAGE, ...FINER_BASEMAP_VINTAGES].join(", ")}) ne porte de forme pour ce code`;
+
+  return {
+    problem:
+      `${label} porte le code pays ${quoted(code)}, que l'ISO 3166-1 alpha-2 attribue bien — ` +
+      `mais le fond de carte du site, ${quoted(`world-atlas ${BASEMAP_VINTAGE}`)}, n'a aucune forme pour lui : ` +
+      `à cette résolution il ne contient aucun micro-État`,
+    action: wayOut,
+  };
 }
 
 /**

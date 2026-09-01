@@ -46,12 +46,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * The 110m world-atlas vintage, which is the one the map is built from. Pinned as
- * a path rather than imported as a module: a `resolveJsonModule` import of a
- * 100 kB TopoJSON makes `tsc` infer the whole literal, and the suite only needs
- * two fields out of it.
+ * The world-atlas vintages the package ships, coarsest first.
+ *
+ * The map is built from the first one and only the first one. The other two are
+ * here because `src/basemap-coverage.ts` also records which countries a *finer*
+ * vintage would draw, and `basemap-coverage.test.ts` has to recompute that answer
+ * from the packaged files rather than trust the generated one.
  */
-const DATASET_RELATIVE_PATH = "node_modules/world-atlas/countries-110m.json";
+export const DATASET_VINTAGES = ["110m", "50m", "10m"] as const;
+
+export type DatasetVintage = (typeof DATASET_VINTAGES)[number];
+
+/** The vintage the map is actually built from — the one `src/map/dataset.ts` imports. */
+export const SHIPPED_DATASET_VINTAGE: DatasetVintage = "110m";
+
+/**
+ * Pinned as a path rather than imported as a module: a `resolveJsonModule` import
+ * of a 100 kB TopoJSON makes `tsc` infer the whole literal, and the suite only
+ * needs two fields out of it.
+ */
+function datasetRelativePath(vintage: DatasetVintage): string {
+  return `node_modules/world-atlas/countries-${vintage}.json`;
+}
 
 export type DatasetGeometry = {
   /**
@@ -69,8 +85,11 @@ export type DatasetGeometry = {
  * renames a key or switches `id` to a number has to fail here, loudly, and not
  * as a mystery count three files away.
  */
-export function readDatasetGeometries(): readonly DatasetGeometry[] {
-  const absolutePath = path.join(repositoryRoot(), DATASET_RELATIVE_PATH);
+export function readDatasetGeometries(
+  vintage: DatasetVintage = SHIPPED_DATASET_VINTAGE
+): readonly DatasetGeometry[] {
+  const relativePath = datasetRelativePath(vintage);
+  const absolutePath = path.join(repositoryRoot(), relativePath);
   const parsed: unknown = JSON.parse(readFileSync(absolutePath, "utf8"));
 
   const objects = isRecord(parsed) ? parsed["objects"] : undefined;
@@ -79,13 +98,13 @@ export function readDatasetGeometries(): readonly DatasetGeometry[] {
 
   if (!Array.isArray(geometries)) {
     throw new Error(
-      `${DATASET_RELATIVE_PATH} has no objects.countries.geometries array; the world-atlas layout changed.`
+      `${relativePath} has no objects.countries.geometries array; the world-atlas layout changed.`
     );
   }
 
   return geometries.map((geometry, index) => {
     if (!isRecord(geometry)) {
-      throw new Error(`Geometry ${index} of ${DATASET_RELATIVE_PATH} is not an object.`);
+      throw new Error(`Geometry ${index} of ${relativePath} is not an object.`);
     }
 
     const id = geometry["id"];
@@ -93,9 +112,7 @@ export function readDatasetGeometries(): readonly DatasetGeometry[] {
     const name = isRecord(properties) ? properties["name"] : undefined;
 
     if (typeof name !== "string") {
-      throw new Error(
-        `Geometry ${index} of ${DATASET_RELATIVE_PATH} has no properties.name string.`
-      );
+      throw new Error(`Geometry ${index} of ${relativePath} has no properties.name string.`);
     }
 
     // `id` is absent on exactly three geometries and a numeric *string* on every
@@ -103,7 +120,7 @@ export function readDatasetGeometries(): readonly DatasetGeometry[] {
     // silently breaks a join written against strings.
     if (id !== undefined && typeof id !== "string") {
       throw new Error(
-        `Geometry ${index} (${name}) of ${DATASET_RELATIVE_PATH} has a non-string id ${String(id)}.`
+        `Geometry ${index} (${name}) of ${relativePath} has a non-string id ${String(id)}.`
       );
     }
 
