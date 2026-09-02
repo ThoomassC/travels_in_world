@@ -46,8 +46,16 @@ describe("the feed link", () => {
   });
 
   it("stays relative, for `metadataBase` to resolve — like the canonical", () => {
-    const [feed] = shareMetadata(page).alternates?.types?.["application/rss+xml"] ?? [];
-    const url = typeof feed === "string" ? feed : feed?.url;
+    /**
+     * `Metadata["alternates"]["types"]` is typed as a string, a `URL` or a list
+     * of descriptors, so the value is narrowed rather than destructured — a
+     * spread would compile against the union and break `next build`'s own
+     * typecheck, which is stricter here than it looks.
+     */
+    const declared = shareMetadata(page).alternates?.types?.["application/rss+xml"];
+    const first = Array.isArray(declared) ? declared[0] : declared;
+    const url =
+      typeof first === "string" ? first : first instanceof URL ? first.href : first?.url;
 
     expect(typeof url).toBe("string");
     expect(String(url).startsWith("http")).toBe(false);
