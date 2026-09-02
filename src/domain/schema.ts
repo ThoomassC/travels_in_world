@@ -220,6 +220,32 @@ const TripFieldsSchema = z.strictObject({
   coverPhotoSrc: z.string().min(1).optional(),
   budget: BudgetSchema.optional(),
   /**
+   * **The day the récit went online — not the day the journey ended.**
+   *
+   * The distinction is the whole field. A journey of 2019 written up this morning
+   * is news to a reader, and `endDate` would call it seven years old; a trip that
+   * ended last week and is still being written is not published at all. Nothing
+   * else in this schema records the second date, which is why it is stored rather
+   * than derived (TIW-19).
+   *
+   * **Required, and that is the one decision here worth arguing.** Both ways out
+   * were a guess about the field a reader is shown a claim about: defaulting to
+   * `endDate` makes an old journey permanently un-announceable, and `.optional()`
+   * makes a journal where nobody wrote the key announce nothing at all, silently
+   * — this repository's least favourite failure. `draft` is defaulted because its
+   * absence has one unambiguous meaning ("published"); the absence of a
+   * publication date has none. `npm run new-trip` writes today's date into the
+   * skeleton, so the field is never typed by hand — the same arrangement
+   * `coordinates` has with `npm run geocode`.
+   *
+   * What consumes it: `src/domain/freshness.ts` (which trip is new, and for how
+   * long) and `src/app/feed.xml/route.ts` (the feed's order and its `pubDate`).
+   * Nothing displays it except the home page's banner, which prints it inside a
+   * `<time>` — so a badge that has outlived its window still carries the date
+   * that contradicts it. See `docs/fraicheur-au-prerendu.md`.
+   */
+  publishedAt: PlainDateSchema,
+  /**
    * Publication state, last as it is in `content/README.md` — a contributor
    * reads the two in the same order, and the key belongs to no content block.
    *
@@ -256,6 +282,28 @@ function checkTrip(trip: TripFields, ctx: TripIssues): void {
       code: "custom",
       path: ["endDate"],
       message: `The trip ends on ${trip.endDate}, before it starts on ${trip.startDate}.`,
+    });
+  }
+
+  /**
+   * A récit published before its journey began.
+   *
+   * Deliberately the *only* rule tying `publishedAt` to the itinerary, and
+   * deliberately not `publishedAt >= endDate`: writing while travelling is
+   * legitimate, and writing years afterwards is the ordinary case this field
+   * exists for. Publishing before the departure is the one reading that cannot
+   * mean anything — and it is the shape a date copy-pasted from `startDate`'s
+   * neighbouring line takes.
+   *
+   * `isBefore` and not `<`: it abstains when either day is malformed, so a
+   * `startDate: "2024-6-1"` reports one issue on `startDate` instead of two, one
+   * of which points at a healthy field.
+   */
+  if (isBefore(trip.publishedAt, trip.startDate)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["publishedAt"],
+      message: `The story is dated ${trip.publishedAt}, before the trip starts on ${trip.startDate}.`,
     });
   }
 

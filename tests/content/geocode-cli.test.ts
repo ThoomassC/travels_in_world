@@ -189,6 +189,7 @@ function kyotoOnly(contentDir: string): string {
 title: Japon, printemps 2024
 startDate: 2024-04-12
 endDate: 2024-04-16
+publishedAt: 2024-05-02
 places:
   - slug: kyoto
     name: Kyoto
@@ -351,6 +352,7 @@ describe("geocode when the service does not cooperate", () => {
 title: Un voyage
 startDate: 2024-04-12
 endDate: 2024-04-16
+publishedAt: 2024-05-02
 places:
   - slug: ville
     name: ${cityName}

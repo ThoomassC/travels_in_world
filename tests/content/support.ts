@@ -93,6 +93,12 @@ export function tripYaml(overrides: Readonly<Record<string, string>> = {}): stri
     title: "title: Japon, printemps 2024",
     startDate: "startDate: 2024-04-12",
     endDate: "endDate: 2024-04-16",
+    /**
+     * Required since TIW-19, so every collection built here carries one.
+     * Deliberately a **different day** from `endDate`: a builder that let the two
+     * coincide would let a consumer reading the wrong field pass this whole suite.
+     */
+    publishedAt: "publishedAt: 2024-05-02",
     places: [
       "places:",
       "  - slug: tokyo",

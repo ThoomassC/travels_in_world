@@ -275,6 +275,15 @@ export type TripSummary = {
   readonly title: Trip["title"];
   readonly startDate: Trip["startDate"];
   readonly endDate: Trip["endDate"];
+  /**
+   * The day the récit went online, which is **not** `endDate` — see the field's
+   * own note in `./schema.ts`.
+   *
+   * On the summary and not only on the detail, because the two views that read it
+   * are both listings: the freshness derivation (`./freshness.ts`) picks which
+   * card carries the badge, and the RSS feed orders and dates its items by it.
+   */
+  readonly publishedAt: Trip["publishedAt"];
   readonly duration: Duration;
   readonly countryCodes: readonly CountryCode[];
   /**
@@ -328,6 +337,7 @@ export function summaryOf(trip: Trip): TripSummary {
     title: trip.title,
     startDate: trip.startDate,
     endDate: trip.endDate,
+    publishedAt: trip.publishedAt,
     duration: durationOf(trip),
     countryCodes: visitedCountryCodes(trip),
     firstArrival: firstArrivalOf(trip),

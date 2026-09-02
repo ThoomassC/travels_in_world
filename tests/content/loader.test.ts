@@ -114,6 +114,17 @@ type TripOptions = {
   readonly endDate: string;
   readonly title?: string;
   readonly draft?: boolean;
+  /**
+   * The day the récit went online. Defaults to `endDate` — the shortest value
+   * `TripSchema` accepts for every trip this builder produces, since the schema
+   * refuses a publication dated before the departure and these fixtures move
+   * `startDate` around freely.
+   *
+   * The freshness cases at the bottom of this file pass it explicitly; nothing
+   * else here reads it, and the distinction between the two dates is asserted
+   * where it belongs, in `tests/domain/freshness.test.ts`.
+   */
+  readonly publishedAt?: string;
 };
 
 /**
@@ -127,6 +138,7 @@ function oneStayTrip(options: TripOptions): string {
     title: `title: ${options.title ?? options.slug}`,
     startDate: `startDate: ${options.startDate}`,
     endDate: `endDate: ${options.endDate}`,
+    publishedAt: `publishedAt: ${options.publishedAt ?? options.endDate}`,
     places: TOKYO_ONLY,
     steps: [
       "steps:",

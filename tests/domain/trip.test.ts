@@ -247,6 +247,7 @@ describe("TripSummary and TripDetail", () => {
       title: trip.title,
       startDate: trip.startDate,
       endDate: trip.endDate,
+      publishedAt: trip.publishedAt,
       duration: durationOf(trip),
       countryCodes: visitedCountryCodes(trip),
       firstArrival: firstArrivalOf(trip),
@@ -357,6 +358,10 @@ describe("summaryOf", () => {
       title: "Japon, printemps 2024",
       startDate: "2024-04-12",
       endDate: "2024-04-22",
+      // A different day from `endDate` in the fixture, on purpose: the freshness
+      // derivation reads this one, and a summary copying the wrong date would be
+      // indistinguishable here if the two agreed.
+      publishedAt: "2024-05-02",
       duration: { nights: 10, days: 11 },
       countryCodes: ["JP", "TH"],
       firstArrival: PlaceSchema.parse(TOKYO),

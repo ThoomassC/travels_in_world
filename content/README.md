@@ -50,6 +50,7 @@ slug: japon-2024 # minuscules, chiffres et traits d'union — c'est l'URL du voy
 title: Japon, printemps 2024
 startDate: 2024-04-12 # toujours AAAA-MM-JJ, jamais une autre écriture
 endDate: 2024-04-16
+publishedAt: 2024-05-02 # le jour où le récit est mis en ligne — voir « La date de publication »
 
 places:
   - slug: tokyo
@@ -99,8 +100,29 @@ tags: # facultatif, mêmes règles qu'un slug
 draft: false # facultatif, false par défaut : le voyage est publié — voir « Un voyage en brouillon »
 ```
 
-Le minimum vital est plus court : `slug`, `title`, `startDate`, `endDate`, un lieu et une
-étape. Tout le reste est facultatif.
+Le minimum vital est plus court : `slug`, `title`, `startDate`, `endDate`, `publishedAt`,
+un lieu et une étape. Tout le reste est facultatif.
+
+## La date de publication
+
+`publishedAt` est **le jour où le récit est mis en ligne**, et ce n'est pas `endDate`.
+La distinction est tout l'intérêt du champ : un voyage de 2019 raconté ce matin est une
+nouveauté pour le lecteur, et `endDate` le déclarerait vieux de sept ans.
+
+C'est la seule entrée du badge « nouveau récit » (accueil, carte, vignette) et l'ordre du
+flux RSS. Il n'y a **aucun champ « nouveau »** à cocher, donc aucun à oublier de décocher :
+le badge est dérivé de cette date et disparaît de lui-même passé 60 jours — à la
+granularité du déploiement, ce que `docs/fraicheur-au-prerendu.md` explique et borne.
+
+`npm run new-trip <slug>` écrit la date du jour, comme `npm run geocode` écrit les
+coordonnées : tu n'as normalement pas à la taper. Le champ est **obligatoire**, parce que
+son absence ne veut rien dire de précis — contrairement à celle de `draft`, qui veut dire
+« publié ». Deux règles :
+
+- il doit s'écrire `AAAA-MM-JJ`, comme toutes les dates de ce fichier ;
+- il ne peut pas précéder `startDate` : publier un récit avant le départ n'a pas de sens,
+  et c'est la forme que prend une date recopiée depuis la ligne d'à côté. Publier
+  **pendant** le voyage, en revanche, reste valide.
 
 L'exemple ci-dessus se termine sur `draft: false` — c'est la valeur par défaut, écrite ici
 pour être copiée sans surprise. L'exemple portait `draft: true` : on copiait le modèle, on
