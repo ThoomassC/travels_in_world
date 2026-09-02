@@ -199,7 +199,7 @@ pourquoi ce garde peut se permettre de refuser plutôt que d'avertir.
 
 **Elles sont branchées, depuis TIW-22** — et cette ligne a dit successivement le contraire de
 la vérité dans les deux sens, ce qui est la raison de la préciser plutôt que de l'abréger.
-`.github/workflows/ci.yml` lance les quatre gardes sur chaque pull request et sur chaque
+`.github/workflows/ci.yml` lance les cinq gardes sur chaque pull request et sur chaque
 poussée vers `main` et `develop`, et la protection de branche fait de la vérification
 `Vérifications` un préalable à toute fusion : une PR rouge n'est pas fusionnable, administrateur
 compris sur `main`. Le hook `prebuild` de `package.json` lance `validate:content` avant **tout**

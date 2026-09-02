@@ -604,8 +604,20 @@ async function indexParsedTrip(
    * a conversation, and interleaved lines from four photos at once are unreadable
    * in the order they happened, which is the same argument `geocode` makes for its
    * own sequential loop. The second is that libvips already uses a thread pool per
-   * operation, so the wall-clock gain on a handful of photographs is small; 0.73 s
-   * per photograph, measured on four realistic ones at three rungs each.
+   * operation, so the wall-clock gain on a handful of photographs is small.
+   *
+   * This line used to claim "0.73 s per photograph, measured on four realistic
+   * ones at three rungs each", and that figure contradicted itself: the same
+   * ticket reported 1.7 s for the four, and 0.73 x 4 is 2.9. TIW-33 re-measured
+   * and got 1.45 s total on three runs, about 0.31 s of conversion per photograph
+   * once startup is taken out; two attempts to reproduce it from the main session
+   * used a faulty harness and are not offered as a third figure.
+   *
+   * So no per-photograph number is quoted here any more. The argument above does
+   * not need one — it needs the order of magnitude, which is "under two seconds
+   * for four photographs", and that much every run agrees on. A precise figure
+   * nobody can reproduce is worse than an honest bound: it invites the reader to
+   * trust an arithmetic that never held.
    */
   for (const [index] of photos.entries()) {
     const photo: PhotoRef = {
