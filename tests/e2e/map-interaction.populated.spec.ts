@@ -105,7 +105,7 @@ test("the fixture really is the build this file assumes", async ({ page }) => {
   await page.goto("/fr");
 
   await expect(page.getByRole("figure")).toHaveAccessibleName(
-    "Carte du monde, recadrée sur les voyages publiés : 4 voyages, 4 pays"
+    "Carte du monde, recadrée sur les voyages publiés : 5 voyages, 5 pays"
   );
 });
 
@@ -415,7 +415,10 @@ test.describe("the tooltip", () => {
      */
     const markers = page.locator("a[data-trip]");
     const count = await markers.count();
-    expect(count).toBe(4);
+    // Five since TIW-18, the untold trip's marker included: it is a link like the
+    // others and carries the same tooltip, so it can widen the document the same
+    // way and has to be walked here too.
+    expect(count).toBe(5);
 
     for (let index = 0; index < count; index += 1) {
       await markers.nth(index).hover({ force: true });
