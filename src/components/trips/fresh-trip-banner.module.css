@@ -25,10 +25,30 @@
  * graphical object required to understand the content (WCAG 1.4.11, ≥ 3:1).
  */
 .banner {
+  /**
+   * **One row, and the height is a measurement rather than a taste.**
+   *
+   * The first version was a three-line stack — chip, then title, then date — at
+   * 122 px tall. Measured at 1152 x 800, the viewport TIW-13's criterion is
+   * written against, that pushed the map's `<figure>` from a bottom edge of 716
+   * to 854: the map no longer fitted on the first screen, which is the one thing
+   * that criterion asks for. The reduced-motion-style fix — "it is only a
+   * banner" — would have traded a documented criterion for a nicer announcement.
+   *
+   * Baseline-aligned and wrapping instead: the same three elements on one line at
+   * 40 px, so the figure's bottom edge comes back to 772 at that viewport. Below
+   * about 640 px of width the row wraps to two or three lines, where there is
+   * room for it — measured at 390 x 844, the figure still opens at 480.
+   *
+   * `gap: 0 var(--space-3)` — horizontal only. A row gap would re-introduce the
+   * height the moment the row wraps on a phone, which is exactly where the
+   * vertical space is scarcest.
+   */
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-5);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-3);
+  padding: var(--space-2) var(--space-4);
   border: 1px solid var(--control-border);
   /* The accent edge is the one visual flourish, and it is redundant with the
      chip and the wording above it — nothing here is the only channel for
@@ -50,7 +70,6 @@
  * If a third placement ever needs the chip, that is the moment to extract it.
  */
 .flag {
-  align-self: start;
   inline-size: max-content;
   max-inline-size: 100%;
   margin: 0;
@@ -67,8 +86,11 @@
 
 .heading {
   margin: 0;
-  font-size: var(--text-lg);
-  line-height: 1.2;
+  /* `--text-md` and not `--text-lg`: the banner is a pointer into the page, and
+     a headline competing with the `<h1>` two lines above it reads as a second
+     title for the site. */
+  font-size: var(--text-md);
+  line-height: 1.4;
 }
 
 .link {
