@@ -40,6 +40,25 @@ un jeu d'icônes le traverse immédiatement.
 Tout est en **brotli à qualité maximale** — ce qu'un CDN livre réellement, donc
 ce qu'un budget doit compter.
 
+> **Note (TIW-33, 2026-09-01).** Il y a un **quatrième** budget depuis TIW-17,
+> et il est d'une autre espèce : les images suivies par git, plafonnées à
+> **150 Mo**, gardées par `npm run check:photo-weight` — mesuré ce jour à
+> 26 282 o sur un seul fichier. La décision est écrite dans
+> `docs/adr/0014-les-derivees-d-images-sont-versionnees.md`.
+>
+> Il est cité ici parce qu'il vérifie la thèse de cette ADR et qu'il en éprouve
+> une limite. La thèse : c'est encore un chiffre plutôt qu'une liste, et il naît
+> exactement du même raisonnement — verser des binaires dans git se contourne
+> honnêtement, une photo à la fois, jusqu'à ce que quelque chose soit lent et que
+> personne ne sache depuis quand. La limite : les trois budgets du tableau lisent
+> un artefact que le build vient de produire, tandis que celui-ci interroge
+> `git ls-files`, donc **le dépôt et non le code** — ce qui est aussi pourquoi il
+> ne coûte rien — 0,15 s mesuré — et pourquoi il vit hors de `npm run test`
+> pour une raison différente des autres.
+>
+> Les chiffres du tableau ci-dessus n'ont pas été réécrits, conformément à la
+> règle de ce dossier ; l'état courant est dans `AGENTS.md`.
+
 Trois propriétés de ce dispositif ne sont pas évidentes et décident de son
 efficacité.
 

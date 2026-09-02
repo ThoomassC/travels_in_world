@@ -28,17 +28,40 @@ URL qui n'a rien à calculer.
 
 ### Un. Une adresse retirée répond 200 avec `noindex, follow`, pas 410
 
-Mesuré sur Next 16.3.1, et c'est ce qui distingue un renoncement d'une paresse :
+Mesuré sur Next 16.3.1, et c'est ce qui distingue un renoncement d'une paresse.
+Chaque ligne porte désormais sa citation, relue dans `node_modules/next/dist/`
+par TIW-31 puis recontrôlée par TIW-33 :
 
-- Next porte **404**, **401** et **403** sur un document prérendu — `notFound()`,
-  `unauthorized()`, `forbidden()` — et n'expose **rien** pour 410.
+- Next porte **404**, **403** et **401** sur un document prérendu — `notFound()`,
+  `forbidden()`, `unauthorized()` — et n'expose **rien** pour 410. C'est un
+  ensemble clos de trois, littéralement :
+  `client/components/http-access-fallback/http-access-fallback.js:35-40` déclare
+  `{ NOT_FOUND: 404, FORBIDDEN: 403, UNAUTHORIZED: 401 }`, et `ALLOWED_CODES`
+  n'est rien d'autre que les valeurs de cet objet. Aucun `gone()` n'existe dans
+  la version installée, vérifié ici ; TIW-31 rapporte la même lecture sur
+  `canary` au 2026-09-01, et cette moitié-là n'a pas été rejouée.
 - Un Route Handler, lui, sait rendre 410, et cesse d'être prérendu à l'instant
-  où il le fait : **le même handler sort `○` en rendant 200 et `ƒ` en rendant 410.**
-- Le fichier `.meta` que Next écrit à côté d'un corps prérendu porte bien un
-  champ `status` — qu'il refuse de remplir avec autre chose que 200.
+  où il le fait. **Le même handler sort `○` en rendant 200 et `ƒ` en rendant
+  410**, et la ligne qui le décide est `export/routes/app-route.js:95` :
+  `isValidStatus` y vaut `response.status < 400 || response.status === 404`, et
+  tout autre 4xx part dans la branche `revalidate: 0`. Tout le `○`-devient-`ƒ`
+  tient dans cette expression.
+- **Le fichier `.meta` n'est pas l'obstacle**, contrairement à ce que ce
+  paragraphe affirmait. Il disait : « le fichier `.meta` que Next écrit à côté
+  d'un corps prérendu porte bien un champ `status` — qu'il refuse de remplir avec
+  autre chose que 200 ». C'était **faux dès l'écriture**, et non vieilli :
+  `export/routes/app-page.js:129-142` calcule `isNonSuccessfulStatusCode` comme
+  `res.statusCode > 300` puis écrit `status = res.statusCode`, donc le champ
+  porterait un 410 sans broncher. Mesuré par TIW-31, qui a rouvert les deux portes
+  que TIW-21 avait fermées, et recontrôlé ligne par ligne par TIW-33. Ce qui
+  manque est **en amont** : rien dans le pipeline de rendu d'une page ne peut
+  produire un 410 à écrire dans ce champ.
 
 Un vrai 410 coûte donc une fonction serveur sur une URL qui n'a aucun contenu à
-calculer. C'est l'invariant 1 échangé contre trois chiffres.
+calculer. C'est l'invariant 1 échangé contre trois chiffres. La correction du
+troisième point ne change pas cette conclusion — elle en déplace la cause, ce qui
+compte pour le lecteur qui viendra chercher par où passer : la porte est fermée
+au niveau du rendu, pas au niveau de l'artefact.
 
 Ce qui est livré à la place tient tout le reste du critère : l'adresse résout,
 la page dit que le récit n'est plus en ligne, et elle propose la carte et les
@@ -52,9 +75,25 @@ canonique dit « cette URL est l'adresse de ce qui est ici ». Une page retirée
 qui perdrait sa canonique laisserait un robot traiter une variante à
 `?utm_source=…` comme une seconde page.
 
-Un 410 authentique reste souhaitable, et il a un ticket : **TIW-31**. Deux
-formes y sont possibles — une règle de plateforme dans `vercel.json`, ou le jour
-où Next exposera une interruption `gone()` avec un document prérendable.
+Un 410 authentique reste souhaitable. Ce paragraphe disait « il a un ticket :
+**TIW-31** » et nommait deux formes possibles ; **TIW-31 est livré**, il a exploré
+les deux, et voici où il laisse la question :
+
+- **du côté de Next, la porte est fermée**, avec les trois citations ci-dessus
+  pour le prouver ;
+- **du côté de la plateforme, elle est ouverte et n'est pas franchie.** Un objet
+  de `routes` dans `vercel.json` accepte bien un `status` entier sans `dest`, et
+  `routes` cohabite désormais avec les `headers` et `redirects` que ce fichier
+  porte déjà — ce qui était l'obstacle au moment de TIW-21. La règle est écrite,
+  prête à l'emploi, dans [`../deploiement.md`](../deploiement.md) ; elle n'est
+  pas posée. Ce qu'aucun document ne tranche est précisément la moitié qui
+  décide ici : la règle rend-elle le 410 **avec cette page** ou avec un corps
+  vide ? Rien dans ce dépôt n'exécute `vercel.json`, donc la question n'a pas de
+  réponse sans un déploiement, et se tromper échangerait un lecteur qui reçoit
+  une explication contre un lecteur qui reçoit trois chiffres.
+
+Le renoncement n'est donc plus « en attente d'un ticket » : il est **mesuré des
+deux côtés**, et ce qui manque est une observation sur un déploiement réel.
 
 ### Deux. Aucune image de partage n'est générée par voyage
 
@@ -123,11 +162,20 @@ route.
 **Un 410 par Route Handler.** Mesurée : `ƒ`. Le pari de l'ADR 0006 se refuse
 route par route, y compris quand c'est un critère d'acceptation qui le demande.
 
-**Un 410 par une règle de plateforme, dans `vercel.json`.** Non écartée :
-reportée à TIW-31. Ce qu'il faudra peser ce jour-là est écrit d'avance — la
-règle sortirait le comportement du code applicatif pour le mettre dans un
-fichier de configuration de déploiement, où aucun test de ce dépôt ne le lit, et
-il faudrait tenir la liste des slugs retirés à deux endroits.
+**Un 410 par une règle de plateforme, dans `vercel.json`.** Ce paragraphe disait
+« non écartée : reportée à TIW-31 ». TIW-31 l'a pesée, et les deux réserves
+annoncées ici se sont vérifiées telles quelles : la règle sortirait le
+comportement du code applicatif pour le mettre dans un fichier que **rien de ce
+dépôt n'exécute** — ni `next build`, ni `next start`, ni Playwright — et
+`vercel.json` étant du JSON statique qui ne peut pas lire
+`src/i18n/slug-history.ts`, la liste des slugs retirés vivrait à deux endroits
+libres de diverger en silence. S'y ajoute une troisième raison qui n'était pas
+prévisible d'ici : le corps de la réponse n'est documenté nulle part, donc le
+choix se ferait à l'aveugle sur ce qui compte le plus pour le lecteur. La règle
+est **consignée prête à l'emploi et non posée** — voir
+[`../deploiement.md`](../deploiement.md), section « Le 410 par une règle de
+plateforme ». Le registre `withdrawn` étant vide, il n'existe d'ailleurs aujourd'hui
+aucune adresse sur laquelle l'essayer.
 
 **`notFound()` sur une adresse retirée.** C'est ce que le code faisait avant
 TIW-21, et ce n'est pas un renoncement mais une régression de sens : un 404 dit
@@ -156,7 +204,11 @@ et dans le README, plutôt que présenté comme fait.
 **Un consommateur qui lit le code de statut et rien d'autre voit une page
 vivante.** Le `noindex` est une balise : un moteur d'indexation la lit, un
 script qui vérifie des liens en `HEAD` ne la lit pas. C'est le vrai résidu du
-renoncement, et il est petit — mais il est réel, et il disparaîtra avec TIW-31.
+renoncement, et il est petit — mais il est réel. Ce point disait « il
+disparaîtra avec TIW-31 » ; **TIW-31 est livré et il n'a pas disparu.** Il ne
+disparaîtra qu'avec un 410 réellement servi, ce qui suppose de mesurer sur un
+déploiement le corps que rend une règle `vercel.json` — voir la décision
+ci-dessus.
 
 **Deux voyages sans photographie partagent la même image.** C'est un compromis
 de la marque et non du prérendu ; l'ADR 0013 l'assume à son tour.
@@ -171,20 +223,29 @@ route à la demande réintroduirait exactement le trou décrit au constat 2.
 
 ## Ce qui invaliderait cette décision
 
-1. **Next exposant un `gone()` prérendable**, ou un `status` que le `.meta`
-   accepte de porter. Le premier renoncement tombe de lui-même, et TIW-31
-   devient une ligne plutôt qu'un choix d'architecture.
-2. **Un rastériseur au build.** Il rend le second renoncement caduc sans toucher
+1. **Next exposant un `gone()` prérendable.** Ce point ajoutait « ou un `status`
+   que le `.meta` accepte de porter » : cette seconde moitié n'a jamais rien
+   signalé, puisque le `.meta` accepte déjà n'importe quel statut au-dessus de 300
+   (`export/routes/app-page.js:129-142`, corrigé plus haut). Le signal utile est
+   donc l'unique : une interruption prérendable côté rendu. Absent de la version
+   installée, et de `canary` au **2026-09-01** selon TIW-31. Ce jour-là, le premier
+   renoncement tombe de lui-même et servir un 410 devient une ligne plutôt qu'un
+   choix d'architecture.
+2. **Une mesure du corps que rend une règle `status` de `vercel.json`**, prise
+   sur un déploiement réel. C'est le seul fait manquant qui décide de la voie
+   plateforme, et il ne s'obtient pas depuis ce dépôt. S'il montre que la page est
+   servie avec le 410, le renoncement tombe sans qu'aucune route ne devienne `ƒ`.
+3. **Un rastériseur au build.** Il rend le second renoncement caduc sans toucher
    au pari : des PNG réels sur le disque, pesés par `test:build` comme n'importe
    quel autre octet, et fermés par la même liste de slugs que les pages. C'est
    la seule évolution qui redonne une image par voyage sans rouvrir la fuite du
    constat 3.
-3. **Une garde qui refuserait toute route sous `dynamicRoutes` sans
+4. **Une garde qui refuserait toute route sous `dynamicRoutes` sans
    `fallback: false`.** Elle n'existe pas ; le jour où elle existe, le constat 2
    cesse d'être un piège et redevient une simple contrainte, et
    `opengraph-image` pourra être reconsidéré au vu d'un chiffre plutôt que d'une
    colonne.
-4. **Un besoin réellement par requête ailleurs dans le site.** Le jour où l'ADR
+5. **Un besoin réellement par requête ailleurs dans le site.** Le jour où l'ADR
    0006 admet une frontière dynamique, ces deux renoncements ne se justifient
    plus par eux-mêmes : il faudra décider si l'adresse retirée et l'image de
    partage sont du bon côté de cette frontière, ce qui n'est pas évident dans un
