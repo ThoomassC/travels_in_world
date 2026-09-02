@@ -45,9 +45,20 @@ const CONTINENT_MESSAGE_KEY: Record<Continent, string> = {
 export type TripCatalogueProps = {
   readonly trips: readonly TripEntry[];
   readonly locale: Locale;
+  /**
+   * The slug of the journal's newest récit, when there is a fresh one (TIW-19) —
+   * the same value the home page's listing receives, resolved once by the content
+   * façade so the two pages cannot disagree about which trip is new.
+   *
+   * The badged card is wherever its country falls in the grouping, which is the
+   * right answer: this page is a catalogue, and hoisting one trip out of its
+   * continent to make the badge easier to find would break the one ordering the
+   * reader is promised.
+   */
+  readonly freshSlug?: string;
 };
 
-export function TripCatalogue({ trips, locale }: TripCatalogueProps): ReactElement {
+export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps): ReactElement {
   const t = useTranslations("trips");
   const collator = collatorFor(locale);
 
@@ -88,7 +99,12 @@ export function TripCatalogue({ trips, locale }: TripCatalogueProps): ReactEleme
                 <ul className={cardStyles.grid} role="list">
                   {country.trips.map((trip) => (
                     <li key={trip.slug}>
-                      <TripCard trip={trip} locale={locale} headingLevel={4} />
+                      <TripCard
+                        trip={trip}
+                        locale={locale}
+                        headingLevel={4}
+                        isNew={trip.slug === freshSlug}
+                      />
                     </li>
                   ))}
                 </ul>

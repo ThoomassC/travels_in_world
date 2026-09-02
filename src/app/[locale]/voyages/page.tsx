@@ -4,9 +4,11 @@ import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { TripCatalogue } from "@/components/trips/trip-catalogue";
 import { listTripSummaries } from "@/content/trips";
+import { freshestTrip } from "@/domain/freshness";
 import { localePathname } from "@/i18n/pathname";
 import { tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
+import { buildDay } from "../../build-day";
 import { shareMetadata } from "../../share";
 import { MAIN_CONTENT_ID } from "../main-content";
 import styles from "./page.module.css";
@@ -100,6 +102,16 @@ export default async function AllTripsPage({ params }: { params: Promise<LocaleP
   const trips = await listTripSummaries();
   const t = await getTranslations("trips");
 
+  /**
+   * The same question the home page asks, answered by the same pure function
+   * over the same collection and the same build day (TIW-19) — so the badge is
+   * on the same trip here as it is there. No banner on this page: it is a
+   * catalogue, and the badged card stays wherever its country falls in the
+   * grouping rather than being hoisted out of the one ordering the reader is
+   * promised.
+   */
+  const fresh = freshestTrip(trips, buildDay());
+
   return (
     /*
       The landing point of the layout's skip link — the same `id` and the same
@@ -135,7 +147,7 @@ export default async function AllTripsPage({ params }: { params: Promise<LocaleP
           </a>
         </section>
       ) : (
-        <TripCatalogue trips={trips} locale={locale} />
+        <TripCatalogue trips={trips} locale={locale} freshSlug={fresh?.slug} />
       )}
     </main>
   );

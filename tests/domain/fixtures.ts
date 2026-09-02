@@ -179,6 +179,7 @@ export function tripInput(overrides: Record<string, unknown> = {}): Record<strin
     title: "Japon, printemps 2024",
     startDate: "2024-04-12",
     endDate: "2024-04-22",
+    publishedAt: "2024-05-02",
     places: [TOKYO, KYOTO, BANGKOK],
     steps: [
       stay("tokyo", "2024-04-12", "2024-04-16"),
@@ -206,6 +207,7 @@ export function minimalTripInput(overrides: Record<string, unknown> = {}): Recor
     title: "Un week-end à Lyon",
     startDate: "2024-06-01",
     endDate: "2024-06-02",
+    publishedAt: "2024-06-09",
     places: [LYON],
     steps: [stay("lyon", "2024-06-01", "2024-06-02")],
     ...overrides,
@@ -224,6 +226,7 @@ export function multiCountryTripInput(
     title: "Tour du monde",
     startDate: "2023-01-05",
     endDate: "2023-02-10",
+    publishedAt: "2023-03-04",
     places: [TOKYO, BANGKOK, PARIS, KYOTO],
     steps: [
       stay("tokyo", "2023-01-05", "2023-01-15"),
@@ -254,6 +257,7 @@ export function openEndedTripInput(
     title: "Tokyo",
     startDate: "2024-04-10",
     endDate: "2024-04-22",
+    publishedAt: "2024-05-06",
     places: [PARIS, TOKYO],
     steps: [
       move("paris", "tokyo", "plane", "2024-04-10"),
@@ -274,6 +278,7 @@ export function layoverTripInput(overrides: Record<string, unknown> = {}): Recor
     title: "Escale à Bangkok",
     startDate: "2024-04-10",
     endDate: "2024-04-20",
+    publishedAt: "2024-04-27",
     places: [PARIS, BANGKOK, TOKYO],
     steps: [
       move("paris", "bangkok", "plane", "2024-04-10"),

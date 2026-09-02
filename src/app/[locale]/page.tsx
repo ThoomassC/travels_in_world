@@ -6,14 +6,17 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 // strings and cannot tell `src/components/map` from a relative spelling of
 // `src/map`. See the header of `src/components/map/index.ts`.
 import { VisitedCountries, WorldMap, type TripMark } from "@/components/map";
+import { FreshTripBanner } from "@/components/trips/fresh-trip-banner";
 import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { LatestTrips } from "@/components/trips/latest-trips";
 import { TripCard } from "@/components/trips/trip-card";
 import { listTripSummaries } from "@/content/trips";
+import { freshestTrip } from "@/domain/freshness";
 import { buildWorldGeometry, projectPoint } from "@/map";
 import { localePathname } from "@/i18n/pathname";
 import { tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
+import { buildDay } from "../build-day";
 import { MAIN_CONTENT_ID } from "./main-content";
 import styles from "./page.module.css";
 
@@ -59,6 +62,28 @@ export default async function HomePage({ params }: HomePageProps) {
   const trips = await listTripSummaries();
   const t = await getTranslations("home");
 
+  /**
+   * **Which récit is new, resolved once for the whole page** (TIW-19). The three
+   * placements — the banner below, the map's marker and the card in "Derniers
+   * voyages" — all compare against this one answer, which is what makes "le
+   * voyage le plus récent le porte, et seulement lui" a property of the data
+   * rather than a discipline three components have to keep.
+   *
+   * `buildDay()` is the only clock reading on this page's path, and
+   * `freshestTrip` is a pure function of the collection and that day: the domain
+   * may not read a clock, and a rule that read one would have no boundary test.
+   *
+   * **`undefined` is an ordinary answer, not an error state**: no trip at all,
+   * or a newest publication older than the window. The page renders no banner and
+   * no badge then, which is the third acceptance criterion.
+   *
+   * What this cannot do, said plainly: the day is the *build's*, so the badge
+   * expires at the first build after its sixtieth day.
+   * `docs/fraicheur-au-prerendu.md` argues that trade against the two
+   * alternatives and says what `.github/workflows/refresh.yml` buys back.
+   */
+  const fresh = freshestTrip(trips, buildDay());
+
   const world = buildWorldGeometry({
     // Duplicates are the normal case — several trips share a country — and
     // `buildWorldGeometry` de-duplicates on its side. Flattening is all this owes.
@@ -93,6 +118,10 @@ export default async function HomePage({ params }: HomePageProps) {
             placeName: trip.firstArrival.name,
             href: localePathname({ href: tripPath(trip.slug), locale }),
             point,
+            // The halo and the "— nouveau récit" suffix on this marker's
+            // accessible name. Compared against the one answer resolved above,
+            // never recomputed per marker.
+            isNew: trip.slug === fresh?.slug,
           },
         ];
   });
@@ -123,7 +152,13 @@ export default async function HomePage({ params }: HomePageProps) {
   const tripCards = new Map(
     trips.map((trip) => [
       trip.slug,
-      <TripCard key={trip.slug} trip={trip} locale={locale} headingLevel={3} />,
+      <TripCard
+        key={trip.slug}
+        trip={trip}
+        locale={locale}
+        headingLevel={3}
+        isNew={trip.slug === fresh?.slug}
+      />,
     ])
   );
 
@@ -139,6 +174,20 @@ export default async function HomePage({ params }: HomePageProps) {
       <section className={styles.hero}>
         <h1 className={styles.title}>{t("title")}</h1>
         <p className={styles.intro}>{t("intro")}</p>
+
+        {/*
+          The banner (TIW-19), and it is here — above the map, below the
+          introduction — for the acceptance criterion's reason: a returning
+          reader must see what is new *before* deciding where to look. It is
+          three short lines with no image and no button, so the first screen
+          still carries the sentence, the map and the start of "Derniers
+          voyages" that TIW-13's criterion asks for.
+
+          Rendered only when there is one. `FreshTripBanner` takes a `TripEntry`
+          and not an optional, so the empty state is this branch and cannot be a
+          component quietly returning `null`.
+        */}
+        {fresh === undefined ? null : <FreshTripBanner trip={fresh} locale={locale} />}
 
         {/*
           No wrapper any more: the height cap that used to live in this page's
@@ -190,7 +239,7 @@ export default async function HomePage({ params }: HomePageProps) {
         />
       </section>
 
-      <LatestTrips trips={trips} locale={locale} />
+      <LatestTrips trips={trips} locale={locale} freshSlug={fresh?.slug} />
     </main>
   );
 }

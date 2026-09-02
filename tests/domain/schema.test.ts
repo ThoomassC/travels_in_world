@@ -783,6 +783,110 @@ describe("TripSchema — draft", () => {
 });
 
 /**
+ * `publishedAt` — the day the récit went online, and the only input of the "new"
+ * badge (TIW-19).
+ *
+ * It is **required**, which is the decision worth pinning in a test rather than
+ * in a comment. Every alternative is a guess about the one field the reader is
+ * shown a claim about: defaulting it to `endDate` makes a 2019 journey written up
+ * today permanently old, and making it optional means a journal where nobody ever
+ * wrote the key announces nothing, in silence. This repository's rule for a field
+ * whose absence has no unambiguous meaning is to refuse the file and name it —
+ * the same call `alt` and `blurDataUrl` already carry.
+ */
+describe("TripSchema — publishedAt", () => {
+  it("refuses a trip that does not say when it was published", () => {
+    const { publishedAt: _omitted, ...withoutIt } = minimalTripInput();
+    const outcome = attempt(TripSchema, withoutIt);
+
+    expect(outcome.accepted).toBe(false);
+    expect(pathsUnder(outcome, "publishedAt")).toEqual(["publishedAt"]);
+  });
+
+  it("keeps the calendar day it was given, as a string", () => {
+    const trip = TripSchema.parse(minimalTripInput({ publishedAt: "2026-02-14" }));
+
+    expect(trip.publishedAt).toBe("2026-02-14");
+  });
+
+  /**
+   * The same day rules as every other date in this schema — `PlainDateSchema`,
+   * never a second pattern. `2026-02-30` is the row that matters: it passes any
+   * regex over `YYYY-MM-DD` and is not a day, and a freshness window computed
+   * from it would be off by two.
+   */
+  it.each(["2026-2-14", "14/02/2026", "2026-02-30", "hier", "", "2026-02-14T00:00:00Z"])(
+    "rejects %o, and blames no field but publishedAt",
+    (value) => {
+      const outcome = attempt(TripSchema, minimalTripInput({ publishedAt: value }));
+
+      expect(outcome.accepted).toBe(false);
+      /**
+       * The set, not the list: a value failing both the pattern and the
+       * calendar check reports two issues on the same path, and `2026-02-30`
+       * reports one. What matters is that every issue lands here — a rule
+       * pointing at a healthy field is the failure `isBefore` exists to avoid.
+       */
+      expect([...new Set(outcome.paths)]).toEqual(["publishedAt"]);
+      expect(pathsUnder(outcome, "publishedAt").length).toBeGreaterThan(0);
+    }
+  );
+
+  /**
+   * **A récit cannot be published before its journey began.** This is the one
+   * cross-field rule the field earns, and it is narrow on purpose: publishing
+   * *during* a trip is live-blogging and stays valid, publishing years afterwards
+   * is the ordinary case and is the whole reason this field is not `endDate`.
+   * Only "before the departure" is impossible — and it is exactly the shape a
+   * date copy-pasted from `startDate`'s neighbour takes.
+   */
+  it("refuses a publication dated before the trip started", () => {
+    const outcome = attempt(
+      TripSchema,
+      minimalTripInput({
+        startDate: "2024-06-01",
+        endDate: "2024-06-02",
+        publishedAt: "2024-05-31",
+      })
+    );
+
+    expect(outcome.accepted).toBe(false);
+    expect(pathsUnder(outcome, "publishedAt")).toEqual(["publishedAt"]);
+    expect(outcome.errors).toContain("2024-05-31");
+  });
+
+  it.each([
+    { label: "the very day of departure", publishedAt: "2024-06-01" },
+    { label: "during the trip", publishedAt: "2024-06-02" },
+    { label: "years afterwards, which is the ordinary case", publishedAt: "2026-08-30" },
+  ])("accepts a publication $label", ({ publishedAt }) => {
+    const outcome = attempt(
+      TripSchema,
+      minimalTripInput({ startDate: "2024-06-01", endDate: "2024-06-02", publishedAt })
+    );
+
+    expect(outcome.errors).toBe("");
+    expect(outcome.accepted).toBe(true);
+  });
+
+  /**
+   * The rule abstains when the start date is not a day, for the reason `isBefore`
+   * records at the top of `src/domain/schema.ts`: Zod runs a refinement even when
+   * the leaf check has already failed, and `"2024-4-1"` compares nonsensically.
+   * One fault must report one issue, on the field that carries it.
+   */
+  it("stays silent about publishedAt when startDate is the malformed field", () => {
+    const outcome = attempt(
+      TripSchema,
+      minimalTripInput({ startDate: "2024-6-1", publishedAt: "2024-05-31" })
+    );
+
+    expect(outcome.accepted).toBe(false);
+    expect(pathsUnder(outcome, "publishedAt")).toEqual([]);
+  });
+});
+
+/**
  * The documented example, read from `content/README.md` rather than copied here.
  *
  * Copying it is the version that rots: the README is what a contributor writes

@@ -40,9 +40,21 @@ export type TripCardProps = {
   readonly trip: TripEntry;
   readonly locale: Locale;
   readonly headingLevel: 3 | 4;
+  /**
+   * Whether this card is the journal's newest récit (TIW-19) — the third of the
+   * badge's three placements, beside the map's marker and the home banner.
+   *
+   * **A boolean, decided upstream, and not `freshestTrip(…)` called here.** A card
+   * sees one trip and cannot know it is the newest of sixty; more importantly the
+   * derivation needs *today*, and a component that read a clock would put the
+   * whole rule out of reach of a test (`docs/fraicheur-au-prerendu.md`). The page
+   * asks once and marks one card, which is also what makes "and only it" true by
+   * construction rather than by every caller remembering.
+   */
+  readonly isNew?: boolean;
 };
 
-export function TripCard({ trip, locale, headingLevel }: TripCardProps): ReactElement {
+export function TripCard({ trip, locale, headingLevel, isNew }: TripCardProps): ReactElement {
   const t = useTranslations("trips");
   const Heading = headingLevel === 3 ? "h3" : "h4";
   const href = localePathname({ href: tripPath(trip.slug), locale });
@@ -102,6 +114,24 @@ export function TripCard({ trip, locale, headingLevel }: TripCardProps): ReactEl
       </div>
 
       <div className={styles.body}>
+        {/*
+          **Real text, and it is the whole accessibility of this badge.** The
+          acceptance criterion is explicit: a distinction carried by an animation
+          or by a colour does not exist for half the readers. So the badge is a
+          `<p>` holding a sentence, before the title, and a screen reader meets
+          "Nouveau récit" then the trip — the order a reader scanning the card
+          reads it in. Its styling is a chip; remove every rule in
+          `trip-card.module.css` and the information is still there.
+
+          Not `aria-label`, not a `::before` with `content:`, not a
+          `visually-hidden` twin of a coloured dot — the first is a string no
+          translator sees in context, the second is text a screen reader may or
+          may not announce depending on the engine, and the third is two copies of
+          one string to keep in step. This repository has taken the same decision
+          three times: see the map marker's label.
+        */}
+        {isNew === true ? <p className={styles.badge}>{t("cardNew")}</p> : null}
+
         <Heading className={styles.title}>
           <a className={styles.link} href={href}>
             {trip.title}

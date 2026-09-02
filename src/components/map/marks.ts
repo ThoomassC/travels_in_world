@@ -33,6 +33,23 @@ export type TripMark = {
   readonly href: string;
   /** Projected into the world box, not geographic. */
   readonly point: Point;
+  /**
+   * Whether this marker is the journal's newest récit (TIW-19) — the first of the
+   * badge's three placements.
+   *
+   * A boolean decided by the page, exactly like `href` and for exactly the same
+   * reason: the derivation needs the build day *and* the whole collection, and
+   * this layer renders from seven shapes under jsdom with neither
+   * (`docs/adr/0003-carte-svg-inerte-et-balises-html.md`). Optional, because a
+   * map with no fresh trip is the ordinary state of a journal.
+   *
+   * It changes two things in the rendering, and the second is the one that
+   * matters: an animated halo — neutralised under `prefers-reduced-motion`, and
+   * never the only channel — and the marker's **accessible name**, which gains
+   * "— nouveau récit". A distinction carried by an animation does not exist for
+   * the readers who cannot see it.
+   */
+  readonly isNew?: boolean;
 };
 
 export type PlacedMark = {

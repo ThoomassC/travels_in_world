@@ -24,6 +24,15 @@ export type TripEntry = {
   /** Calendar days, `YYYY-MM-DD`, never a `Date` — see `docs/adr/0001-domain-purity.md`. */
   readonly startDate: string;
   readonly endDate: string;
+  /**
+   * The day the récit went online, which is **not** `endDate` (TIW-19).
+   *
+   * Read by two things and by nothing else: `freshestTrip`, which decides which
+   * single card carries the badge, and the home banner, which prints it inside a
+   * `<time>`. A card never formats it — knowing *that* a récit is new is the
+   * card's job, knowing *when* is the banner's.
+   */
+  readonly publishedAt: string;
   /** Derived upstream by `durationOf`; never recomputed here. */
   readonly duration: { readonly nights: number; readonly days: number };
   /** Every country the itinerary touches, ascending by code. */

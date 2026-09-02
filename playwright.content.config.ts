@@ -57,6 +57,29 @@ const CONTENT_DIR = "tests/fixtures/content/home-map/trips";
  */
 const PUBLIC_DIR = "tests/fixtures/content/home-map/public";
 
+/**
+ * The day this build believes it is — one day after the fixture's newest
+ * publication (`islande-2022`, `publishedAt: 2026-01-05`).
+ *
+ * **Without it the "nouveau récit" badge is a function of the day the suite
+ * runs**, which is the definition of a flaky spec: green until early March 2026,
+ * red for ever after, and nobody would connect that failure to this file. With
+ * it, `fresh-trip.populated.spec.ts` asserts a J+1 journal on any machine on any
+ * date.
+ *
+ * Read by `src/app/build-day.ts` — the one module on the render path that reads a
+ * clock — and it is a **build**-time input like `TIW_CONTENT_DIR` above, because
+ * the badge is prerendered bytes and `next start` never re-decides it. Exported
+ * to both halves for the same reason that variable is: a `start` disagreeing with
+ * its own build is how a spec goes mysteriously green.
+ *
+ * The far end of the window — J+61, the badge gone — is not asserted here and
+ * could not be: a served page pins exactly one day per build. It is asserted over
+ * this same committed collection, with the date injected, in
+ * `tests/app/freshness-pipeline.test.ts`.
+ */
+const BUILD_DATE = "2026-01-06";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   /** The mirror of the `testIgnore` in `playwright.config.ts`: these specs only. */
@@ -79,8 +102,8 @@ export default defineConfig({
      * mysteriously green.
      */
     command:
-      `TIW_CONTENT_DIR=${CONTENT_DIR} TIW_PUBLIC_DIR=${PUBLIC_DIR} npm run build && ` +
-      `TIW_CONTENT_DIR=${CONTENT_DIR} npm run start -- --port ${PORT}`,
+      `TIW_CONTENT_DIR=${CONTENT_DIR} TIW_PUBLIC_DIR=${PUBLIC_DIR} TIW_BUILD_DATE=${BUILD_DATE} npm run build && ` +
+      `TIW_CONTENT_DIR=${CONTENT_DIR} TIW_BUILD_DATE=${BUILD_DATE} npm run start -- --port ${PORT}`,
     url: BASE_URL,
     /** Same reason as the other config: attaching to a stranger costs the point. */
     reuseExistingServer: false,

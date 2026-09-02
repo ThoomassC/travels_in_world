@@ -319,8 +319,29 @@ export function WorldMap({
                 href={mark.href}
                 data-trip={mark.slug}
                 data-zone={zoneOfTrip.get(mark.slug)}
+                /*
+                  TIW-19's badge on the map. An attribute and not a second class
+                  name, so the halo below is one CSS rule keyed on it and the
+                  client component's `closest("a[data-trip]")` reading is
+                  untouched — it never looks at classes.
+                */
+                data-new={mark.isNew === true ? "" : undefined}
               >
                 <span className={styles.dot} aria-hidden="true" />
+                {/*
+                  The halo, and **only** the halo: it is decoration on top of a
+                  distinction the accessible name below already carries in words.
+                  A separate element rather than a `::after` on `.dot`, because
+                  the dot already animates its own `transform` on hover and focus
+                  — two animations on one element would mean one of them winning.
+
+                  It is rendered for every marker and lit by `[data-new]` in CSS,
+                  which costs one empty span per trip and buys the guarantee that
+                  the fresh marker's box is identical to its neighbours': a halo
+                  that only existed on one marker would have to size itself, and
+                  a 44 px target that changes size is a target that moves.
+                */}
+                <span className={styles.halo} aria-hidden="true" />
                 {/*
                   Real text, and **one** text node doing two jobs: it is the
                   link's accessible name, and it is the tooltip the acceptance
@@ -340,7 +361,18 @@ export function WorldMap({
                   have cost.
                 */}
                 <span className={styles.label}>
-                  {t("markLabel", { title: mark.title, place: mark.placeName })}
+                  {/*
+                    The newest récit says so **in this very string** (TIW-19),
+                    and not in an extra `aria-label`, an `aria-describedby` or a
+                    visually hidden twin. This text node is already doing two
+                    jobs — the link's accessible name and the hover/focus bubble
+                    — so extending it is the only spelling in which the halo's
+                    meaning reaches a screen reader, a mouse and a keyboard at
+                    once, with nothing to keep in step.
+                  */}
+                  {mark.isNew === true
+                    ? t("markLabelNew", { title: mark.title, place: mark.placeName })
+                    : t("markLabel", { title: mark.title, place: mark.placeName })}
                 </span>
               </a>
             </li>

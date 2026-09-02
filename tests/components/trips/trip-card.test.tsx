@@ -141,3 +141,61 @@ describe("TripCard", () => {
     expect(within(facts[0] as HTMLElement).getByText("Pérou")).toBeInTheDocument();
   });
 });
+
+/**
+ * The "nouveau récit" chip — the third of TIW-19's three placements.
+ *
+ * What is asserted here is deliberately not *which* trip is new: that is
+ * `freshestTrip`'s decision and `tests/domain/freshness.test.ts` covers every
+ * boundary of it. A card is handed a boolean, and these cases pin the two things
+ * only a rendering can answer — that the badge is real text a screen reader
+ * meets, and that it is absent by default.
+ */
+describe("TripCard — the new-story badge", () => {
+  it("says nothing at all when the card is not the newest récit", () => {
+    card();
+
+    expect(screen.queryByText(frMessages.trips.cardNew)).toBeNull();
+  });
+
+  it("is absent by default, so a caller that forgets the prop cannot announce news", () => {
+    // `isNew` is optional, and the safe default is the silent one: a listing
+    // written before this ticket keeps rendering exactly as it did.
+    card({ isNew: undefined });
+
+    expect(screen.queryByText(frMessages.trips.cardNew)).toBeNull();
+  });
+
+  it("announces the newest récit in words, not by a colour or an animation", () => {
+    card({ isNew: true });
+
+    /**
+     * `getByText` and not a class-name query, and that is the point of the case:
+     * the badge has to be a text node in the accessibility tree. A `::before`
+     * with a `content:` string, an `aria-label` on a coloured dot or a CSS-only
+     * chip would all pass a visual review and fail here — which is the criterion
+     * "le badge reste identifiable sans l'animation (libellé textuel)".
+     */
+    expect(screen.getByText(frMessages.trips.cardNew)).toBeInTheDocument();
+  });
+
+  it("does not turn the badge into a second link or a control", () => {
+    card({ isNew: true });
+
+    // One link per card stays the rule: the badge is a statement, not an
+    // affordance, and a second tab stop per card is what `.cta` already refuses.
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("leaves the card's own facts untouched", () => {
+    card({ isNew: true });
+
+    // The badge is added, nothing is displaced: the heading is still the title
+    // and the three facts are still three.
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Japon, printemps 2024" })
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+  });
+});

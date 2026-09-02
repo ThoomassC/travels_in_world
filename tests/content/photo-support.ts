@@ -140,6 +140,7 @@ export function tripWithPhotos(photos: string, overrides: readonly string[] = []
     "title: Japon, printemps 2024",
     "startDate: 2024-04-12",
     "endDate: 2024-04-16",
+    "publishedAt: 2024-05-02",
     "",
     "places:",
     "  - slug: tokyo",

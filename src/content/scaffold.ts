@@ -54,6 +54,12 @@ title: Titre du voyage, à remplir # ce qui s'affichera en tête de page
 startDate: ${today} # premier jour du voyage, toujours écrit AAAA-MM-JJ
 endDate: ${today} # dernier jour du voyage, jamais avant startDate
 
+# Le jour de la mise en ligne du récit — pas la fin du voyage. Un voyage de 2019
+# raconté aujourd'hui est une nouveauté pour le lecteur, et c'est cette date-là
+# qui décide du badge « nouveau récit » et de l'ordre du flux RSS. La date du jour
+# est déjà écrite ci-dessous : corrige-la si tu publies plus tard.
+publishedAt: ${today}
+
 # Un lieu par ville. Ne remplis pas « coordinates » à la main :
 # « npm run geocode ${slug} » les écrit à partir du nom et du code pays, refuse
 # (0, 0), et vérifie que le pays renvoyé est bien celui déclaré ici.
