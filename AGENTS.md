@@ -140,11 +140,20 @@ ne pèse jamais sur un bundle client, ce que le relevé ci-dessous vérifie de f
 
 Avant d'ajouter une dépendance, vérifie le budget : `npm run test:build` mesure
 le JS initial, à **123,2 Ko brotli sur `/fr` pour un plafond de 150 Ko** — il reste
-**26,8 Ko** (mesuré sur `develop` @ `5c5bf34`, après TIW-14). La marge qui compte est celle
-de la route la plus lourde, pas la moyenne : `/_not-found` en est à 111,2 Ko et sa marge de
-38,8 Ko ne finance rien. Les ADR portent des relevés **datés** de leur décision — ils ne
-sont pas réécrits quand le chiffre bouge, et ce paragraphe est le seul à dire l'état
-courant.
+**26,8 Ko** (remesuré sur `develop` @ `cd96492`, après TIW-26 ; inchangé depuis `5c5bf34`).
+La marge qui compte est celle de la route la plus lourde, pas la moyenne : `/_not-found` en
+est à 111,2 Ko et sa marge de 38,8 Ko ne finance rien. Les ADR portent des relevés **datés**
+de leur décision — ils ne sont pas réécrits quand le chiffre bouge, et ce paragraphe est le
+seul à dire l'état courant.
+
+Ce que TIW-18 a coûté, pour mémoire de la méthode plus que du chiffre : **zéro octet de JS
+sur les cinq routes**, à l'octet, sur deux builds du même contenu — un état de publication de
+plus, une teinte de plus et une tuile de plus se rendent entièrement en HTML et en CSS. Le
+document a pris **+0,1 Ko** sur `/fr` et sur `/fr/voyages` (38,6 → 38,7 et 5,4 → 5,5), et ce
+n'est pas la teinte : ce sont les trois clés de message ajoutées, que
+`NextIntlClientProvider` sérialise dans **chaque** document du site, y compris ceux qui ne
+les rendent pas. C'est la même mécanique que le 1,8 Ko de `photo-viewer.tsx`, à un ordre de
+grandeur en dessous.
 
 Depuis TIW-12 il y a un **second** budget, que ce paragraphe est le seul endroit à réunir
 avec le premier : les tracés du planisphère sont plafonnés à **34 Ko brotli**, mesurés à
@@ -188,6 +197,21 @@ Les quatre premières exigent une étape préalable — `test:build` a besoin d'
 `npm run test`. `check:photo-weight` n'exige rien : il interroge `git ls-files`, coûte ~0,2 s,
 et vit hors de `npm run test` pour une autre raison — c'est une propriété du _dépôt_ et non du
 code, et elle n'a rien à faire dans une suite unitaire.
+
+**Un sixième invariant est gardé depuis TIW-18, et il n'a pas de commande à lui** — raison
+pour laquelle il n'est pas dans le tableau plutôt que par oubli : **aucun lien interne rendu
+ne mène à une adresse qui n'existe pas.** Il vit dans `npm run test:e2e`
+(`tests/e2e/dead-links.populated.spec.ts`), qui parcourt en largeur les documents servis
+depuis `/fr`, exige un 200 sur chaque chemin, et — c'est la moitié qui compte — exige que
+chaque **fragment** désigne un élément réellement présent dans la page visée. Un fragment
+mort est un 200 : il dépose le lecteur en haut d'une page de soixante entrées, sans un mot,
+et ce dépôt l'a payé deux fois en le trouvant à la main (`#pays-bo`, puis `/#voyage-<slug>`
+avant que l'accueil n'émette ces id). Le garde a trouvé **six** liens morts à sa première
+exécution — un par balise de mini-carte, `/#voyage-<slug>--<lieu>` désignant un id qu'aucune
+page n'émet — et il a été prouvé par échec volontaire. Il ne pèse pas les assets, et
+l'exclusion est nommée dans le fichier : `next start` sert le `public/` du dépôt et non celui
+de la fixture, donc un 200 sur une photo y mesurerait la configuration du serveur et non le
+lien.
 
 Histoire du **poids du dépôt** : c'est le seul budget de ce projet qui grossit sans que
 personne décide de le dépenser. Chaque clone le paie, chaque job d'intégration continue le
@@ -242,6 +266,27 @@ filtre est désormais _fail-closed_ et s'appuie sur `NEXT_PHASE`, mesuré posé 
 (`node_modules/next/dist/build/index.js:1212`) et **non replié**. Ne le « simplifie » pas en
 `NODE_ENV !== "development"` : ce serait revenir à une valeur par défaut ouverte sur le seul
 champ de ce projet qui décide qu'un contenu est privé.
+
+**Il y a un second champ de publication depuis TIW-18, et il ne se filtre pas au même
+endroit.** `story: unwritten` veut dire « le voyage a eu lieu, le récit n'est pas écrit » :
+le voyage est **dans** la carte et dans les listes — son pays teinté d'un état distinct, sa
+fiche portant « Récit à venir » — et il n'a **pas de page**. Les quatre portes de
+`src/content/loader.ts` se séparent donc en deux paires, ce qui est la forme de tout l'état :
+`listTripSummaries` et `loadTrips` le rendent, `tripStaticParams` et `findTrip` le refusent.
+C'est cette seconde paire qui fait de « aucun lien vers une page inexistante » une propriété
+du build et non une discipline que trois composants doivent tenir.
+
+Trois différences avec `draft` valent d'être sues avant de toucher au filtre :
+**l'environnement n'a rien à y dire** — un brouillon est un état de mise en page, montré sur
+`localhost` pour être relu, alors qu'un voyage sans récit est publié délibérément sans texte,
+donc `TIW_DRAFTS` ne lui donne pas de page ; `sitemap.xml` et `feed.xml` filtrent eux-mêmes
+sur `hasStory`, parce que les deux annoncent des adresses et qu'un `<item>` de flux est suivi
+des mois plus tard depuis un logiciel qui l'a gardé ; et `freshestTrip` l'écarte **avant** de
+comparer, pas après — le badge dit « Nouveau récit », et rejeter le gagnant ferait taire un
+carnet dont le dernier publié serait non raconté alors qu'un récit frais est juste en dessous.
+Le prédicat unique est `hasStory` dans `src/domain/trip.ts`, et son en-tête dit pourquoi
+c'est une égalité et non un `!== "unwritten"` : la première échoue fermée quand un troisième
+état arrive, la seconde ouverte.
 
 Une nuance sur ces quatre lignes, à ne pas surestimer : le seul exécuteur réel de
 `server-only` est le bundler client de `next build`, et aucun test de ce dépôt ne l'exerce.
