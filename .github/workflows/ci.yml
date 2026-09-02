@@ -15,6 +15,15 @@
 # - `validate:content` refuses a trip whose YAML the pages could not load.
 # - `check:photo-weight` refuses a repository whose tracked images pass 150 MB.
 #   Every clone and every build pay that weight, and git never gives it back.
+# - since TIW-26, `test:perf` measures LCP and CLS on a throttled mobile profile
+#   and refuses a median past 2.5 s or 0.1. It also PUBLISHES the numbers to the
+#   run summary, green or red: a ceiling answers pass/fail and never answers how
+#   much room the next ticket has.
+# - and the end-to-end job gained four guards no build output can carry: nothing is
+#   requested off this origin on load, the heading outline of the four screens is
+#   well formed (axe's own rule for that is `best-practice`, so the WCAG-tagged
+#   audits do not run it — measured), the whole keyboard journey is walkable with
+#   `Tab` alone, and the site is usable with JavaScript switched off.
 #
 # See `docs/deploiement.md` for what this pipeline does NOT gate (preview
 # deployments) and why, and for the branch-protection settings that turn a red
@@ -132,10 +141,18 @@ jobs:
   # Since TIW-17 this job makes TWO builds of its own, and the second is not
   # redundancy either: the photo viewer can only be exercised on a trip page that
   # has photographs, and `content/trips` is empty until TIW-24 — which the specs
-  # here assert, deliberately, because it is what production serves. The fixture
-  # build therefore goes to its own `distDir` (`TIW_DIST_DIR`, see
-  # `playwright.config.ts`) so it can neither clobber `.next` nor be mistaken for
-  # the build `test:build` measures in the job above.
+  # here assert, deliberately, because it is what production serves.
+  #
+  # These three lines used to say the fixture build went to a `distDir` of its own
+  # through `TIW_DIST_DIR`. Measured while writing TIW-26: **that variable does not
+  # exist anywhere in this repository** — not in `next.config.ts`, not in either
+  # Playwright config, not in `src/`. The shape it describes was considered and
+  # dropped, and `playwright.content.config.ts` says why in its own header: a second
+  # top-level build directory is walked by `eslint .`, whose flat config does not
+  # read `.gitignore`. Both configs therefore build the **default** `.next`, in
+  # sequence, and `package.json` fixes the order so the one left on disk is the
+  # repository's own. On this runner the question is moot anyway: `build` and
+  # `test:build` are a different job with a different checkout.
   #
   # What DOES deserve to be shared between runs is the browser download, below.
   e2e:
@@ -196,6 +213,79 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # TIW-26's performance measurement: Largest Contentful Paint and Cumulative
+  # Layout Shift on the home page and on a trip page, under a throttled mobile
+  # profile (CPU x4, Slow 4G), on a build of the end-to-end fixture.
+  #
+  # A JOB OF ITS OWN, and the two reasons are in `tests/perf/playwright.perf.config.ts`
+  # at length. In short: `workers: 1`, because a sample taken while three other
+  # Chromiums share the runner measures the runner; and legibility, because a red
+  # `Performance` says "the site got slower" where the same failure inside the
+  # Playwright job says "the end-to-end suite is broken".
+  #
+  # IT BLOCKS, deliberately, and here is the reasoning rather than the habit. A
+  # threshold on a shared runner is the classic flaky guard, so three things make
+  # this one safe to require: each case is the MEDIAN of five cold loads, so one
+  # hiccup is absorbed inside the case; the margin is large — measured locally at
+  # 464 ms and 588 ms against a 2500 ms ceiling, and 0.0000 against 0.1 — so the
+  # threshold is nowhere near the measurement; and one retry covers the other kind
+  # of event, a runner descheduled for two seconds, which ruins all five samples at
+  # once and has nothing to do with the code. A real regression is reproducible and
+  # fails twice.
+  #
+  # AND IT PUBLISHES. The suite writes its per-sample table to the job log and to
+  # `$GITHUB_STEP_SUMMARY`, because pass/fail does not answer "how close are we",
+  # which is the question that decides whether the next ticket has room. The
+  # numbers are on the run's summary page whether it is green or red.
+  perf:
+    name: Performance (LCP et CLS, mobile bridé)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # The same two-step browser cache as the job above, for the same measured
+      # reason: `~/.cache/ms-playwright` is cacheable and the apt packages
+      # `--with-deps` installs are not, so a cache hit still needs `install-deps`
+      # or Chromium dies on a missing shared object.
+      - name: Resolve the installed Playwright version
+        id: playwright
+        run: |
+          version="$(node -p "require('@playwright/test/package.json').version")"
+          echo "Playwright $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
+
+      - name: Install Chromium and its system dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install only the system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - run: npm run test:perf
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-perf
+          path: playwright-report/
+          retention-days: 7
+
   # The single check name branch protection points at.
   #
   # Without it, protection has to list every job by name, and the day a job is
@@ -204,7 +294,7 @@ jobs:
   # documents twice. `needs: [...]` here is the list, and it lives in the repo.
   verify:
     name: Vérifications
-    needs: [checks, build, e2e]
+    needs: [checks, build, e2e, perf]
     # `always()`, otherwise this job is skipped when a dependency fails — and a
     # skipped required check is reported as neutral, not as a failure.
     if: always()
