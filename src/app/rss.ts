@@ -57,7 +57,7 @@ export type FeedChannel = {
 };
 
 /**
- * The five characters XML gives up, plus the C0 control range.
+ * The five characters XML gives up, plus the control codepoints it forbids.
  *
  * The five are the ordinary ones. The controls are the half nobody writes and
  * every parser enforces: XML 1.0 forbids every C0 codepoint except tab, newline
@@ -67,8 +67,13 @@ export type FeedChannel = {
  * did reach this repository's content layer once, so the input is not
  * hypothetical.
  *
- * Stripped rather than escaped, because there is no escape that is legal: `&#x1B;`
- * is refused by the same rule.
+ * Stripped rather than escaped, because there is no escape that is legal:
+ * `&#x1B;` is refused by the same rule.
+ *
+ * `\u007F` is in the set too, and it is the one entry XML 1.0 does *not*
+ * forbid — XML 1.1 does. It is stripped anyway: DEL is not a character anybody
+ * writes in a trip title, and the cost of being one codepoint stricter than the
+ * older specification is nothing next to a feed an aggregator might refuse.
  */
 const FORBIDDEN_CONTROLS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 

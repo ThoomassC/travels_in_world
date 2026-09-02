@@ -40,7 +40,7 @@ J+60, soit au plus 24 h + la durée du build après l'échéance — au lieu de
 
 **Ce qui reste à brancher, et c'est hors du dépôt** : le secret GitHub
 `VERCEL_DEPLOY_HOOK_URL`, créé dans Vercel → Settings → Git → Deploy Hooks. Tant
-qu'il est absent, le workflow **ne échoue pas en rouge tous les matins** : il
+qu'il est absent, le workflow **n'échoue pas en rouge tous les matins** : il
 s'arrête sur un message qui nomme le secret manquant et ce que son absence coûte.
 Un garde qui rougit tous les jours pour une raison connue est un garde que
 quelqu'un désactive.
@@ -61,12 +61,18 @@ source d'horloge murale.** Il n'y a pas de fonction de date, pas de
 lecture.
 
 La seule primitive temporelle de CSS est la timeline d'animation, et elle a été
-regardée sérieusement parce qu'elle *semble* fonctionner :
+regardée sérieusement parce qu'elle _semble_ fonctionner :
 
 ```css
 /* écrit au build : durée = 60 jours, décalage = âge du récit au build */
-.badge { animation: expire 5184000s linear -3456000s 1 forwards; }
-@keyframes expire { to { display: none } }
+.badge {
+  animation: expire 5184000s linear -3456000s 1 forwards;
+}
+@keyframes expire {
+  to {
+    display: none;
+  }
+}
 ```
 
 Un `animation-delay` négatif avance bien l'animation, et `forwards` fige l'état
@@ -94,15 +100,15 @@ Il tiendrait en vingt lignes : un `'use client'` qui lit `Date.now()` après le
 montage et retire le badge. Trois raisons de ne pas le poser, dans l'ordre où
 elles pèsent.
 
-1. **Il ne tient pas le critère, il le déplace.** Le badge périmé est *dans le
-   HTML servi* et le reste jusqu'à l'hydratation. Un lecteur sans JavaScript le
+1. **Il ne tient pas le critère, il le déplace.** Le badge périmé est _dans le
+   HTML servi_ et le reste jusqu'à l'hydratation. Un lecteur sans JavaScript le
    garde pour toujours — et la page d'accueil de ce projet est explicitement
    conçue pour être complète sans JavaScript (ADR 0003, critère de TIW-13). On
    remplacerait une erreur de granularité par un scintillement, pour la moitié du
    public seulement.
 2. **Il ment sur la source de vérité.** L'horloge du lecteur n'est pas une
    horloge : un poste mal réglé fait apparaître ou disparaître le badge sans que
-   rien ne le dise. La date de build est fausse *de façon bornée et connue* ;
+   rien ne le dise. La date de build est fausse _de façon bornée et connue_ ;
    l'horloge cliente est fausse de façon arbitraire.
 3. **Le budget.** Les deux `'use client'` du jalon sont dépensés (carte TIW-14,
    visionneuse TIW-17) et il reste 26,8 Ko brotli sur `/fr`. Un troisième îlot
@@ -116,12 +122,12 @@ décision indépendante du chiffre.
 
 ## Ce que le critère tient, et ce qu'il ne tient pas
 
-| Situation                                       | Le badge est-il juste ?                    |
-| ----------------------------------------------- | ------------------------------------------ |
-| Un récit vient d'être publié                    | oui — la publication **est** un déploiement |
-| Le déploiement quotidien tourne                 | oui, à 24 h près                            |
-| Le Deploy Hook n'est pas branché, rien n'est publié depuis 60 j | **non** — le badge reste, daté |
-| Le lecteur a désactivé JavaScript               | identique : rien de tout ceci n'en dépend   |
+| Situation                                                       | Le badge est-il juste ?                     |
+| --------------------------------------------------------------- | ------------------------------------------- |
+| Un récit vient d'être publié                                    | oui — la publication **est** un déploiement |
+| Le déploiement quotidien tourne                                 | oui, à 24 h près                            |
+| Le Deploy Hook n'est pas branché, rien n'est publié depuis 60 j | **non** — le badge reste, daté              |
+| Le lecteur a désactivé JavaScript                               | identique : rien de tout ceci n'en dépend   |
 
-La ligne du milieu est le prix, écrit ici plutôt que tu. Elle se referme en
-créant un secret ; elle ne se referme pas en écrivant du code.
+La troisième ligne est le prix, écrit ici plutôt que passé sous silence. Elle se
+referme en créant un secret ; elle ne se referme pas en écrivant du code.

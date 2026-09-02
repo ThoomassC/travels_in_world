@@ -17,12 +17,12 @@ ne portait dans aucun canal, donc c'est la table que la suite vérifie.
 **Les quatre dates de publication sont dans un ordre différent de celui des
 voyages, depuis TIW-19**, et c'est le piège du ticket écrit dans la donnée :
 
-| Voyage               | Voyage (startDate) | Récit publié (publishedAt) |
-| -------------------- | ------------------ | -------------------------- |
-| `japon-2025`         | 2025-03-02 ← le plus récent | 2025-03-20        |
-| `perou-bolivie-2023` | 2023-07-04         | **2026-01-05 ← le dernier publié** |
-| `japon-2024`         | 2024-04-12         | 2025-06-10                 |
-| `islande-2022`       | 2022-09-10 ← le plus ancien | 2024-11-03        |
+| Voyage               | Voyage (startDate)          | Récit publié (publishedAt)         |
+| -------------------- | --------------------------- | ---------------------------------- |
+| `japon-2025`         | 2025-03-02 ← le plus récent | 2025-03-20                         |
+| `perou-bolivie-2023` | 2023-07-04                  | **2026-01-05 ← le dernier publié** |
+| `japon-2024`         | 2024-04-12                  | 2025-06-10                         |
+| `islande-2022`       | 2022-09-10 ← le plus ancien | 2024-11-03                         |
 
 Le badge « nouveau récit » suit la **publication**, donc il se pose sur
 `perou-bolivie-2023` — pas sur `japon-2025`, qui ouvre pourtant la liste des

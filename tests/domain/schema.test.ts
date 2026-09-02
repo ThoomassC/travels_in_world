@@ -843,7 +843,11 @@ describe("TripSchema — publishedAt", () => {
   it("refuses a publication dated before the trip started", () => {
     const outcome = attempt(
       TripSchema,
-      minimalTripInput({ startDate: "2024-06-01", endDate: "2024-06-02", publishedAt: "2024-05-31" })
+      minimalTripInput({
+        startDate: "2024-06-01",
+        endDate: "2024-06-02",
+        publishedAt: "2024-05-31",
+      })
     );
 
     expect(outcome.accepted).toBe(false);

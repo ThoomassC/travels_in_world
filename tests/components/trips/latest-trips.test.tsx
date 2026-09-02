@@ -30,9 +30,7 @@ describe("LatestTrips", () => {
       ).toBeInTheDocument();
       expect(screen.getByText(frMessages.home.emptyBody)).toBeInTheDocument();
 
-      expect(
-        screen.queryByRole("heading", { name: frMessages.home.latestHeading })
-      ).toBeNull();
+      expect(screen.queryByRole("heading", { name: frMessages.home.latestHeading })).toBeNull();
       expect(screen.queryByRole("list")).toBeNull();
       expect(screen.queryByRole("link")).toBeNull();
     });
@@ -107,9 +105,7 @@ describe("LatestTrips — the new-story badge", () => {
   const THREE = SIXTY_TRIPS.slice(0, LATEST_TRIP_COUNT);
 
   const withFresh = (freshSlug?: string) =>
-    renderWithMessages(
-      <LatestTrips trips={THREE} locale={defaultLocale} freshSlug={freshSlug} />
-    );
+    renderWithMessages(<LatestTrips trips={THREE} locale={defaultLocale} freshSlug={freshSlug} />);
 
   it("badges exactly one card, and it is the one named", () => {
     const target = THREE[1];
@@ -156,9 +152,7 @@ describe("LatestTrips — the new-story badge", () => {
   });
 
   it("badges nothing on an empty journal, where there is no block at all", () => {
-    renderWithMessages(
-      <LatestTrips trips={[]} locale={defaultLocale} freshSlug="japon-2024" />
-    );
+    renderWithMessages(<LatestTrips trips={[]} locale={defaultLocale} freshSlug="japon-2024" />);
 
     expect(screen.queryByText(frMessages.trips.cardNew)).toBeNull();
   });

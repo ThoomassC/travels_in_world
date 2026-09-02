@@ -506,9 +506,7 @@ describe("WorldMap — the newest récit's marker", () => {
      */
     renderMap({ marks: [{ ...CENTRED_MARK, isNew: true }, OLDER] });
 
-    expect(
-      screen.getByRole("link", { name: freshLinkName(CENTRED_MARK) })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: freshLinkName(CENTRED_MARK) })).toBeInTheDocument();
   });
 
   it("marks exactly one marker, and it is the one asked for", () => {

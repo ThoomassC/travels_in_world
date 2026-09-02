@@ -122,7 +122,10 @@ describe("renderRssFeed", () => {
   it("leaves the array it was given in its own order", () => {
     // The caller's array is the content façade's memoised projection, shared
     // with every page of the build — the reasoning `summaryOf` records.
-    const items = [item({ publishedAt: "2024-05-02", url: "u/a" }), item({ publishedAt: "2026-03-01", url: "u/b" })];
+    const items = [
+      item({ publishedAt: "2024-05-02", url: "u/a" }),
+      item({ publishedAt: "2026-03-01", url: "u/b" }),
+    ];
 
     renderRssFeed(channel(items));
 
@@ -137,7 +140,10 @@ describe("renderRssFeed", () => {
      * reasoning as the sitemap's `lastModified`.
      */
     const xml = renderRssFeed(
-      channel([item({ publishedAt: "2024-05-02", url: "u/a" }), item({ publishedAt: "2026-03-01", url: "u/b" })])
+      channel([
+        item({ publishedAt: "2024-05-02", url: "u/a" }),
+        item({ publishedAt: "2026-03-01", url: "u/b" }),
+      ])
     );
 
     expect(xml).toContain("<lastBuildDate>Sun, 01 Mar 2026 00:00:00 GMT</lastBuildDate>");

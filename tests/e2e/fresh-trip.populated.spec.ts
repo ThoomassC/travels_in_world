@@ -145,10 +145,7 @@ test.describe("the home page", () => {
 
     const card = badgedCard(page);
 
-    await expect(card.getByRole("link", { name: FRESH.title })).toHaveAttribute(
-      "href",
-      FRESH.href
-    );
+    await expect(card.getByRole("link", { name: FRESH.title })).toHaveAttribute("href", FRESH.href);
   });
 });
 
@@ -192,9 +189,7 @@ test.describe("the map's marker", () => {
       page.evaluate((css) => {
         const element = document.querySelector(css);
 
-        return element === null
-          ? "missing"
-          : getComputedStyle(element).animationName;
+        return element === null ? "missing" : getComputedStyle(element).animationName;
       }, selector);
 
     expect(await animationOf("a[data-trip][data-new] > span:nth-child(2)")).not.toBe("none");
@@ -260,10 +255,7 @@ test.describe("the full listing", () => {
 
     const card = badgedCard(page);
 
-    await expect(card.getByRole("link", { name: FRESH.title })).toHaveAttribute(
-      "href",
-      FRESH.href
-    );
+    await expect(card.getByRole("link", { name: FRESH.title })).toHaveAttribute("href", FRESH.href);
   });
 });
 
@@ -283,12 +275,9 @@ test.describe("the feed", () => {
      * position of each slug in the document, which is the only reading that is
      * about order.
      */
-    const positions = [
-      "perou-bolivie-2023",
-      "japon-2024",
-      "japon-2025",
-      "islande-2022",
-    ].map((slug) => body.indexOf(slug));
+    const positions = ["perou-bolivie-2023", "japon-2024", "japon-2025", "islande-2022"].map(
+      (slug) => body.indexOf(slug)
+    );
 
     expect(positions.every((at) => at >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);

@@ -54,8 +54,7 @@ describe("the feed link", () => {
      */
     const declared = shareMetadata(page).alternates?.types?.["application/rss+xml"];
     const first = Array.isArray(declared) ? declared[0] : declared;
-    const url =
-      typeof first === "string" ? first : first instanceof URL ? first.href : first?.url;
+    const url = typeof first === "string" ? first : first instanceof URL ? first.href : first?.url;
 
     expect(typeof url).toBe("string");
     expect(String(url).startsWith("http")).toBe(false);
