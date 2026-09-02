@@ -95,11 +95,23 @@ export async function generateStaticParams(): Promise<{ slug: string }[]> {
    * The register cannot check this on its own: `src/i18n/slug-history.ts` is loaded
    * by `next.config.ts` and knows nothing about the content. This is the first place
    * that holds both, so it is the place that refuses.
+   *
+   * **Checked against every trip the journal holds, and not against `published`**
+   * — which is `tripStaticParams`, i.e. the trips that have a page. That
+   * distinction is what TIW-18 changed here, and it is not cosmetic: a trip whose
+   * récit is not written is absent from `published`, so the narrower loop stopped
+   * seeing exactly the case that is hardest to spot. Withdrawn *and* untold, the
+   * journal would tint its country, put its marker on the map and print « Récit à
+   * venir » on its card, while `/voyages/<slug>` prerendered "ce récit n'est plus
+   * en ligne" — a story announced as forthcoming at an address that says it is
+   * gone, with a green build and nothing to read but two contradictory pages.
    */
-  for (const { slug } of published) {
+  const declared = await listTripSummaries();
+
+  for (const { slug } of declared) {
     if (withdrawnSlugs.has(slug)) {
       throw new Error(
-        `Le slug « ${slug} » est déclaré retiré dans src/i18n/slug-history.ts alors qu'un voyage publié le porte : supprime l'entrée « withdrawn » ou dépublie le voyage.`
+        `Le slug « ${slug} » est déclaré retiré dans src/i18n/slug-history.ts alors qu'un voyage du carnet le porte : supprime l'entrée « withdrawn », ou retire le voyage de content/trips.`
       );
     }
   }

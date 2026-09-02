@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FRESHNESS_WINDOW_DAYS, freshestTrip, isFresh } from "@/domain/freshness";
+import type { StoryState } from "@/domain/schema";
 
 /**
  * The freshness derivation, and the only place in the project that decides what
@@ -27,7 +28,17 @@ function dayAfter(days: number): string {
   return instant.toISOString().slice(0, 10);
 }
 
-const trip = (slug: string, publishedAt: string) => ({ slug, publishedAt });
+/**
+ * `story` defaults to `"written"` here and is **required** on the type, which is
+ * the pressure TIW-18 deliberately put on this helper: every construction of a
+ * `Publication` now has to say whether there is a récit to announce, and the
+ * default keeps the sixteen cases that predate the field reading as they did.
+ */
+const trip = (slug: string, publishedAt: string, story: StoryState = "written") => ({
+  slug,
+  publishedAt,
+  story,
+});
 
 describe("the freshness window", () => {
   /**
@@ -111,8 +122,8 @@ describe("which trip carries the badge", () => {
    * badge the wrong trip, and every rendering test would still be green.
    */
   it("reads the publication date and never the order it was handed", () => {
-    const recentJourney = { slug: "japon-2026", publishedAt: dayAfter(-10) };
-    const oldJourneyJustWritten = { slug: "perou-2019", publishedAt: PUBLISHED };
+    const recentJourney = trip("japon-2026", dayAfter(-10));
+    const oldJourneyJustWritten = trip("perou-2019", PUBLISHED);
 
     expect(freshestTrip([recentJourney, oldJourneyJustWritten], dayAfter(1))).toBe(
       oldJourneyJustWritten
@@ -174,5 +185,63 @@ describe("which trip carries the badge", () => {
     freshestTrip(trips, dayAfter(1));
 
     expect(trips.map((entry) => entry.slug)).toEqual(order);
+  });
+});
+
+/**
+ * **A trip whose récit is not written can never be the new récit** (TIW-18), and
+ * this is the one place in the project where those two states meet.
+ *
+ * The badge's own label is « Nouveau récit ». An untold trip has no récit and no
+ * page, so announcing it is a promise with no address behind it: the marker's
+ * accessible name would end in "nouveau récit" while the marker leads to a
+ * listing, and the home banner would print a publication date for a story nobody
+ * wrote.
+ *
+ * **Filtered before the comparison, not after it** — the opposite of what the
+ * window does, and the difference is the whole rule. The window is applied to the
+ * *winner*, because a journal whose newest récit is stale has no news and
+ * promoting the runner-up would invent some. An untold trip is not stale news, it
+ * is not news at all: it must not take part in the comparison, or a journal whose
+ * most recent publication happens to be untold would announce nothing while a
+ * perfectly fresh récit sat one line below it.
+ */
+describe("an untold trip is never the new récit", () => {
+  it("never announces a trip whose récit is not written", () => {
+    const untold = trip("maroc-2026", PUBLISHED, "unwritten");
+
+    expect(freshestTrip([untold], dayAfter(1))).toBeUndefined();
+  });
+
+  /**
+   * The case that separates "filtered before" from "filtered after", and the one a
+   * `hasStory` check bolted onto the *result* would fail: the untold trip is the
+   * most recent publication of the two, so a rule that picked the winner first and
+   * then rejected it would leave the journal announcing nothing while `japon-2024`
+   * is eleven days old and eminently announceable.
+   */
+  it("falls through to the newest récit that is actually written", () => {
+    const untold = trip("maroc-2026", PUBLISHED, "unwritten");
+    const written = trip("japon-2024", dayAfter(-11));
+
+    expect(freshestTrip([untold, written], dayAfter(1))).toBe(written);
+  });
+
+  it("still shows nothing when every written récit has left the window", () => {
+    const trips = [trip("maroc-2026", PUBLISHED, "unwritten"), trip("japon-2024", dayAfter(-70))];
+
+    expect(freshestTrip(trips, dayAfter(1))).toBeUndefined();
+  });
+
+  /**
+   * The tiebreak is unaffected, because it is applied among the trips that remain:
+   * an untold trip with the alphabetically winning slug does not win by being
+   * first.
+   */
+  it("does not let an untold trip win a same-day tie", () => {
+    const angola = trip("angola-2026", PUBLISHED, "unwritten");
+    const bolivie = trip("bolivie-2026", PUBLISHED);
+
+    expect(freshestTrip([angola, bolivie], dayAfter(1))?.slug).toBe("bolivie-2026");
   });
 });

@@ -56,6 +56,36 @@ export const TRANSPORT_MODES = ["plane", "train", "bus", "car", "boat", "bike", 
 
 export const TransportModeSchema = z.enum(TRANSPORT_MODES);
 
+/**
+ * Whether the récit is written — the journal's third publication state (TIW-18).
+ *
+ * `draft` answers "may this be seen at all". This answers a different question
+ * the model had no room for: **the journey happened, and nobody has written it up
+ * yet.** Before this field a trip had exactly two states, and `content/README.md`
+ * said so — absent from the repository, or live and looking finished. An author
+ * back from a trip had to choose between a country nobody knows they visited and
+ * a page that promises a story it does not hold.
+ *
+ * An untold trip is a full citizen of the map and of the listings: its countries
+ * are tinted, its entry carries its dates and its itinerary. What it does not have
+ * is a **page** — `tripStaticParams` leaves it out, so nothing links to one.
+ *
+ * **An enum where `draft` is a boolean**, which is worth the two lines. In YAML
+ * `story: unwritten` says what it means, where the boolean spelling is a double
+ * negative (`storyWritten: false`) that an author has to decode every time. And an
+ * enum's refusal *names the values it accepts*: `story: pending` — the likeliest
+ * synonym there is — comes back with `written` and `unwritten` in the message,
+ * where a boolean could only complain that it is not a boolean.
+ *
+ * `.default("written")` and never `.optional()`, for the reason written at length
+ * on `draft`: the absent key has one unambiguous meaning, so no consumer has a
+ * third "story unknown" state to handle. {@link Trip} therefore always carries the
+ * field, and `hasStory` in `./trip.ts` is the one place that reads it.
+ */
+export const STORY_STATES = ["written", "unwritten"] as const;
+
+export const StoryStateSchema = z.enum(STORY_STATES);
+
 const StaySchema = z
   .strictObject({
     kind: z.literal("stay"),
@@ -179,6 +209,7 @@ export const TagSchema = SlugSchema;
 
 export type Place = z.infer<typeof PlaceSchema>;
 export type TransportMode = z.infer<typeof TransportModeSchema>;
+export type StoryState = z.infer<typeof StoryStateSchema>;
 export type Step = z.infer<typeof StepSchema>;
 export type Budget = z.infer<typeof BudgetSchema>;
 export type Photo = z.infer<typeof PhotoSchema>;
@@ -262,6 +293,24 @@ const TripFieldsSchema = z.strictObject({
    * word. Refusing the string is the only way that mistake is ever said out loud.
    */
   draft: z.boolean().default(false),
+  /**
+   * Whether the récit is written — see {@link StoryStateSchema} for the state
+   * itself and for why it is an enum.
+   *
+   * Beside `draft` rather than anywhere else, because a contributor reads the two
+   * as one question: *what of this trip is public today?* They are independent —
+   * a trip may be both a draft and unwritten, which is the ordinary shape of a
+   * journey just come back — and neither implies the other.
+   *
+   * **`publishedAt` stays required for an untold trip**, which reads as a
+   * contradiction and is not. That field's own note calls it "the day the récit
+   * went online"; on an untold trip it is the day the *entry* went online, and
+   * making it optional here would hand `PlainDate | undefined` to every consumer
+   * to express something none of them asks. The distinction is respected where it
+   * is visible instead: `freshestTrip` never puts a "nouveau récit" badge on a
+   * trip whose récit nobody can read.
+   */
+  story: StoryStateSchema.default("written"),
 });
 
 type TripFields = z.infer<typeof TripFieldsSchema>;

@@ -1,5 +1,7 @@
 import { daysBetween, isPlainDate } from "./geo";
 import type { PlainDate } from "./geo";
+import type { StoryState } from "./schema";
+import { hasStory } from "./trip";
 
 /**
  * Which récit is *new*, and for how long — the whole of TIW-19's rule, as a pure
@@ -43,6 +45,18 @@ export const FRESHNESS_WINDOW_DAYS = 60;
 export type Publication = {
   readonly slug: string;
   readonly publishedAt: PlainDate;
+  /**
+   * Whether there is a récit to announce (TIW-18).
+   *
+   * **Required, not optional**, and it is the one field of this type worth an
+   * argument. An optional `story` would make every existing caller compile
+   * unchanged and default to "announceable", which is precisely the fail-open
+   * direction `hasStory` exists to refuse: a state added later would be announced
+   * as a new récit until somebody noticed. Required, the compiler asks each of
+   * the two pages that call {@link freshestTrip} to hand over the field — and
+   * both already have it on their `TripSummary`.
+   */
+  readonly story: StoryState;
 };
 
 /**
@@ -86,6 +100,16 @@ export function isFresh(publishedAt: PlainDate, today: PlainDate): boolean {
  * the comparison — the two read the same on most inputs and differ on exactly the
  * state this rule is about.
  *
+ * **An untold trip does not compete at all** (TIW-18), and it is filtered
+ * *before* the comparison — the opposite of what the window does one paragraph
+ * above, which is why the two are written next to each other rather than merged.
+ * The distinction: a stale récit is news that has aged, so rejecting the winner is
+ * right; an untold trip is not news at all. Rejected after winning, a journal
+ * whose most recent publication happened to be untold would announce nothing
+ * while a perfectly fresh récit sat one line below it. And the badge says
+ * « Nouveau récit »: on a trip with no récit and no page it is a promise with no
+ * address behind it.
+ *
  * **Compared on `publishedAt`, which is not the order the caller hands over.**
  * The content façade sorts by `startDate` descending, and a 2019 journey written
  * up today is the newest *publication* while being the oldest *trip*. Taking
@@ -107,6 +131,12 @@ export function freshestTrip<T extends Publication>(
   today: PlainDate
 ): T | undefined {
   const newest = trips.reduce<T | undefined>((best, trip) => {
+    // Skipped rather than pre-filtered into a new array: `trips` is the façade's
+    // memoised projection, and this keeps the derivation allocation-free on the
+    // ordinary path where every récit is written.
+    if (!hasStory(trip)) {
+      return best;
+    }
     if (best === undefined) {
       return trip;
     }

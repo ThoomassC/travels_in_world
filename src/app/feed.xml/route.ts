@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { countryListOf, formatDateRange } from "@/components/trips/format";
 import { listTripSummaries } from "@/content/trips";
+import { hasStory } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
 import { tripPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
@@ -51,7 +52,22 @@ export const dynamic = "force-static";
 const FEED_LOCALE = routing.defaultLocale;
 
 export async function GET(): Promise<Response> {
-  const trips = await listTripSummaries();
+  /**
+   * **The trips with a récit, and not every trip the journal holds** (TIW-18).
+   *
+   * Every `<item>` of a feed is an address a reader will follow, days or months
+   * after it was written, from software that keeps it. A trip whose story is not
+   * written has no page — `tripStaticParams` leaves it out — so advertising it here
+   * would put a permanent 404 in the one channel nobody re-reads before clicking.
+   *
+   * Filtered here rather than by the façade, because the map and the listings need
+   * exactly the trips this drops: see the note on `listTripSummaries`.
+   * `tests/build/durable-urls.test.ts` is what would catch the mistake in the
+   * other direction — it holds the sitemap and the prerendered pages to each
+   * other in both directions — and this filter is the same rule applied one
+   * channel over.
+   */
+  const trips = (await listTripSummaries()).filter(hasStory);
 
   /**
    * `getTranslations({ locale, namespace })` and never the implicit form. This

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { TripSchema } from "@/domain/schema";
 import type { Trip } from "@/domain/schema";
-import { detailOf, summaryOf } from "@/domain/trip";
+import { detailOf, hasStory, summaryOf } from "@/domain/trip";
 import type { TripDetail, TripSummary } from "@/domain/trip";
 import { displayPath, readTripCollection } from "./collection";
 import type { TripFile } from "./collection";
@@ -660,14 +660,58 @@ function publishedTrips(): readonly Trip[] {
   return showsDrafts() ? all : all.filter((trip) => !trip.draft);
 }
 
+/**
+ * The published trips that have a récit to read, and therefore an address
+ * (TIW-18).
+ *
+ * **A second filter over `publishedTrips`, not beside it**, because the two
+ * questions nest: a draft is not published at all, so whether its story is
+ * written cannot arise. That order is what keeps `TIW_DRAFTS` out of a state it
+ * has nothing to say about — the flag decides visibility, this decides whether
+ * there is a page.
+ *
+ * **Why the environment does not enter into it, unlike `showsDrafts()`.** A draft
+ * is a staging state, shown on `localhost` so an author can see work in progress.
+ * An untold trip is not staged: it is deliberately published *without* a récit. A
+ * page shown only in development would be a page that ships to nobody, and the
+ * author would be reviewing something no reader ever sees — the exact inversion of
+ * what the draft flag buys. So this filter is unconditional, and
+ * `tests/content/loader.test.ts` pins that across all three values of `NODE_ENV`
+ * and against `TIW_DRAFTS=visible`.
+ *
+ * `hasStory` rather than the comparison written out here: the direction that
+ * predicate fails in is the whole reason it exists, and it is argued on the
+ * predicate.
+ */
+function tripsWithAStory(): readonly Trip[] {
+  return publishedTrips().filter(hasStory);
+}
+
 /* ------------------------------------------------------------- the four doors -- */
 
-/** Every published trip, in full, in publication order. */
+/**
+ * Every published trip, in full, in publication order — **an untold trip
+ * included**.
+ *
+ * The pair with `tripStaticParams` below is deliberate and is the whole shape of
+ * the untold state (TIW-18): this door and `listTripSummaries` answer "what does
+ * the journal hold", the other two answer "what has an address". A trip whose
+ * récit is not written is in the first pair and not in the second.
+ */
 export async function loadTrips(): Promise<readonly TripDetail[]> {
   return publishedTrips().map(detailOf);
 }
 
-/** The same trips, projected down to what a listing renders. */
+/**
+ * The same trips, projected down to what a listing renders — untold ones
+ * included, since a listing is exactly where they belong.
+ *
+ * The two consumers that must *not* take this list whole are `sitemap.xml` and
+ * `feed.xml`: both advertise addresses, so both filter on `hasStory` themselves.
+ * That filtering is not done here, because a listing needs the untold trips and a
+ * fifth door taking the decision for everyone would be the wrong seam — see the
+ * note on `hasStory` in `src/domain/trip.ts`.
+ */
 export async function listTripSummaries(): Promise<readonly TripSummary[]> {
   return publishedTrips().map(summaryOf);
 }
@@ -688,9 +732,18 @@ export async function listTripSummaries(): Promise<readonly TripSummary[]> {
  * be handed `Object` to render. Comparing strings has no such reading, and it
  * needs no sanitising of `"../../etc/passwd"` either, because a slug is compared
  * and never joined onto a path.
+ *
+ * **Over the trips that have a récit, not over every published one** (TIW-18),
+ * and this is the second of the two locks on the untold state. `tripStaticParams`
+ * decides the closed set of addresses the build produces, which
+ * `dynamicParams = false` turns into an immediate 404; this makes the absence true
+ * for any *other* caller as well — a route added next year, a script — so no code
+ * path can render a page for a story nobody wrote. Neither lock is redundant: the
+ * first one is what stops a file being read at all, the second is what stops a
+ * page being rendered from one.
  */
 export async function findTrip(slug: string): Promise<TripDetail | undefined> {
-  const found = publishedTrips().find((trip) => trip.slug === slug);
+  const found = tripsWithAStory().find((trip) => trip.slug === slug);
 
   return found === undefined ? undefined : detailOf(found);
 }
@@ -698,7 +751,10 @@ export async function findTrip(slug: string): Promise<TripDetail | undefined> {
 /**
  * The `generateStaticParams` of the trip page: exactly the trips that must be
  * prerendered, in the same order as the listings. A draft is absent from it in
- * production.
+ * production, and **a trip whose récit is not written is absent from it in every
+ * environment** (TIW-18) — it has no page, which is what makes "no link to a page
+ * that does not exist" a property of the build rather than a discipline every
+ * component has to keep. See `tripsWithAStory`.
  *
  * **Being absent from this list is not, by itself, a 404 — and this comment said
  * it was.** Under the App Router's defaults, a slug that `generateStaticParams`
@@ -728,5 +784,5 @@ export async function findTrip(slug: string): Promise<TripDetail | undefined> {
  * requirement belongs to whoever reads this function, not to a ticket description.
  */
 export async function tripStaticParams(): Promise<readonly { readonly slug: string }[]> {
-  return publishedTrips().map((trip) => ({ slug: trip.slug }));
+  return tripsWithAStory().map((trip) => ({ slug: trip.slug }));
 }

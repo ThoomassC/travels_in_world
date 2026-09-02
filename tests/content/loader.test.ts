@@ -125,6 +125,13 @@ type TripOptions = {
    * where it belongs, in `tests/domain/freshness.test.ts`.
    */
   readonly publishedAt?: string;
+  /**
+   * Whether the récit is written (TIW-18). Omitted by every fixture that predates
+   * the field, which is exactly what `.default("written")` promises: the builder
+   * writes no `story:` line at all, so these collections keep exercising the
+   * absent-key path rather than a spelled-out default.
+   */
+  readonly story?: string;
 };
 
 /**
@@ -148,6 +155,7 @@ function oneStayTrip(options: TripOptions): string {
       `    endDate: ${options.endDate}`,
     ].join("\n"),
     ...(options.draft === undefined ? {} : { draft: `draft: ${String(options.draft)}` }),
+    ...(options.story === undefined ? {} : { story: `story: ${options.story}` }),
   });
 }
 
@@ -186,6 +194,25 @@ const WITH_A_DRAFT: Readonly<Record<string, string>> = {
     startDate: "2025-03-01",
     endDate: "2025-03-10",
     draft: true,
+  }),
+};
+
+/**
+ * A trip with a récit and a trip without one (TIW-18), the untold one being the
+ * **most recent** of the two — so a filter applied in the wrong place shows up as
+ * a change of order and not only as a change of membership.
+ */
+const WITH_AN_UNTOLD_TRIP: Readonly<Record<string, string>> = {
+  "japon-2024": oneStayTrip({
+    slug: "japon-2024",
+    startDate: "2024-04-12",
+    endDate: "2024-04-16",
+  }),
+  "maroc-2025": oneStayTrip({
+    slug: "maroc-2025",
+    startDate: "2025-03-01",
+    endDate: "2025-03-10",
+    story: "unwritten",
   }),
 };
 
@@ -270,6 +297,149 @@ describe("order", () => {
     expect(details.map((trip) => trip.slug)).toEqual(PUBLISHED_ORDER);
     expect(summaries.map((summary) => summary.slug)).toEqual(PUBLISHED_ORDER);
     expect(params.map((entry) => entry.slug)).toEqual(PUBLISHED_ORDER);
+  });
+});
+
+/* ------------------------------------------------------------ untold récits -- */
+
+/**
+ * `story: unwritten` — the third publication state (TIW-18), and the one that
+ * splits the façade's four doors in two rather than filtering all of them.
+ *
+ * **This is where it differs from `draft`, and the difference is the whole
+ * design.** A draft is invisible: all four doors deny it. An untold trip is
+ * *visible without a page* — it belongs on the map and in every listing, because
+ * a country nobody knows you visited is the state this field exists to end. What
+ * it must not have is an address:
+ *
+ *   door                  | draft         | untold
+ *   ----------------------|---------------|-------------------------------------
+ *   `listTripSummaries()` | absent        | **present** — the map and the lists
+ *   `loadTrips()`         | absent        | **present** — same collection, in full
+ *   `tripStaticParams()`  | absent        | absent — no page is built
+ *   `findTrip(slug)`      | `undefined`   | `undefined` — nothing to render
+ *
+ * The last two are a **pair**, and neither is redundant. `tripStaticParams` is
+ * what decides the closed set of addresses, which `dynamicParams = false` on the
+ * route turns into an immediate 404 with no file read. `findTrip` is the second
+ * lock: it means a future caller that reaches for a trip by slug — a route added
+ * next year, a script — cannot render a page for a story nobody wrote, whatever
+ * it does about `generateStaticParams`. Exactly the belt-and-braces the draft
+ * frontier already has, for the same reason.
+ */
+describe("story: unwritten", () => {
+  /**
+   * One sweep over the four doors rather than four tests, the same reasoning the
+   * draft case records: four green tests can coexist with a fifth exit nobody
+   * remembered, and a sweep forces this test to be revisited when a door is added.
+   */
+  it("keeps an untold trip in the listings and out of every address", async () => {
+    useTrips(WITH_AN_UNTOLD_TRIP);
+    vi.stubEnv("NODE_ENV", "production");
+
+    const [details, summaries, params, found] = await Promise.all([
+      loadTrips(),
+      listTripSummaries(),
+      tripStaticParams(),
+      findTrip("maroc-2025"),
+    ]);
+
+    // Present in both collections, and *first*, because it is the most recent
+    // journey: the order the listings render is untouched by this state.
+    expect(details.map((trip) => trip.slug)).toEqual(["maroc-2025", "japon-2024"]);
+    expect(summaries.map((summary) => summary.slug)).toEqual(["maroc-2025", "japon-2024"]);
+
+    // And no page: absent from the built set, and absent by slug.
+    expect(params).toEqual([{ slug: "japon-2024" }]);
+    expect(found).toBeUndefined();
+  });
+
+  /**
+   * The state that survives the listings carries the field, so a card can render
+   * "Récit à venir" and a marker can point somewhere that exists. A projection
+   * that dropped `story` would leave every consumer guessing.
+   */
+  it("hands the story state through to the projections", async () => {
+    useTrips(WITH_AN_UNTOLD_TRIP);
+
+    const summaries = await listTripSummaries();
+
+    expect(summaries.map((summary) => [summary.slug, summary.story])).toEqual([
+      ["maroc-2025", "unwritten"],
+      ["japon-2024", "written"],
+    ]);
+  });
+
+  /**
+   * **The environment does not enter into it**, which is the sharpest contrast
+   * with `draft` and the reason this case exists.
+   *
+   * A draft is a *staging* state: it is hidden in production and shown in
+   * development, so an author can see their work in progress. An untold trip is
+   * not staged — it is published, deliberately, without a récit. Showing its page
+   * on `localhost` would show a page that ships to nobody, and hiding its card
+   * would hide a card production renders. So both halves are the same in every
+   * environment, and `TIW_DRAFTS` has no say.
+   */
+  it.each(["production", "development", "test"])(
+    "answers the same way under NODE_ENV=%s",
+    async (environment) => {
+      useTrips(WITH_AN_UNTOLD_TRIP);
+      vi.stubEnv("NODE_ENV", environment);
+
+      const [summaries, params, found] = await Promise.all([
+        listTripSummaries(),
+        tripStaticParams(),
+        findTrip("maroc-2025"),
+      ]);
+
+      expect(summaries.map((summary) => summary.slug)).toEqual(["maroc-2025", "japon-2024"]);
+      expect(params).toEqual([{ slug: "japon-2024" }]);
+      expect(found).toBeUndefined();
+    }
+  );
+
+  /**
+   * `TIW_DRAFTS=visible` publishes drafts; it must not give an untold trip a page.
+   * The two fields answer different questions, and a filter written as one
+   * `showsDrafts() || …` would make the flag reach a state it has nothing to say
+   * about.
+   */
+  it("gives an untold trip no page even when drafts are forced visible", async () => {
+    useTrips(WITH_AN_UNTOLD_TRIP);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("TIW_DRAFTS", "visible");
+
+    await expect(tripStaticParams()).resolves.toEqual([{ slug: "japon-2024" }]);
+    await expect(findTrip("maroc-2025")).resolves.toBeUndefined();
+  });
+
+  /**
+   * A trip that is both a draft and untold: the draft filter is the outer one, so
+   * in production it is absent from *everything*, listings included — and the
+   * untold rule does not have to know that drafts exist.
+   */
+  it("hides a trip that is both a draft and untold from the listings too", async () => {
+    useTrips({
+      "japon-2024": oneStayTrip({
+        slug: "japon-2024",
+        startDate: "2024-04-12",
+        endDate: "2024-04-16",
+      }),
+      "maroc-2025": oneStayTrip({
+        slug: "maroc-2025",
+        startDate: "2025-03-01",
+        endDate: "2025-03-10",
+        draft: true,
+        story: "unwritten",
+      }),
+    });
+    vi.stubEnv("NODE_ENV", "production");
+
+    const [summaries, params] = await Promise.all([listTripSummaries(), tripStaticParams()]);
+
+    expect(summaries.map((summary) => summary.slug)).toEqual(["japon-2024"]);
+    expect(params).toEqual([{ slug: "japon-2024" }]);
   });
 });
 
