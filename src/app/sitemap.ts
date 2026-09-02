@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { listTripSummaries } from "@/content/trips";
 import { localePathname } from "@/i18n/pathname";
-import { tripPath, tripsPath } from "@/i18n/paths";
+import { aboutPath, tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
 import { absoluteUrl } from "./site-url";
@@ -81,6 +81,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...localisedEntry("/", mostRecentEnd),
     ...localisedEntry(tripsPath(), mostRecentEnd),
+    /**
+     * The colophon (TIW-25), and it is here because it has to be: every
+     * reader-facing prerendered page must appear in this file, and
+     * `tests/build/durable-urls.test.ts` compares the two sets in both directions.
+     * A page absent from the sitemap is a page nobody finds.
+     *
+     * **No `lastModified`, and that is the honest answer rather than a shortcut.**
+     * The two entries above take the most recent trip's end date because what
+     * changes a list is a trip arriving; this page changes when its *code* changes,
+     * and nothing in this project records that date. A build-time `Date` would
+     * stamp it with the deployment's clock and tell a crawler it changed on every
+     * deploy — which is exactly how a sitemap stops being believed.
+     * `localisedEntry` omits the element entirely for `undefined`.
+     */
+    ...localisedEntry(aboutPath(), undefined),
     ...trips.flatMap((trip) => localisedEntry(tripPath(trip.slug), trip.endDate)),
   ];
 }

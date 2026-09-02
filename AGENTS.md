@@ -48,18 +48,38 @@ hors `src/map/**` de les importer en profondeur — ainsi que `world-atlas`, `d3
 c'est la façon de partager un type de frontière sans importer de code. Voir
 `docs/adr/0002-facade-serveur-gardee.md`.
 
-`src/iso-3166.ts` est le seul module à la racine de `src/`, et il l'est depuis TIW-29. C'est
-la transcription des 249 codes ISO 3166-1 alpha-2 attribués, avec deux consommateurs dans deux
-couches qui ne peuvent pas s'atteindre : la jointure de `src/map/world.ts`, et le prédicat
-`isAssignedCountryCode` dont `src/content/validate.ts` a besoin pour refuser un code pays
-qu'aucune carte ne peut dessiner. Les trois autres routes ont été mesurées et écartées — la
-façade `@/map` échoue à la _résolution_ sous Node nu (`Cannot find package 'server-only'`),
-l'import profond `@/map/iso-3166` est refusé par `map-entry-point`, et une troisième copie des
-249 lignes ne se justifiait pas. `src/domain/**` continue de ne pas pouvoir l'atteindre —
-`domain-purity` refuse tout `@/*`, mesuré — ce qui est exactement ce qui garde
-`docs/adr/0001-domain-purity.md` intact : le domaine valide la _forme_ d'un code, ce module
-connaît le monde, et `src/content` est la couche qui refuse du contenu. L'en-tête du module
-porte les trois mesures.
+**Deux** modules vivent à la racine de `src/`, et c'est la même décision prise deux fois —
+`docs/adr/0011-la-table-iso-hors-des-facades.md` en porte l'argument, qui vaut pour les deux :
+une façade gardée ne peut **jamais** servir un script Node, parce que `server-only` échoue à
+la _résolution_ et non à l'exécution (`Cannot find package 'server-only'`, mesuré). Or c'est
+un script Node, `npm run validate:content`, qui doit refuser un code pays avant le build.
+
+- `src/iso-3166.ts`, depuis TIW-29 : la transcription des 249 codes ISO 3166-1 alpha-2
+  attribués. Consommateurs : la jointure de `src/map/world.ts`, et le prédicat
+  `isAssignedCountryCode` du validateur.
+- `src/basemap-coverage.ts`, depuis TIW-30 : **généré**, la liste des 174 pays que le
+  millésime 110m sait dessiner, plus les 238 qu'un millésime plus fin dessinerait. Un code
+  peut être parfaitement attribué et n'avoir aucune forme — 75 des 249 sont dans ce cas,
+  Singapour et Hong Kong compris. Régénéré par `npm run basemap:coverage`.
+
+Les deux autres routes restent mesurées et écartées pour l'un comme pour l'autre : l'import
+profond `@/map/*` est refusé par `map-entry-point`, et une copie de plus tenue en phase par un
+test coûtait plus qu'un module partagé. `src/domain/**` ne peut atteindre ni l'un ni l'autre —
+`domain-purity` refuse tout `@/*`, mesuré — ce qui garde `docs/adr/0001-domain-purity.md`
+intact : le domaine valide la _forme_ d'un code (`jp`), `src/iso-3166` sait lesquels existent
+(`XK`), `src/basemap-coverage` sait lesquels la carte dessine (`SG`), et `src/content` est la
+seule couche qui refuse du contenu. L'en-tête de chaque module porte ses mesures.
+
+**Un fichier généré qui ment est pire que pas de fichier**, donc `src/basemap-coverage.ts` est
+comparé au vrai dataset à deux moments : `tests/map/basemap-coverage.test.ts` le recalcule
+depuis le TopoJSON livré, à chaque `npm test` ; et `src/map/world.ts` le confronte à la
+géométrie qu'il vient de projeter, donc à l'intérieur de `next build`. Les deux ont été
+prouvés par échec volontaire. Ne les retire pas : sans eux, un `npm install` qui bouge
+`world-atlas` fait refuser des pays que la carte dessine, en silence.
+
+**Attention au troisième.** L'ADR 0011 dit « à un fichier c'est une exception, à trois c'est un
+dossier qu'on n'a pas nommé ». Nous sommes à deux. Le prochain module transverse ne se pose pas
+ici sans que la question du dossier soit tranchée.
 
 `src/content/**` **ne le porte pas**, délibérément : c'est du code Node exécutable, que
 `npm run validate:content`, `npm run geocode`, `npm run new-trip` et Vitest chargent sous Node
@@ -132,6 +152,15 @@ avec le premier : les tracés du planisphère sont plafonnés à **34 Ko brotli*
 chemin dans le HTML — donc les deux plafonds ne se financent pas l'un l'autre. Le garde est
 `tests/map/world.test.ts` : passer au millésime 50m ferait 182,5 Ko et le rougirait, ce qui
 est voulu.
+
+Une variante qu'on croit hors budget et qui ne l'est pas, mesurée par TIW-30 parce que
+l'ignorer aurait fait rejeter une option pour une mauvaise raison : composer le 110m avec les
+**seuls** micro-États du 50m donne **33,0 Ko brotli** (238 tracés), donc _sous_ le plafond. Ce
+n'est pas ce qui a été retenu, et le chiffre est là pour que le prochain lecteur écarte cette
+voie sur ses vrais défauts — il ne resterait que 1,0 Ko de marge sur 34, il faudrait charger
+deux topologies aux simplifications différentes, et **11 codes ISO ne seraient toujours pas
+dessinés** parce qu'aucun millésime ne les porte (BQ, BV, CC, CX, GF, GP, MQ, RE, SJ, TK, YT).
+Le validateur resterait donc nécessaire de toute façon.
 
 ## Versions figées, et pourquoi
 

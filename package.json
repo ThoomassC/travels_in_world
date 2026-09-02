@@ -25,7 +25,8 @@
     "geocode": "node --import ./scripts/runtime/register-typescript.mts scripts/geocode.ts",
     "new-trip": "node --import ./scripts/runtime/register-typescript.mts scripts/new-trip.ts",
     "index-photos": "node --import ./scripts/runtime/register-typescript.mts scripts/index-photos.ts",
-    "check:photo-weight": "node --import ./scripts/runtime/register-typescript.mts scripts/photo-weight.ts"
+    "check:photo-weight": "node --import ./scripts/runtime/register-typescript.mts scripts/photo-weight.ts",
+    "basemap:coverage": "node --import ./scripts/runtime/register-typescript.mts scripts/generate-basemap-coverage.ts"
   },
   "dependencies": {
     "d3-geo": "^3.1.1",

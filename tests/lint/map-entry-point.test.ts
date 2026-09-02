@@ -210,7 +210,6 @@ describe("the map entry-point rule refuses a deep import from outside src/map", 
   it.each([
     "@/map/world",
     "@/map/projection",
-    "@/map/iso-3166",
     "@/map/dataset",
     "@/map/path-context",
     "@/map/index",
@@ -360,30 +359,83 @@ describe("the map entry-point rule leaves the legitimate paths alone", () => {
   });
 
   /**
+   * The two modules that left this folder, and the widening they represent —
+   * asserted rather than assumed, because both sit one character away from a
+   * pattern that would swallow them.
+   *
+   * `@/iso-3166` moved out at TIW-29 (`docs/adr/0011`) and `@/basemap-coverage`
+   * was generated at TIW-30, each because a plain Node script had to read it and
+   * a guarded façade can never serve one. Both are now importable from anywhere in
+   * `src/**`, `'use client'` components included; ADR 0011 records that as an
+   * accepted residual, and this pair of rows is what makes it a *decision* rather
+   * than an accident nobody re-reads. Neither module can draw anything — the
+   * geometry, `d3-geo`, `topojson-client` and `world-atlas` all stay behind the
+   * refusals above — which is the whole reason the widening is affordable.
+   *
+   * They also guard the shape of the pattern from the other side: `@/map/*` and
+   * `**\/map/*` must not grow into something that matches a root module whose name
+   * merely starts with the same letters.
+   */
+  it.each(["@/iso-3166", "@/basemap-coverage"])(
+    "accepts the root module %o from src/app",
+    async (specifier) => {
+      await expectAccepted(
+        "src/app/[locale]/page.tsx",
+        `import { thing } from ${JSON.stringify(specifier)};\n`.concat("export const a = thing;")
+      );
+    }
+  );
+
+  /**
+   * The import TIW-30 actually added, in the file that actually makes it.
+   * `src/content/validate.ts` is matched by this block and not by
+   * `travels-in-world/content-facade`, which exempts `src/content/**` — so this
+   * rule is the last word there, and it is the one that would have refused the
+   * validator's new dependency.
+   */
+  it("accepts `@/basemap-coverage` from the content validator", async () => {
+    await expectAccepted(
+      "src/content/validate.ts",
+      'import { DRAWABLE_COUNTRY_CODES } from "@/basemap-coverage";\nexport const a = DRAWABLE_COUNTRY_CODES;'
+    );
+  });
+
+  /**
    * The map modules talk to each other. A rule scoped by specifier rather than by
    * *importing file* would break the folder from the inside — and the break would
    * surface as a lint error in code nobody had touched.
    */
   it.each([
-    { file: "src/map/world.ts", specifier: "@/map/iso-3166" },
+    { file: "src/map/world.ts", specifier: "@/map/dataset" },
     { file: "src/map/world.ts", specifier: "@/map/projection" },
     { file: "src/map/projection.ts", specifier: "@/map/path-context" },
     { file: "src/map/index.ts", specifier: "@/map/world" },
   ])("accepts $specifier from $file", async ({ file, specifier }) => {
     await expectAccepted(
       file,
-      `import { NUMERIC_BY_ALPHA2 } from ${JSON.stringify(specifier)};\n`.concat(
-        "export const a = NUMERIC_BY_ALPHA2;"
-      )
+      `import { thing } from ${JSON.stringify(specifier)};\n`.concat("export const a = thing;")
     );
   });
 
   /**
    * Sibling imports inside the folder, the relative form the map actually uses.
    * A pattern broad enough to catch `"../map/world"` from outside must not also
-   * catch `"./iso-3166"` from inside.
+   * catch `"./dataset"` from inside.
+   *
+   * **Every specifier in this file names a module that exists.** Six of them used
+   * to name `@/map/iso-3166` and `"./iso-3166"`, and they went on passing after
+   * TIW-29 moved that table to `src/iso-3166.ts`: the rule keys on the *shape* of
+   * a path, never on whether the file is there. A guard rehearsing against a
+   * target nobody can write any more buys confidence it has not earned — the
+   * failure `docs/adr/0011` records under "ce qu'on paie" — so the six were
+   * swapped for real modules of `src/map/**`, and the swap was re-proved by
+   * deliberate failure rather than by a green run.
+   *
+   * The residual is worth naming rather than leaving implicit: nothing here can
+   * *tell* that a specifier is fictional, so the next module to leave this folder
+   * will strand its cases in exactly the same way.
    */
-  it.each(["./iso-3166", "./projection", "./dataset"])(
+  it.each(["./path-context", "./projection", "./dataset"])(
     "accepts the sibling %o from src/map/world.ts",
     async (specifier) => {
       await expectAccepted(
@@ -657,7 +709,6 @@ describe("the map boundary refuses the dynamic import the static rule cannot see
   const DEEP_MODULES = [
     "@/map/world",
     "@/map/projection",
-    "@/map/iso-3166",
     "@/map/dataset",
     "@/map/path-context",
     "@/map/index",
@@ -779,7 +830,7 @@ describe("the dynamic selector leaves the legitimate paths alone", () => {
    * impossible to build — and the break would surface in code nobody had touched.
    */
   it.each([
-    { file: "src/map/world.ts", specifier: "@/map/iso-3166" },
+    { file: "src/map/world.ts", specifier: "@/map/projection" },
     { file: "src/map/world.ts", specifier: "./dataset" },
     { file: "src/map/dataset.ts", specifier: "world-atlas/countries-110m.json" },
     { file: "src/map/dataset.ts", specifier: "d3-geo" },

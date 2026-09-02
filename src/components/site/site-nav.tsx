@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
 import { localePathname } from "@/i18n/pathname";
-import { tripsPath } from "@/i18n/paths";
+import { aboutPath, tripsPath } from "@/i18n/paths";
 import type { Locale } from "@/i18n/routing";
 import { SiteBrand } from "./site-brand";
 import styles from "./site-nav.module.css";
@@ -37,8 +37,18 @@ import styles from "./site-nav.module.css";
  * component (`usePathname`), which the milestone does not allow and which would
  * put this nav's JavaScript on every route, or a request read, which de-statifies
  * the whole tree with `next build` still exiting 0 (invariant 1). Neither is
- * worth it for a two-entry navigation on pages whose `<h1>` names them. It
- * becomes worth revisiting the day the nav grows a third entry.
+ * worth it for a small navigation on pages whose `<h1>` names them.
+ *
+ * > **Revisited at the third entry (TIW-25), which is what the previous version of
+ * > this note asked for — and the answer is unchanged.** The two ways above are
+ * > still the only two, and both still cost more than the marker is worth. The
+ * > third road that would exist for a nav rendered by a *page* is closed here: this
+ * > component is rendered by the layout, which receives only `params` and therefore
+ * > cannot be told which page is current without a prop threaded through every
+ * > route. What is really lost is one convenience for a returning reader; what is
+ * > kept is that this nav costs zero byte of JavaScript on every route of the site.
+ * > Re-open it the day the nav stops being a flat list of three, or the day a
+ * > client boundary exists in the header for another reason.
  */
 export function SiteNav({ locale }: { readonly locale: Locale }): ReactElement {
   const t = useTranslations("trips");
@@ -80,6 +90,26 @@ export function SiteNav({ locale }: { readonly locale: Locale }): ReactElement {
           <li>
             <a className={styles.link} href={localePathname({ href: tripsPath(), locale })}>
               {t("navAll")}
+            </a>
+          </li>
+          {/*
+            The colophon (TIW-25), and it is in the header rather than in a footer
+            for one measured reason: there is no footer, and adding one would put a
+            second landmark and a second stylesheet on **every** route of the site
+            to carry a single link. The criterion asks for "the main navigation OR
+            the footer"; the nav is already rendered by the layout, so this entry
+            costs one `<li>` and one message key and appears everywhere by
+            construction.
+
+            LAST, and that order is the criterion's other half. "Aucun jargon
+            technique sur les pages de voyage" — a reader who came for a story meets
+            the map and the listing first, and a label that says nothing about what
+            is behind it. The technical vocabulary starts on the other side of this
+            link and nowhere before it.
+          */}
+          <li>
+            <a className={styles.link} href={localePathname({ href: aboutPath(), locale })}>
+              {t("navAbout")}
             </a>
           </li>
         </ul>
