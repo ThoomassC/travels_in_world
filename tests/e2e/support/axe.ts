@@ -50,7 +50,14 @@ export type AxeReport = {
   readonly violations: readonly AxeViolation[];
   /** Rules that passed. Reported so a green run cannot be an empty run. */
   readonly passes: number;
-  /** Rules axe could not decide — never a failure, always worth printing. */
+  /**
+   * Rules axe could not decide — never a failure, always worth printing.
+   *
+   * With one carved-out exception, which is why this comment is longer than the
+   * field: a `color-contrast` node whose ratio is *exactly* 1.0 is moved into
+   * `violations` above. See the note in `auditPage`. It still appears in this
+   * list, because the rule as a whole remains undecided for its other nodes.
+   */
   readonly incomplete: readonly string[];
 };
 
@@ -62,7 +69,17 @@ type RawResults = {
     nodes: { target: string[] }[];
   }[];
   passes: { id: string }[];
-  incomplete: { id: string }[];
+  incomplete: {
+    id: string;
+    impact: string | null;
+    help: string;
+    nodes: {
+      target: string[];
+      any?: { data?: { messageKey?: string } | null }[];
+      all?: { data?: { messageKey?: string } | null }[];
+      none?: { data?: { messageKey?: string } | null }[];
+    }[];
+  }[];
 };
 
 declare global {
@@ -87,13 +104,55 @@ export async function auditPage(page: Page): Promise<AxeReport> {
 
     const results = await window.axe.run(document, { runOnly: { type: "tag", values: tags } });
 
+    /**
+     * The one `incomplete` result this project refuses to treat as undecided.
+     *
+     * Measured while TIW-26 audited the four screens: axe reports a contrast
+     * ratio of *exactly* 1.0 — foreground and background resolving to the same
+     * colour, which is text nobody can read — as `incomplete` with
+     * `messageKey: "equalRatio"`, and NOT as a violation. Its reasoning is
+     * defensible in general: identical colours are how a decorative or
+     * deliberately hidden node often looks, and axe will not guess. But every
+     * assertion in this repository reads `report.violations`, so the worst
+     * contrast expressible in CSS passed all eleven audits.
+     *
+     * Promoted here, at the choke point, rather than asserted in each spec: the
+     * hole existed *because* it lived between the helper and its callers, and a
+     * guard added to eleven files is a guard the twelfth forgets.
+     *
+     * Only `equalRatio`, deliberately. `incomplete` legitimately carries
+     * `color-contrast` entries on a clean build — the zoom buttons' glyphs, the
+     * `<figcaption>`, the timeline badge — where axe cannot resolve a composited
+     * or gradient background. Failing on "any incomplete" would go red for the
+     * wrong reason and be switched off within a month.
+     */
+    const equalRatio = results.incomplete.flatMap((entry) =>
+      entry.id !== "color-contrast"
+        ? []
+        : entry.nodes
+            .filter((node) =>
+              [node.any, node.all, node.none]
+                .flat()
+                .some((check) => check?.data?.messageKey === "equalRatio")
+            )
+            .map((node) => ({
+              id: "color-contrast",
+              impact: entry.impact,
+              help: `${entry.help} — foreground and background are the same colour (ratio 1.0), so the text is invisible`,
+              targets: node.target,
+            }))
+    );
+
     return {
-      violations: results.violations.map((violation) => ({
-        id: violation.id,
-        impact: violation.impact,
-        help: violation.help,
-        targets: violation.nodes.flatMap((node) => node.target),
-      })),
+      violations: [
+        ...results.violations.map((violation) => ({
+          id: violation.id,
+          impact: violation.impact,
+          help: violation.help,
+          targets: violation.nodes.flatMap((node) => node.target),
+        })),
+        ...equalRatio,
+      ],
       passes: results.passes.length,
       incomplete: results.incomplete.map((entry) => entry.id),
     };
