@@ -26,9 +26,45 @@ const image = {
   height: 1067,
 } as const;
 
+/**
+ * The feed link travels with the canonical, and TIW-19 put it there rather than
+ * in the layout — so this block sits beside the canonical's, because they are one
+ * decision.
+ *
+ * Next merges metadata shallowly per top-level field: a page declaring
+ * `alternates` replaces the layout's entirely, and every page here declares one
+ * for its canonical. A feed link declared one segment up would therefore appear
+ * on exactly the pages that forgot their canonical, which is nowhere.
+ */
+describe("the feed link", () => {
+  it("is advertised on every page the builder serves", () => {
+    const types = shareMetadata(page).alternates?.types;
+
+    expect(types).toEqual({
+      "application/rss+xml": [{ url: "/feed.xml", title: "Travels in World" }],
+    });
+  });
+
+  it("stays relative, for `metadataBase` to resolve — like the canonical", () => {
+    const [feed] = shareMetadata(page).alternates?.types?.["application/rss+xml"] ?? [];
+    const url = typeof feed === "string" ? feed : feed?.url;
+
+    expect(typeof url).toBe("string");
+    expect(String(url).startsWith("http")).toBe(false);
+  });
+
+  it("survives on a page that is not indexable", () => {
+    // A withdrawn récit is still part of a journal a reader may subscribe to;
+    // `noindex` is about listing this page, not about the site's feed.
+    const types = shareMetadata({ ...page, indexable: false }).alternates?.types;
+
+    expect(types).toHaveProperty("application/rss+xml");
+  });
+});
+
 describe("the canonical", () => {
   it("is the page's own path", () => {
-    expect(shareMetadata(page).alternates).toEqual({ canonical: "/fr/voyages/japon-2024" });
+    expect(shareMetadata(page).alternates?.canonical).toBe("/fr/voyages/japon-2024");
   });
 
   it("stays relative, for `metadataBase` to resolve", () => {
@@ -50,7 +86,7 @@ describe("the canonical", () => {
     // count as a second page.
     const metadata = shareMetadata({ ...page, indexable: false });
 
-    expect(metadata.alternates).toEqual({ canonical: "/fr/voyages/japon-2024" });
+    expect(metadata.alternates?.canonical).toBe("/fr/voyages/japon-2024");
     expect(metadata.robots).toEqual({ index: false, follow: true });
   });
 

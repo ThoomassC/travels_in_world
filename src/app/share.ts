@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { Locale } from "@/i18n/routing";
+import { FEED_PATH } from "./rss";
 
 /**
  * What a page hands a messaging app, a social network and a crawler — built once,
@@ -142,7 +143,23 @@ export function shareMetadata(page: SharePage): Metadata {
      * de-indexed in favour of it. `tests/build/durable-urls.test.ts` reads every
      * prerendered document and refuses one whose canonical is not its own URL.
      */
-    alternates: { canonical: page.path },
+    alternates: {
+      canonical: page.path,
+      /**
+       * Feed discovery, and it is **here rather than in the layout** for a
+       * measured reason: Next merges metadata shallowly per top-level field, so
+       * every page that declares its own `alternates` — which is every page, for
+       * the canonical above — would replace a layout-level declaration and lose
+       * the feed link. Putting it in the builder means the two travel together
+       * and no page can carry one without the other.
+       *
+       * Relative, like the canonical: `metadataBase` resolves it, in Next's
+       * implementation rather than in a second one of ours. The path comes from
+       * {@link FEED_PATH} so the head, the route's folder and the feed's own
+       * `atom:link rel="self"` cannot disagree about one URL.
+       */
+      types: { "application/rss+xml": [{ url: FEED_PATH, title: page.siteName }] },
+    },
 
     openGraph: {
       type: page.type,
