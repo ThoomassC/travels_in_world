@@ -72,8 +72,25 @@ const canvas = (page: Page): Locator => page.locator(`${MAP} svg`).locator("..")
  * `locator.hover()` aims at an element's centre and fails when anything overlaps
  * it — which on this map is the normal case, since the markers are 44 px targets
  * over a drawing. Moving the mouse to a chosen point is what a reader does.
+ *
+ * **The scroll is not decoration, and TIW-19 is what proved it.** `page.mouse`
+ * works in *viewport* coordinates, so a point computed from a bounding box is
+ * only usable if the box is on screen — and nothing here ensured that. TIW-19
+ * puts a 45 px banner above the map on the home page, and at Playwright's default
+ * 1280 x 720 the `(0.5, 0.75)` point then landed at y = 720.6: six tenths of a
+ * pixel outside the viewport. `mouse.move` accepted it, `mouse.wheel` dispatched
+ * on nothing, and the wheel assertion failed on an **empty** list of events
+ * rather than on a wrong one — a failure that says nothing about its own cause.
+ * The margin before that ticket was those same six tenths of a pixel in the other
+ * direction: this helper was passing by luck, and any block added above the map
+ * would have spent it.
+ *
+ * `scrollIntoViewIfNeeded` first, *then* read the box: the box moves when the
+ * page does, so the order is the whole of the fix.
  */
 async function pointAt(page: Page, fx: number, fy: number): Promise<void> {
+  await canvas(page).scrollIntoViewIfNeeded();
+
   const box = await canvas(page).boundingBox();
 
   await page.mouse.move(

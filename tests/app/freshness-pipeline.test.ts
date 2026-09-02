@@ -21,14 +21,17 @@ import { fixtureRoots } from "../content/support";
  * rendered half is asserted once, at J+1, in `tests/e2e/fresh-trip.populated.spec.ts`.
  *
  * The fixture is `home-map`, four trips whose newest **publication** is
- * `islande-2022` — the oldest **journey** of the four. That is the ticket's trap
+ * `perou-bolivie-2023` — the *third*-newest **journey** of the four. That is the ticket's trap
  * built into the data: a derivation reading `startDate`, or trusting the order
  * the façade hands over, answers `japon-2025` here and passes on any fixture
  * where the two agree.
  */
 
-/** `islande-2022`'s `publishedAt`, and the newest of the fixture's four. */
+/** `perou-bolivie-2023`'s `publishedAt`, and the newest of the fixture's four. */
 const NEWEST_PUBLICATION = "2026-01-05";
+
+/** The trip that carries it: the third-newest journey of the four. */
+const FRESH_SLUG = "perou-bolivie-2023";
 
 /** `NEWEST_PUBLICATION` plus `days`, so a case reads as an offset. */
 function dayAfter(days: number): string {
@@ -51,7 +54,7 @@ async function summariesOf(fixture: string) {
 describe("the newest récit, read from the committed collection", () => {
   it("carries the publication date the file declares", async () => {
     const trips = await summariesOf("home-map");
-    const islande = trips.find((trip) => trip.slug === "islande-2022");
+    const fresh = trips.find((trip) => trip.slug === FRESH_SLUG);
 
     /**
      * The link in the chain nothing else would notice breaking. If `publishedAt`
@@ -59,7 +62,7 @@ describe("the newest récit, read from the committed collection", () => {
      * against `undefined`, answer the first trip, and every case below would
      * still pass for the wrong reason.
      */
-    expect(islande?.publishedAt).toBe(NEWEST_PUBLICATION);
+    expect(fresh?.publishedAt).toBe(NEWEST_PUBLICATION);
   });
 
   it("is the newest publication and not the newest journey", async () => {
@@ -67,8 +70,8 @@ describe("the newest récit, read from the committed collection", () => {
 
     // The façade's own order — `startDate` descending — puts the 2025 trip first.
     expect(trips[0]?.slug).toBe("japon-2025");
-    // The badge follows the publication date, so it lands on the 2022 journey.
-    expect(freshestTrip(trips, dayAfter(1))?.slug).toBe("islande-2022");
+    // The badge follows the publication date, so it lands on the 2023 journey.
+    expect(freshestTrip(trips, dayAfter(1))?.slug).toBe(FRESH_SLUG);
   });
 
   it("is present at J+1", async () => {
@@ -89,7 +92,7 @@ describe("the newest récit, read from the committed collection", () => {
    * J+1 and J+61 and fails only here.
    */
   it.each([
-    { age: 59, expected: "islande-2022" },
+    { age: 59, expected: FRESH_SLUG },
     { age: 60, expected: undefined },
   ])("at J+$age answers $expected", async ({ age, expected }) => {
     const trips = await summariesOf("home-map");
