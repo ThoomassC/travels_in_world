@@ -90,8 +90,29 @@ export type MapCountry = {
 export type WorldMapProps = {
   /** The 177 geometries, background layer, in dataset order. */
   readonly countries: readonly MapCountry[];
-  /** The tinted subset: countries holding at least one trip. */
+  /**
+   * The tinted subset: countries holding at least one trip **whose récit is
+   * written**.
+   *
+   * Disjoint from `untold` below, and the partition is upstream on purpose. The
+   * alternative — `visited` holding every tinted country and `untold` painting
+   * over a subset of it — looks tidier and does not work: the dashed stroke's
+   * gaps would show the solid stroke underneath, and the two states would render
+   * identically. Two lists, no overlap, one paint each.
+   */
   readonly visited: readonly MapCountry[];
+  /**
+   * The countries every one of whose trips is untold (TIW-18) — the third tint.
+   *
+   * Selected by the page from `untoldOnlyCountryCodes`, which is why this arrives
+   * as shapes rather than as a set of codes: the page already holds the geometry
+   * façade's tinted subset and is the one place that can partition it. `@/map` is
+   * untouched, and the world is projected once.
+   *
+   * Optional, because a journal where every récit is written is the ordinary case
+   * — and the ordinary case must emit no empty `<g>`.
+   */
+  readonly untold?: readonly MapCountry[];
   /** One marker per published trip, already projected and already sorted upstream. */
   readonly marks: readonly TripMark[];
   /** The projected world box — `{ width: 960, height: 500 }` in production. */
@@ -153,6 +174,7 @@ const shapeKey = (country: MapCountry, index: number): string =>
 export function WorldMap({
   countries,
   visited,
+  untold = [],
   marks,
   world,
   tripCards,
@@ -326,6 +348,20 @@ export function WorldMap({
                   untouched — it never looks at classes.
                 */
                 data-new={mark.isNew === true ? "" : undefined}
+                /*
+                  TIW-18's third state. An attribute and not a class name, the
+                  same reasoning as `data-new`: `map-viewport.tsx` reads markers
+                  through `closest("a[data-trip]")` and never looks at classes, so
+                  the interaction layer is untouched by this. What it drives is a
+                  hollow dot — a difference of shape, so the state survives for a
+                  reader who cannot separate the hues.
+
+                  Note what is NOT here: no change to `href`, and no
+                  `aria-disabled`. The marker is a working link to something that
+                  exists (the trip's entry in the listing), and a disabled-looking
+                  link that still navigates is worse than either.
+                */
+                data-story={mark.story === "unwritten" ? "unwritten" : undefined}
               >
                 <span className={styles.dot} aria-hidden="true" />
                 {/*
@@ -370,9 +406,20 @@ export function WorldMap({
                     meaning reaches a screen reader, a mouse and a keyboard at
                     once, with nothing to keep in step.
                   */}
-                  {mark.isNew === true
-                    ? t("markLabelNew", { title: mark.title, place: mark.placeName })
-                    : t("markLabel", { title: mark.title, place: mark.placeName })}
+                  {/*
+                    Three wordings, one text node, and the order of the tests is
+                    the argument: **untold wins over new**. The pair is
+                    unreachable through the real pipeline — `freshestTrip` skips
+                    untold trips before it compares — but `isNew` is a prop, and a
+                    marker announcing "nouveau récit" for a story that is not
+                    written is the map promising something it also says does not
+                    exist. Of the two, "récit à venir" is the one a reader needs.
+                  */}
+                  {mark.story === "unwritten"
+                    ? t("markLabelToCome", { title: mark.title, place: mark.placeName })
+                    : mark.isNew === true
+                      ? t("markLabelNew", { title: mark.title, place: mark.placeName })
+                      : t("markLabel", { title: mark.title, place: mark.placeName })}
                 </span>
               </a>
             </li>
@@ -463,6 +510,27 @@ export function WorldMap({
               <path key={shapeKey(country, index)} d={country.path} />
             ))}
           </g>
+          {/*
+            The third tint (TIW-18): countries every one of whose trips is untold.
+
+            **Rendered conditionally, and the guard is not cosmetic.** An empty
+            `<g>` in every document of a journal where every récit is written is a
+            layer that exists to say nothing — and `layersOf` in the suite counts
+            these, so "two layers when nothing is untold" is asserted rather than
+            assumed.
+
+            Last in paint order, above the told layer, for the reason the told
+            layer is above the background: a tinted border must not be overpainted
+            by a neighbour drawn after it. The two lists are disjoint, so nothing
+            here is drawn twice.
+          */}
+          {untold.length > 0 ? (
+            <g className={styles.untold}>
+              {untold.map((country, index) => (
+                <path key={shapeKey(country, index)} d={country.path} />
+              ))}
+            </g>
+          ) : null}
         </MapViewport>
       ) : (
         /*
@@ -491,9 +559,17 @@ export function WorldMap({
         never a label.
       */}
       <figcaption className={styles.caption}>
+        {/*
+          `visited.length + untold.length`, and the sum is the honest count: the
+          caption answers *where has he been*, and a country visited without being
+          written about has still been visited. Counting only `visited` would make
+          the caption disagree with `VisitedCountries` beside it, which tallies
+          trips per country over the whole collection — and would quietly shrink
+          the number the day a récit went unwritten.
+        */}
         {showsWholeWorld
-          ? t("summary", { trips: marks.length, countries: visited.length })
-          : t("summaryCropped", { trips: marks.length, countries: visited.length })}
+          ? t("summary", { trips: marks.length, countries: visited.length + untold.length })
+          : t("summaryCropped", { trips: marks.length, countries: visited.length + untold.length })}
       </figcaption>
     </figure>
   );

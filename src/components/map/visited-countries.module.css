@@ -140,3 +140,26 @@
 .allTrips {
   align-self: flex-start;
 }
+
+/**
+ * « récit à venir » on the row of a country nothing is written about (TIW-18).
+ *
+ * **This is the textual channel of the map's third tint**, not an ornament. The
+ * drawing is `aria-hidden` and its dashed stroke says nothing to a screen reader,
+ * so these three words are what make the distinct state exist for a reader who
+ * does not see it — and, because they are inside the link's accessible name, for
+ * a reader navigating by link list too.
+ *
+ * Styled as the quietest thing on the row: it is a qualifier on the count, not a
+ * second fact. Italic and `--text-muted` rather than a chip, deliberately —
+ * `trip-card.module.css` takes the same decision for the same reason, a bordered
+ * pill is the shape this site uses for "go here" and this says the opposite.
+ *
+ * No colour carries meaning: the words do.
+ */
+.pending {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+  white-space: nowrap;
+}

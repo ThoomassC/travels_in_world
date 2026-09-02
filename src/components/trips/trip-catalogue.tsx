@@ -98,7 +98,33 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
                 */}
                 <ul className={cardStyles.grid} role="list">
                   {country.trips.map((trip) => (
-                    <li key={trip.slug}>
+                    /*
+                      `id="voyage-<slug>"` — what makes every entry of this
+                      listing addressable by a fragment (TIW-18).
+
+                      **What needs it:** a trip whose récit is not written has no
+                      page, so the map's marker for it points here, at this
+                      entry, which is where its dates, its countries and « Récit à
+                      venir » are actually written. Its card carries no link of
+                      its own, so this fragment is the whole of its address. A
+                      fragment naming nothing leaves the reader silently at the
+                      top of a sixty-entry page — measured, on `#pays-bo`, and
+                      recorded in `visited-countries.tsx`.
+
+                      **Why `LatestTrips` does not get one**, though it renders
+                      the same cards: the home page also renders the map, whose
+                      markers already carry `id="voyage-<slug>"` on their own
+                      `<li>`. Two elements sharing an `id` in one document is
+                      invalid HTML and resolves to whichever comes first, so the
+                      scheme belongs to this page and to no other.
+
+                      On the `<li>` and not inside the card, so the fragment lands
+                      on the entry's own top edge rather than scrolling past it.
+                      Uniqueness comes from `trip.slug` — the content façade's
+                      primary key, and `buildCatalogue` files each trip exactly
+                      once.
+                    */
+                    <li key={trip.slug} id={`voyage-${trip.slug}`}>
                       <TripCard
                         trip={trip}
                         locale={locale}

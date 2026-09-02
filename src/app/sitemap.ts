@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { listTripSummaries } from "@/content/trips";
+import { hasStory } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
 import { aboutPath, tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
@@ -96,6 +97,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
      * `localisedEntry` omits the element entirely for `undefined`.
      */
     ...localisedEntry(aboutPath(), undefined),
-    ...trips.flatMap((trip) => localisedEntry(tripPath(trip.slug), trip.endDate)),
+    /**
+     * **The trips that have a page, and not every trip in the list** (TIW-18).
+     *
+     * `tripStaticParams` leaves an untold trip out of the build, so its address is
+     * an immediate 404 — and a sitemap is a *promise* that an address exists.
+     * `tests/build/durable-urls.test.ts` compares this set against the prerendered
+     * pages in both directions, so the mistake in either direction is caught: a
+     * page absent from here, and a URL advertised here with no page behind it.
+     *
+     * Note what is deliberately **not** filtered: `mostRecentEnd` above still reads
+     * the whole collection. The two index entries take their date from "what
+     * changes a list is a trip arriving", and an untold trip does arrive in the
+     * listing — it is rendered there, with its dates and its countries. Only its own
+     * address is missing.
+     */
+    ...trips.filter(hasStory).flatMap((trip) => localisedEntry(tripPath(trip.slug), trip.endDate)),
   ];
 }

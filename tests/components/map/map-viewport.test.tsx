@@ -59,6 +59,7 @@ const TOKYO: TripMark = {
   startDate: "2024-04-12",
   placeName: "Tokyo",
   href: "/fr/voyages/japon-2024",
+  story: "written",
   point: { x: 830, y: 172 },
 };
 
@@ -68,6 +69,7 @@ const OSAKA: TripMark = {
   startDate: "2025-03-02",
   placeName: "Osaka",
   href: "/fr/voyages/japon-2025",
+  story: "written",
   point: { x: 832, y: 175 },
 };
 
@@ -77,6 +79,7 @@ const REYKJAVIK: TripMark = {
   startDate: "2022-09-10",
   placeName: "Reykjavik",
   href: "/fr/voyages/islande-2022",
+  story: "written",
   point: { x: 430, y: 60 },
 };
 

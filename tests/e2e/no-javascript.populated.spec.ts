@@ -70,8 +70,18 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
     await expect(page.locator("button")).toHaveCount(0);
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
-    // Every marker is a real link with its trip's name as text.
-    await expect(page.locator("a[data-trip]")).toHaveCount(4);
+    /**
+     * Every marker is a real link with its trip's name as text — **five since
+     * TIW-18**, the untold trip's marker included.
+     *
+     * That marker is the reason this count is worth stating rather than
+     * loosening: `maroc-2023` has no page, so its `href` is the entry it owns in
+     * the listing instead. Making it a `<button>` — or an `<a>` with no `href` —
+     * would have left it out of this count, which is exactly the regression this
+     * script-less run exists to catch: a control that only works once the script
+     * has mounted.
+     */
+    await expect(page.locator("a[data-trip]")).toHaveCount(5);
     await expect(page.getByRole("link", { name: new RegExp(TRIP.title) }).first()).toBeVisible();
 
     // ---- 2. The list of destinations, under the drawing. ----
@@ -87,8 +97,12 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
     await page.getByRole("navigation", { name: NAV.navLabel }).getByText(NAV.navAll).click();
     await expect(page).toHaveURL(/\/fr\/voyages$/);
     await expect(page.getByRole("heading", { level: 1, name: NAV.allHeading })).toBeVisible();
-    // The catalogue, not an empty block: four trips, announced as four.
-    await expect(page.getByText("4 voyages", { exact: false }).first()).toBeVisible();
+    /**
+     * The catalogue, not an empty block: five trips, announced as five — the
+     * untold one included, which is the whole point of the state. It is listed
+     * with its dates and its countries; only its own page is missing.
+     */
+    await expect(page.getByText("5 voyages", { exact: false }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: new RegExp(TRIP.title) }).first()).toBeVisible();
 
     // ---- 4. Reading a trip, reached from the listing. ----

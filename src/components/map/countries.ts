@@ -29,6 +29,9 @@
  * degenerate cases are worth a dozen cheap cases rather than a dozen renders.
  */
 
+import type { StoryState } from "@/domain/schema";
+import { hasStory } from "@/domain/trip";
+
 /**
  * What the tally reads of a trip, and nothing more. Structurally a subset of
  * `TripSummary`, so the content façade's value is assignable without a line of
@@ -40,6 +43,19 @@ export type CountingTrip = {
   readonly slug: string;
   /** Every country the trip reaches, not just the one its marker names. */
   readonly countryCodes: readonly string[];
+  /**
+   * Whether the récit is written (TIW-18).
+   *
+   * Read by both functions here, for two different questions. The tally uses it
+   * to decide whether a country's single trip may be linked *to its own page* —
+   * an untold trip has none — and {@link untoldOnlyCountryCodes} uses it to
+   * decide which countries the drawing tints in the distinct state.
+   *
+   * Required, like everywhere this field appears: a caller that could omit it
+   * would inherit "has a page" by default, which is the fail-open direction
+   * `hasStory` exists to refuse.
+   */
+  readonly story: StoryState;
 };
 
 export type VisitedCountryTally = {
@@ -56,6 +72,20 @@ export type VisitedCountryTally = {
    * page instead of to a listing the reader then has to search.
    */
   readonly tripSlugs: readonly string[];
+  /**
+   * The subset of {@link tripSlugs} that has a page to link to (TIW-18).
+   *
+   * **A second list and not a filter at the call site**, because the row that
+   * reads it has to answer two different questions from it and neither is
+   * `tripSlugs.length`: *is there a story here at all* (empty means no, and the
+   * row then says « récit à venir » rather than relying on the drawing's tint),
+   * and *may this row link to one trip's own page* (exactly one, and it is the
+   * country's only trip).
+   *
+   * A subset rather than a count, for the reason the field above gives about two
+   * numbers — and because the row needs the slug itself to build the href.
+   */
+  readonly toldTripSlugs: readonly string[];
 };
 
 /**
@@ -112,11 +142,58 @@ export function tallyVisitedCountries(
     }
   }
 
+  const told = new Set(trips.filter(hasStory).map((trip) => trip.slug));
+
   return [...slugsByCode]
     .map(([code, tripSlugs]) => ({
       code,
       name: labels.countryName(code),
       tripSlugs: [...tripSlugs],
+      toldTripSlugs: tripSlugs.filter((slug) => told.has(slug)),
     }))
     .sort((left, right) => labels.compare(left.name, right.name));
+}
+
+/**
+ * **The countries the drawing tints in the distinct "récit à venir" state**
+ * (TIW-18): those every one of whose trips is untold.
+ *
+ * **"Every", not "any", and that is the whole rule.** A country holding one
+ * written récit and one untold journey has something to read, so marking it as
+ * forthcoming would tell the reader there is nothing there while a récit sits one
+ * click away. The distinct state means *nothing here is written yet*, which one
+ * told trip is enough to falsify.
+ *
+ * **Codes and not shapes, which is what keeps `@/map` out of this.** The map
+ * component already receives its tinted subset from the geometry façade; handed
+ * this set, it partitions that subset itself. The alternative — a third bucket
+ * returned by `buildWorldGeometry` — would have meant either changing the
+ * façade's signature or projecting the world twice per build, for a distinction
+ * that is entirely a property of the content.
+ *
+ * A trip's state reaches **every** country it crosses, the same reading
+ * `tallyVisitedCountries` takes of a multi-country trip: a journey through
+ * Morocco and Mauritania is unwritten in both.
+ */
+export function untoldOnlyCountryCodes(trips: readonly CountingTrip[]): ReadonlySet<string> {
+  const untold = new Set<string>();
+  const told = new Set<string>();
+
+  for (const trip of trips) {
+    // The target set is chosen once per trip rather than per code, so a trip
+    // cannot land in both for two of its own countries.
+    const destination = hasStory(trip) ? told : untold;
+    for (const code of trip.countryCodes) {
+      destination.add(code);
+    }
+  }
+
+  // Subtracted afterwards, and not skipped during the walk: the told trip of a
+  // country may arrive *after* its untold one — the façade orders by `startDate`,
+  // which has nothing to do with either.
+  for (const code of told) {
+    untold.delete(code);
+  }
+
+  return untold;
 }

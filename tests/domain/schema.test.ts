@@ -783,6 +783,107 @@ describe("TripSchema — draft", () => {
 });
 
 /**
+ * `story` — the third publication state, and the field TIW-18 exists to model.
+ *
+ * Before it, a trip had exactly two states: absent from the repository, or live
+ * and looking finished. `draft: true` covers "not ready to be seen at all"; this
+ * covers "the journey happened, the récit is not written" — a trip that belongs
+ * on the map and in the lists, with no page behind it.
+ *
+ * **An enum and not a boolean**, unlike `draft`, and the two reasons are worth
+ * pinning. `story: unwritten` reads in YAML the way it reads out loud, where the
+ * boolean spelling is a double negative (`storyWritten: false`); and an enum
+ * refuses `story: planned` with a message naming the two values it accepts, where
+ * a boolean could only refuse it for not being a boolean.
+ *
+ * Whether an untold trip then loses its page is the loader's business
+ * (`tests/content/loader.test.ts`), exactly as it is for `draft`.
+ */
+describe("TripSchema — story", () => {
+  /**
+   * `.default("written")`, not `.optional()`, and the same argument `draft`
+   * carries: the absent key has one unambiguous meaning, so there is no third
+   * "story unknown" state for a consumer to handle. With `optional`, the
+   * predicate becomes `trip.story !== "unwritten"` in one place and
+   * `trip.story === "written"` in another, and a trip eventually loses its page
+   * to whichever spelling wins.
+   */
+  it("parses an absent story key to written, not to undefined", () => {
+    const trip = TripSchema.parse(minimalTripInput());
+
+    expect(trip.story).toBe("written");
+    expect("story" in trip).toBe(true);
+  });
+
+  it.each([
+    { label: "a récit that is written", value: "written" },
+    { label: "a journey whose récit is not written yet", value: "unwritten" },
+  ])("accepts $label and keeps the value it was given", ({ value }) => {
+    const trip = TripSchema.parse(minimalTripInput({ story: value }));
+
+    expect(trip.story).toBe(value);
+  });
+
+  /**
+   * The refusals that matter are the ones a hand-written file actually takes: a
+   * plausible synonym, the boolean an author reaches for by analogy with `draft`,
+   * and the empty value a dangling `story:` key parses to.
+   *
+   * `story: pending` is the row this list exists for. It is the likeliest synonym,
+   * it is *not* accepted, and the enum is what makes the refusal name the two
+   * values that are. Accepted by a looser schema it would mean nothing to any
+   * consumer: the predicate would read it as "written" and the trip would get a
+   * page whose story nobody wrote.
+   */
+  it.each([
+    { label: "a plausible synonym", value: "pending" },
+    { label: "the French label", value: "à venir" },
+    { label: "the analogy with draft", value: false },
+    { label: "an empty story key", value: null },
+    { label: "the right value in the wrong case", value: "Unwritten" },
+  ])("rejects $label, and points the error at story", ({ value }) => {
+    const outcome = attempt(TripSchema, minimalTripInput({ story: value }));
+
+    expect(outcome.accepted).toBe(false);
+    expect(pathsUnder(outcome, "story")).toEqual(["story"]);
+  });
+
+  /**
+   * **`draft` and `story` are independent, and both spellings of "not finished"
+   * may be set at once.** It is not a contradiction to refuse: a trip being
+   * drafted is invisible, so `story` has no effect until the day `draft` comes
+   * off — and that day the trip must land on the map without a page rather than
+   * with a page nobody wrote. Refusing the pair would force an author to flip two
+   * fields in one commit, which is the edit this state exists to spare them.
+   */
+  it("accepts a trip that is both a draft and unwritten", () => {
+    const trip = TripSchema.parse(minimalTripInput({ draft: true, story: "unwritten" }));
+
+    expect(trip.draft).toBe(true);
+    expect(trip.story).toBe("unwritten");
+  });
+
+  /**
+   * `publishedAt` stays **required** on an untold trip, and this is the modelling
+   * tension worth a test rather than a paragraph.
+   *
+   * The field's own note calls it "the day the récit went online", which an untold
+   * trip has not had — so the tempting move is to make it optional for this state.
+   * Refused: it would turn `publishedAt` into `PlainDate | undefined` for every
+   * consumer, to express something no consumer asks. The field means "the day this
+   * entry went online", and the *badge* is what respects the distinction —
+   * `freshestTrip` never announces a récit nobody can read.
+   */
+  it("still requires publishedAt on an untold trip", () => {
+    const { publishedAt: _omitted, ...withoutDate } = minimalTripInput({ story: "unwritten" });
+    const outcome = attempt(TripSchema, withoutDate);
+
+    expect(outcome.accepted).toBe(false);
+    expect(pathsUnder(outcome, "publishedAt")).toEqual(["publishedAt"]);
+  });
+});
+
+/**
  * `publishedAt` — the day the récit went online, and the only input of the "new"
  * badge (TIW-19).
  *

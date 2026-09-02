@@ -53,7 +53,7 @@ export const dynamicParams = false;
 const withdrawnSlugs: ReadonlySet<string> = new Set(readSlugHistory(process.env).withdrawn);
 
 /**
-* The gallery grid's `id`. Named here rather than inside `PhotoGallery`, which
+ * The gallery grid's `id`. Named here rather than inside `PhotoGallery`, which
  * renders several times per page — one grid per stay that has photos — and cannot
  * invent a unique one for each.
  */
@@ -95,11 +95,23 @@ export async function generateStaticParams(): Promise<{ slug: string }[]> {
    * The register cannot check this on its own: `src/i18n/slug-history.ts` is loaded
    * by `next.config.ts` and knows nothing about the content. This is the first place
    * that holds both, so it is the place that refuses.
+   *
+   * **Checked against every trip the journal holds, and not against `published`**
+   * — which is `tripStaticParams`, i.e. the trips that have a page. That
+   * distinction is what TIW-18 changed here, and it is not cosmetic: a trip whose
+   * récit is not written is absent from `published`, so the narrower loop stopped
+   * seeing exactly the case that is hardest to spot. Withdrawn *and* untold, the
+   * journal would tint its country, put its marker on the map and print « Récit à
+   * venir » on its card, while `/voyages/<slug>` prerendered "ce récit n'est plus
+   * en ligne" — a story announced as forthcoming at an address that says it is
+   * gone, with a green build and nothing to read but two contradictory pages.
    */
-  for (const { slug } of published) {
+  const declared = await listTripSummaries();
+
+  for (const { slug } of declared) {
     if (withdrawnSlugs.has(slug)) {
       throw new Error(
-        `Le slug « ${slug} » est déclaré retiré dans src/i18n/slug-history.ts alors qu'un voyage publié le porte : supprime l'entrée « withdrawn » ou dépublie le voyage.`
+        `Le slug « ${slug} » est déclaré retiré dans src/i18n/slug-history.ts alors qu'un voyage du carnet le porte : supprime l'entrée « withdrawn », ou retire le voyage de content/trips.`
       );
     }
   }
@@ -119,21 +131,32 @@ export async function generateStaticParams(): Promise<{ slug: string }[]> {
  * fingerprint test in `tests/build/prerender.test.ts`. See
  * `docs/adr/0005-getpathname-sans-le-link-client.md`.
  *
- * **The fragment is a forward-compatible seam, not a working feature today.**
- * `/#voyage-<slug>` names this trip on the world map; the home page that will
- * honour it is TIW-20's and the framing behind it is TIW-14's. Until then the
- * link lands on the world map at the top of the page, which is a degradation
- * with no broken state in it — the reader still arrives at the map.
+ * **The fragment resolves, and since TIW-18 that is verified rather than hoped.**
+ * `/#voyage-<slug>` is the `id` the world map puts on this trip's marker, so the
+ * reader lands on the marker and not at the top of the home page. TIW-20 emitted
+ * those ids and TIW-14 gave the map its frame; both have landed, and
+ * `tests/e2e/dead-links.populated.spec.ts` now walks every rendered href of every
+ * page and checks that each fragment matches a real element.
  *
- * A marker adds its place after a double hyphen. `SlugSchema` forbids `--`
- * inside a slug, so `voyage-japon-2024--tokyo` splits back into trip and place
- * unambiguously, and each marker gets a distinct href rather than four links
- * pointing at one target.
+ * > **Corrected by TIW-18, and the correction is the reason the parameter is
+ * > gone.** This function took an optional `placeSlug` and produced
+ * > `/#voyage-japon-2024--tokyo` for each marker of the trip's mini-map, on the
+ * > argument that "each marker gets a distinct href rather than four links
+ * > pointing at one target". The distinct href addressed **nothing**: the world
+ * > map has one marker per *trip*, anchored where its first step arrives, so no
+ * > element bears a place-level id and none ever will under that design. Measured
+ * > by the dead-link crawl on the populated fixture: six such fragments, one per
+ * > mini-map marker across four trips, each a link that scrolls nowhere.
+ * >
+ * > A distinct href that resolves to nothing is worse than four identical ones
+ * > that resolve, so every marker now points at the trip's own marker. The labels
+ * > stay per-place — "Tokyo, sur la carte du monde" — because that is the marker
+ * > the reader activated, and the destination really does show the trip that
+ * > crosses Tokyo. `SlugSchema`'s ban on `--` inside a slug is no longer load-
+ * > bearing here; `TripCatalogue` still relies on it for its own entry ids.
  */
-function worldMapHref(locale: Locale, tripSlug: string, placeSlug?: string): string {
-  const fragment = placeSlug === undefined ? tripSlug : `${tripSlug}--${placeSlug}`;
-
-  return localePathname({ href: `/#voyage-${fragment}`, locale });
+function worldMapHref(locale: Locale, tripSlug: string): string {
+  return localePathname({ href: `/#voyage-${tripSlug}`, locale });
 }
 
 /**
@@ -361,7 +384,14 @@ export default async function TripPage({ params }: TripPageProps) {
           {
             placeSlug: place.slug,
             placeName: place.name,
-            href: worldMapHref(locale, trip.slug, place.slug),
+            /**
+             * The trip's marker on the world map, and deliberately not a
+             * place-level fragment: see `worldMapHref`, whose `placeSlug`
+             * parameter TIW-18 removed after measuring that it addressed no
+             * element. Every marker of this mini-map therefore shares one
+             * destination and keeps its own name.
+             */
+            href: worldMapHref(locale, trip.slug),
             point,
           },
         ];

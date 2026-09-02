@@ -25,7 +25,7 @@ import {
  */
 
 /**
- * The four rows, in the order the page must render them, each with the target its
+ * The five rows, in the order the page must render them, each with the target its
  * link carries.
  *
  * **A country holding one trip goes straight to that trip; several go to the
@@ -33,13 +33,22 @@ import {
  * dangled: `TripCatalogue` files a trip under its *first arrival* country only,
  * so Bolivia — merely crossed by `perou-bolivie-2023` — had no section, and
  * `#pays-bo` matched nothing on a real build. A fragment matching no id does not
- * fail; it silently leaves the reader at the top of the listing. Both targets
- * below are routes, so neither can dangle.
+ * fail; it silently leaves the reader at the top of the listing. Every target
+ * below is a route, so none can dangle.
+ *
+ * **Morocco is the row TIW-18 added, and it is a third case.** Its only trip has
+ * no page — `maroc-2023` carries `story: unwritten` — so the "one trip, one page"
+ * rule would have sent this row to `/fr/voyages/maroc-2023`, an address the build
+ * never wrote. It goes to the listing instead, where that trip *is* rendered, and
+ * its label ends in « récit à venir »: the `<svg>` is `aria-hidden` and the
+ * country's dashed outline says nothing to a screen reader, so this row is the
+ * only textual channel the third tint has.
  */
 const EXPECTED = [
   { name: "Bolivie", label: "Bolivie 1 voyage", href: "/fr/voyages/perou-bolivie-2023" },
   { name: "Islande", label: "Islande 1 voyage", href: "/fr/voyages/islande-2022" },
   { name: "Japon", label: "Japon 2 voyages", href: "/fr/voyages" },
+  { name: "Maroc", label: "Maroc 1 voyage récit à venir", href: "/fr/voyages" },
   { name: "Pérou", label: "Pérou 1 voyage", href: "/fr/voyages/perou-bolivie-2023" },
 ] as const;
 
@@ -47,16 +56,21 @@ const EXPECTED = [
 const countryLinks = (page: import("@playwright/test").Page) =>
   page.getByRole("region", { name: "Les pays visités" }).getByRole("link");
 
-test("the fixture really is the four trips this file assumes", async ({ page }) => {
+test("the fixture really is the five trips this file assumes", async ({ page }) => {
   /**
    * The guard on the guard. Everything below is arithmetic over the fixture, so a
    * suite pointed at the *wrong* build — the empty one, on the wrong port — would
-   * fail in four confusing ways instead of one clear one. This is that one.
+   * fail in five confusing ways instead of one clear one. This is that one.
+   *
+   * "5 pays" counts Morocco, which holds only an untold trip, and that is the
+   * caption telling the truth: it answers *where has he been*, and a country
+   * visited without being written about has still been visited. The distinction
+   * belongs to the tint and to the row below, not to this number.
    */
   await page.goto("/fr");
 
   await expect(page.getByRole("figure")).toHaveAccessibleName(
-    "Carte du monde, recadrée sur les voyages publiés : 4 voyages, 4 pays"
+    "Carte du monde, recadrée sur les voyages publiés : 5 voyages, 5 pays"
   );
 });
 
@@ -95,7 +109,8 @@ test("the countries and their trip counts are under the map, in the reader's alp
 test("only the visited countries are links; the other 174 shapes are not", async ({ page }) => {
   await page.goto("/fr");
 
-  // The whole dataset is drawn — 177 shapes plus a second pass over the 4 visited.
+  // The whole dataset is drawn — 177 shapes plus a second pass over the 5 tinted
+  // ones, now split across two layers: 4 told, and Morocco untold (TIW-18).
   const paths = page.locator("figure svg path");
   expect(await paths.count()).toBeGreaterThan(170);
 
@@ -105,11 +120,16 @@ test("only the visited countries are links; the other 174 shapes are not", async
   expect(await svg.locator("a, button, [tabindex], title, [role]").count()).toBe(0);
 
   /**
-   * Four countries hold a trip, so four country links exist — not 177, and not
-   * 174 neutral ones quietly focusable. Asserted as a relation between the
+   * Five countries hold a trip, so five country links exist — not 177, and not
+   * 172 neutral ones quietly focusable. Asserted as a relation between the
    * drawing and the equivalent, which is the property the criterion states.
+   *
+   * Morocco counts here even though its only trip has no page: the row is still a
+   * link, to the listing, which is what keeps it focusable and keyboard-operable.
+   * A row with no link at all would have been the easy answer and a 2.1.1 failure
+   * — the country would exist in the drawing and be unreachable in the equivalent.
    */
-  await expect(countryLinks(page)).toHaveCount(4);
+  await expect(countryLinks(page)).toHaveCount(5);
 });
 
 /**
@@ -208,16 +228,17 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
     true,
   ]);
 
-  // 2b. Then the map's four markers, one per published trip.
+  // 2b. Then the map's five markers, one per trip the journal holds — the untold
+  // one included, since it is a real link like the others (TIW-18).
   const markerStops = journey.filter((stop) => stop.isMarker);
-  expect(markerStops).toHaveLength(4);
+  expect(markerStops).toHaveLength(5);
 
   const lastControl = journey.reduce((last, stop, index) => (stop.isControl ? index : last), -1);
   const firstMarker = journey.findIndex((stop) => stop.isMarker);
   expect(firstMarker).toBeGreaterThan(lastControl);
 
   /**
-   * 3. The four countries follow, in order, each announcing its own count. This is
+   * 3. The five countries follow, in order, each announcing its own count. This is
    * the criterion "entirely navigable by keyboard" stated as the sequence a reader
    * actually receives rather than as a property of the markup.
    */
@@ -341,10 +362,11 @@ test("the caption tells the truth about what the drawing shows", async ({ page }
   /**
    * The bug this closes, end to end and on a real build.
    *
-   * `frameAround` crops to the extent of the markers, and the fixture's four
-   * trips — Tokyo, Osaka, Cusco, Reykjavik — span 212° of longitude, which is
-   * wide but not the world: the served `viewBox` is `177.3 0 764.4 398.2`, so
-   * 764 units of 960. The caption used to say "Carte du monde" over that picture
+   * `frameAround` crops to the extent of the markers, and the fixture's trips —
+   * Tokyo, Osaka, Cusco, Reykjavik, and Marrakech since TIW-18 — span 212° of
+   * longitude, which is wide but not the world: the served `viewBox` is
+   * `177.3 0 764.4 398.2`, so 764 units of 960. Marrakech falls strictly inside
+   * that extent, which is why the fifth trip did not move a single unit of it. The caption used to say "Carte du monde" over that picture
    * regardless, and over the 288-unit crop a *single* published trip produces —
    * a label read aloud, describing something it did not match.
    *
@@ -359,7 +381,7 @@ test("the caption tells the truth about what the drawing shows", async ({ page }
 
   expect(width).toBeLessThan(960);
   await expect(page.locator("figcaption")).toHaveText(
-    "Carte du monde, recadrée sur les voyages publiés : 4 voyages, 4 pays"
+    "Carte du monde, recadrée sur les voyages publiés : 5 voyages, 5 pays"
   );
 });
 

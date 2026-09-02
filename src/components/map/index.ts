@@ -39,3 +39,15 @@ export type { TripMark } from "./marks";
 export { VisitedCountries } from "./visited-countries";
 export type { VisitedCountriesProps } from "./visited-countries";
 export type { CountingTrip, CountryLabels, VisitedCountryTally } from "./countries";
+/**
+ * A **value** export, unlike everything above it, and the only one on this list.
+ *
+ * `untoldOnlyCountryCodes` (TIW-18) is arithmetic over the content — which
+ * countries hold nothing but untold journeys — and it is the home page that runs
+ * it, because the page is the one file holding both façades and therefore the one
+ * that can partition the geometry's tinted subset with the answer. Exported from
+ * here rather than imported deeply for the reason this whole file exists: a
+ * `@/components/map/countries` specifier is what the geometry façade's guard
+ * refuses by string comparison.
+ */
+export { untoldOnlyCountryCodes } from "./countries";

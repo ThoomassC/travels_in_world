@@ -98,6 +98,7 @@ tags: # facultatif, mêmes règles qu'un slug
   - train
 
 draft: false # facultatif, false par défaut : le voyage est publié — voir « Un voyage en brouillon »
+story: written # facultatif, written par défaut : le récit est écrit — voir « Un voyage sans récit »
 ```
 
 Le minimum vital est plus court : `slug`, `title`, `startDate`, `endDate`, `publishedAt`,
@@ -154,6 +155,11 @@ carte, ni dans les listes, ni dans le sitemap, et son URL répond 404. En dével
 
 C'est ce qui permet d'écrire un voyage en plusieurs fois. Sans ce champ, il n'y a que deux
 états : le fichier n'existe pas, ou il est en ligne à moitié écrit — et rien entre les deux.
+
+> **Il y a un troisième état depuis TIW-18, et ce n'est pas celui-ci.** `draft: true` veut
+> dire « ne montre rien ». `story: unwritten` veut dire « montre le voyage, dis que le récit
+> n'est pas écrit ». Les deux sont indépendants, et le second est décrit plus bas, sous
+> « Un voyage sans récit ».
 
 ```yaml
 draft: true # visible sur localhost, absent de la production
@@ -213,6 +219,54 @@ Elle l'emporte sur tout le reste, et c'est le seul moyen de publier un brouillon
 ces deux valeurs explicites, un environnement inconnu **masque**. Une valeur non reconnue
 (`TIW_DRAFTS=oui`) est ignorée, pas interprétée : une faute de frappe ne décide pas d'une
 publication.
+
+## Un voyage sans récit
+
+`story: unwritten`, et le voyage est **dans le carnet sans avoir de page**.
+
+C'est l'état d'un voyage dont tu es rentré et que tu n'as pas encore écrit. Avant ce champ
+il n'y avait pas de place pour lui : soit `draft: true`, et personne ne sait que tu es allé
+là ; soit publié, et la page promet un récit qu'elle n'a pas.
+
+```yaml
+story: unwritten # le voyage a eu lieu, le récit n'est pas écrit
+```
+
+Ce que ça change, exactement :
+
+|                                | `draft: true` | `story: unwritten`                                       |
+| ------------------------------ | ------------- | -------------------------------------------------------- |
+| sur la carte                   | absent        | **présent**, le pays teinté d'un état distinct           |
+| dans les listes                | absent        | **présent**, avec ses dates et ses pays                  |
+| sa fiche                       | —             | affiche « Récit à venir » au lieu d'un lien              |
+| sa page `/voyages/<slug>`      | 404           | **404 : elle n'est pas construite**                      |
+| liens vers elle                | aucun         | **aucun** — la balise et la fiche pointent vers la liste |
+| dans le sitemap et le flux RSS | absent        | absent                                                   |
+| badge « nouveau récit »        | jamais        | jamais : il n'y a pas de récit à annoncer                |
+| en développement               | visible       | identique à la production                                |
+
+Quatre choses à savoir :
+
+- **Ce n'est pas un brouillon, et la dernière ligne du tableau est la différence.** Un
+  brouillon est un état de mise en page : masqué en ligne, visible sur `localhost`, pour que
+  tu puisses le relire. Un voyage sans récit est **publié** — délibérément, sans texte — donc
+  il se comporte pareil partout. `TIW_DRAFTS` n'a rien à dire dessus.
+- **Les deux se cumulent, et c'est la forme normale d'un retour de voyage.** `draft: true`
+  plus `story: unwritten` : tu prépares le fichier, personne ne le voit ; le jour où tu
+  retires `draft`, le voyage apparaît sur la carte sans page, et tu retires `story` quand le
+  texte est écrit. Deux éditions, dans l'ordre où le travail se fait.
+- **La validation reste entière**, comme pour un brouillon : itinéraire continu,
+  coordonnées, texte alternatif des photos. Un voyage sans récit n'est pas un voyage à
+  moitié valide.
+- **`publishedAt` reste obligatoire**, et se lit alors « le jour où cette entrée est
+  apparue » plutôt que « le jour où le récit est sorti ». C'est assumé : rendre le champ
+  facultatif pour ce seul cas obligerait tout le site à traiter une date absente, pour
+  n'exprimer que ce que le tableau ci-dessus dit déjà.
+
+Une précision sur les photos : `coverPhotoSrc` **est utilisé** — c'est la vignette de la
+fiche — mais les autres photos ne s'affichent nulle part tant qu'il n'y a pas de page. Elles
+ne sont pas refusées : les déclarer d'avance est légitime, et elles apparaîtront le jour où
+tu retires `story: unwritten`.
 
 ## Les règles que la validation fait respecter
 

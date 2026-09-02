@@ -1,3 +1,4 @@
+import type { StoryState } from "@/domain/schema";
 import type { Frame, Point } from "./frame";
 
 /**
@@ -50,6 +51,25 @@ export type TripMark = {
    * the readers who cannot see it.
    */
   readonly isNew?: boolean;
+  /**
+   * Whether this trip's récit is written (TIW-18).
+   *
+   * **Required, unlike `isNew` right above**, and the asymmetry is the point. A
+   * missing `isNew` means "not the newest récit", which is true of fifty-nine
+   * markers out of sixty and harmless; a missing `story` would mean "has a page"
+   * for a trip that does not, and the marker would point at a 404. Required, the
+   * compiler asks the page — the only place that builds these — to say which it
+   * is.
+   *
+   * It changes two things in the rendering and **neither of them is `href`**. The
+   * destination is the page's decision, as it is for every marker (ADR 0003: this
+   * layer constructs no URL): for an untold trip the page hands over the listing
+   * entry of that trip, which certainly exists. What this layer does with the
+   * field is the marker's **accessible name**, which gains "— récit à venir", and
+   * a `data-story` attribute driving a hollow dot — a difference of *shape*, so
+   * the state is not carried by colour alone.
+   */
+  readonly story: StoryState;
 };
 
 export type PlacedMark = {

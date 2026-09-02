@@ -207,8 +207,48 @@
   stroke-width: 2;
 }
 
+/**
+ * **A country every one of whose trips is untold** (TIW-18) — the third tint, and
+ * the one the acceptance criterion asks to be "un état visuel distinct".
+ *
+ * **Distinct by the stroke's PATTERN, not by its hue**, and that is the whole
+ * design. The visited state already spends both of the channels a fill and a
+ * colour can offer — `--accent-quiet` over neutral land measures 1.16:1, which is
+ * why the contrast is carried by a `--text-accent` outline at 7.03:1 and the
+ * non-colour cue by its 2 px weight (see the note above). A third state cannot be
+ * a third hue: it would be a colour-only distinction from the second, failing WCAG
+ * 1.4.1 for exactly the reader the thick outline was chosen for.
+ *
+ * So the stroke is **dashed**, at the same colour and the same weight as a visited
+ * country's. Solid means "there is something to read", dashed means "not yet
+ * written" — a shape difference that survives greyscale, both themes, and a reader
+ * who separates no hues at all. The fill is halved from `--accent-quiet` towards
+ * the neutral surface so the shape reads as lighter at a glance, which is
+ * reinforcement and never the channel.
+ *
+ * And the distinction is carried in **text** as well, which is what actually
+ * satisfies 1.4.1: `VisitedCountries` beside the drawing says « récit à venir » on
+ * the country's own row, and each untold marker's accessible name ends in the same
+ * words. The `<svg>` is `aria-hidden` (ADR 0003), so no rule in this block is ever
+ * a reader's only source.
+ *
+ * `stroke-dasharray` is in **user units and scales with the crop**, which is
+ * deliberate and is the one thing here `non-scaling-stroke` does not pin: the
+ * dash pattern of a country zoomed to fill the frame stays proportional to the
+ * shape it outlines instead of degenerating into a dotted line. The stroke's
+ * *width* is still pinned, below, along with the other two layers.
+ */
+.untold path {
+  fill: color-mix(in srgb, var(--accent-quiet) 50%, transparent);
+  stroke: var(--text-accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
+}
+
 .land path,
-.visited path {
+.visited path,
+.untold path {
   /* Stroke width is in user units, so a cropped frame would scale it: at the
      0.3-world-width floor `frameAround` applies to a single trip, a 1-unit
      border renders over 3 px. `non-scaling-stroke` pins it to device pixels
@@ -318,6 +358,40 @@
 .link:hover .dot,
 .link:focus-visible .dot {
   transform: scale(1.3);
+}
+
+/**
+ * **The dot of a trip whose récit is not written** (TIW-18): hollow instead of
+ * filled.
+ *
+ * A *shape* difference and not a colour one, the same reasoning as the dashed
+ * country outline: the marker's fill is `--accent`, and a second hue would be a
+ * colour-only distinction from it. A ring with a hole in the middle reads as
+ * "outline, not filled in" in greyscale, in both themes, and at 12 px.
+ *
+ * **The box does not change**, which is what keeps the 44 px target honest: the
+ * `inline-size`/`block-size` above are untouched and only the paint moves inside
+ * them, so an untold marker sits on exactly the same point as its neighbours and
+ * is exactly as easy to hit — the property TIW-19's halo was rendered on every
+ * marker to preserve.
+ *
+ * `inset` box-shadow rather than a `border`: a border would eat 2 px of the dot's
+ * own size and make it visibly smaller than a told one. The outer ring in
+ * `--text-on-accent` is kept from the base rule, so the marker still separates
+ * itself from whichever tint it lands on.
+ *
+ * Never the only channel: the accessible name of this marker ends in « — récit à
+ * venir », and the country under it is dashed.
+ */
+.link[data-story="unwritten"] .dot {
+  /* `--surface`, the canvas the drawing sits on (line 157), and not
+     `transparent`: a transparent hole would show whichever country tint happens
+     to be underneath, so the same marker would read differently over sea, over
+     neutral land and over its own dashed country. */
+  background: var(--surface);
+  box-shadow:
+    0 0 0 2px var(--text-on-accent),
+    inset 0 0 0 3px var(--accent);
 }
 
 /* =============================================================================

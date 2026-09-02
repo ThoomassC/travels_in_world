@@ -109,6 +109,16 @@ steps:
 # tags: # mêmes règles qu'un slug, une étiquette par ligne
 #   - asie
 #   - train
+#
+# story: unwritten # le voyage a eu lieu, le récit n'est pas écrit
+#   # Le voyage entre dans la carte et dans les listes — son pays est teinté, sa
+#   # fiche porte ses dates et ses pays — mais il n'a PAS de page, et rien ne
+#   # renvoie vers une : la fiche affiche « Récit à venir » au lieu d'un lien.
+#   # Retire cette ligne le jour où tu écris le récit ; sans elle, il est publié.
+#   #
+#   # À ne pas confondre avec « draft: true », qui masque le voyage partout en
+#   # production. Ici c'est l'inverse : le voyage est montré, et le fait que le
+#   # texte n'est pas encore là est dit au lecteur. Voir content/README.md.
 `;
 }
 

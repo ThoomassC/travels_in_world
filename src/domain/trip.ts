@@ -1,7 +1,7 @@
 import { daysBetween } from "./geo";
 import type { CountryCode, PlainDate } from "./geo";
 import { referencedPlaceSlugs } from "./schema";
-import type { Budget, Photo, Place, Step, Tag, Trip } from "./schema";
+import type { Budget, Photo, Place, Step, StoryState, Tag, Trip } from "./schema";
 
 /**
  * Derivations. Nothing here is ever stored: a duration, a per-person budget and
@@ -23,6 +23,30 @@ export function durationOf(range: {
   const nights = daysBetween(range.startDate, range.endDate);
 
   return { nights, days: nights + 1 };
+}
+
+/**
+ * **Whether this trip has a récit to read, and therefore a page.**
+ *
+ * One predicate, named once, because five places need the answer and none of them
+ * may disagree: the loader's two publication doors (`findTrip` and
+ * `tripStaticParams`), `sitemap.xml`, `feed.xml`, and the freshness derivation
+ * that decides which card is announced as new.
+ *
+ * **A predicate and not a comparison repeated at each site**, and what decides it
+ * is the direction it fails in. Spelled `trip.story !== "unwritten"` — the shape
+ * that reads most naturally at a call site — a third member added to
+ * {@link StoryState} would silently inherit "has a page", and the journal would
+ * advertise an address nobody wrote. Spelled as this equality, a new state has no
+ * page until somebody decides it does, and `tests/domain/trip.test.ts` fails the
+ * day the list grows, so the decision is taken rather than defaulted.
+ *
+ * Structural, like every derivation here: a parsed `Trip`, a `TripSummary` and a
+ * component's own narrowed entry are all assignable, so no layer has to import
+ * the schema to ask the question.
+ */
+export function hasStory(trip: { readonly story: StoryState }): boolean {
+  return trip.story === "written";
 }
 
 export type PerPersonBudget = {
@@ -294,6 +318,17 @@ export type TripSummary = {
   readonly firstArrival: Place;
   readonly coverPhotoSrc: Trip["coverPhotoSrc"];
   readonly tags: readonly Tag[];
+  /**
+   * Whether the récit is written (TIW-18) — see {@link hasStory}.
+   *
+   * **On the summary and not only on the detail**, which is the opposite call from
+   * `draft` right below, and for a reason that is not symmetry: every consumer of
+   * this field is a *listing*. A card decides whether its title is a link at all,
+   * the map's marker decides where it points, and the sitemap and the feed decide
+   * whether to advertise an address. The detail page never reads it — a page that
+   * renders at all is a page whose story is written, which the loader guarantees.
+   */
+  readonly story: StoryState;
 };
 
 export type TripDetail = TripSummary & {
@@ -343,6 +378,7 @@ export function summaryOf(trip: Trip): TripSummary {
     firstArrival: firstArrivalOf(trip),
     coverPhotoSrc: trip.coverPhotoSrc,
     tags: [...trip.tags],
+    story: trip.story,
   };
 }
 

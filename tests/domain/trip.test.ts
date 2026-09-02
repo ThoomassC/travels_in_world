@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { PlaceSchema, StepSchema, TripSchema } from "@/domain/schema";
+import { PlaceSchema, StepSchema, STORY_STATES, TripSchema } from "@/domain/schema";
 import type { TripDetail, TripSummary } from "@/domain/trip";
 import {
   budgetPerPerson,
   detailOf,
   durationOf,
   firstArrivalOf,
+  hasStory,
   summaryOf,
   visitedCountryCodes,
 } from "@/domain/trip";
@@ -253,6 +254,7 @@ describe("TripSummary and TripDetail", () => {
       firstArrival: firstArrivalOf(trip),
       coverPhotoSrc: trip.coverPhotoSrc,
       tags: trip.tags,
+      story: trip.story,
     };
 
     const detail: TripDetail = {
@@ -349,6 +351,46 @@ describe("firstArrivalOf", () => {
   });
 });
 
+/**
+ * `hasStory` — one predicate, named once, read by everything that has to decide
+ * whether a trip has a page (TIW-18).
+ *
+ * **Why a function for a string comparison.** Five call sites need the answer —
+ * the loader's two publication doors, the sitemap, the feed and the freshness
+ * derivation — and a `trip.story === "written"` written five times is five places
+ * to miss the day a third state arrives. It is also the direction that fails
+ * *closed*: a new state is "no story" until someone decides otherwise, rather
+ * than "has a story" because it is not the one value somebody remembered to
+ * exclude.
+ */
+describe("hasStory", () => {
+  it.each([
+    { story: "written", expected: true },
+    { story: "unwritten", expected: false },
+  ] as const)("answers $expected for a $story récit", ({ story, expected }) => {
+    expect(hasStory({ story })).toBe(expected);
+  });
+
+  /**
+   * Tested against the schema's own list rather than against two literals: the
+   * day `STORY_STATES` gains a member, this case fails and somebody has to decide
+   * what a page means for it — instead of the new state silently inheriting
+   * whichever branch the `!==` happened to put it in.
+   */
+  it("has an answer for every state the schema accepts", () => {
+    for (const story of STORY_STATES) {
+      expect(typeof hasStory({ story })).toBe("boolean");
+    }
+
+    expect(STORY_STATES.filter((story) => hasStory({ story }))).toEqual(["written"]);
+  });
+
+  it("reads a parsed trip, whose story key is always present", () => {
+    expect(hasStory(TripSchema.parse(minimalTripInput()))).toBe(true);
+    expect(hasStory(TripSchema.parse(minimalTripInput({ story: "unwritten" })))).toBe(false);
+  });
+});
+
 describe("summaryOf", () => {
   it("carries the fields the list page renders", () => {
     const trip = TripSchema.parse(tripInput());
@@ -367,6 +409,15 @@ describe("summaryOf", () => {
       firstArrival: PlaceSchema.parse(TOKYO),
       coverPhotoSrc: "/photos/japon-2024/tokyo.jpg",
       tags: ["asie", "train"],
+      /**
+       * On the summary and not only on the detail, and that is the whole point of
+       * the field being here (TIW-18): the three views that need it are all
+       * *listings* — a card decides whether its title is a link at all, the map's
+       * marker decides where it points, and the sitemap and the feed decide
+       * whether to advertise an address. The detail page never reads it, because a
+       * page that renders at all is a page whose story is written.
+       */
+      story: "written",
     });
   });
 

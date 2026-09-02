@@ -112,17 +112,60 @@
 }
 
 /**
- * No photo yet. A flat token surface and nothing else — no icon, no initial, no
- * "image manquante" label: it is not information, so it says nothing, and
- * `aria-hidden` keeps it out of the accessibility tree entirely. Rendering
- * nothing at all was the alternative, and it is worse — the cards of a mixed
- * listing would then have two different heights for no reason a reader could
- * guess.
+ * **No photo yet: the fallback tile** (TIW-18), and what it replaced.
+ *
+ * This was a bare `linear-gradient` with nothing in it — the "emplacement gris"
+ * the acceptance criterion refuses by name, and three cards out of four carried
+ * one on the populated listing. The gradient is kept as the tile's ground,
+ * because the box still has to occupy exactly the space a photograph would (the
+ * ratio is on `.thumbnail`, so a card with no cover is the same height as its
+ * neighbours) — what changed is that something is written on it.
+ *
+ * `text-wrap: balance` rather than a width guess: "Bolivie et Pérou" has to break
+ * somewhere, and balancing the lines is the only rule that reads well at both two
+ * words and five. `overflow: hidden` is the backstop for a trip crossing six
+ * countries, where the tile crops rather than pushing the card taller than its
+ * locked ratio.
+ *
+ * No colour carries meaning here and there is nothing to fail 1.4.1 with: the
+ * tile is `aria-hidden` decoration whose every word is also in the card's facts.
+ * The text is `--text-accent`, measured 7.03:1 against neutral surface where the
+ * map's visited countries already use the pair.
  */
-.placeholder {
+.tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-3);
   inline-size: 100%;
   block-size: 100%;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--surface-muted), var(--accent-quiet));
+  color: var(--text-accent);
+  text-align: center;
+  text-wrap: balance;
+}
+
+.tileCountry {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: 1.15;
+}
+
+/**
+ * Smaller and quieter than the country, and second in the DOM: the country is
+ * what identifies the trip at a glance in a grid, the year is what disambiguates
+ * two trips to the same place. `--text-muted` and not the accent, so the two
+ * lines read as a hierarchy rather than as one block of teal.
+ */
+.tileYear {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
 }
 
 .body {
@@ -181,6 +224,20 @@
 .link {
   color: var(--text-strong);
   text-decoration: none;
+}
+
+/**
+ * The title of a trip whose récit is not written (TIW-18) — a `<span>` where the
+ * told card has an `<a>`.
+ *
+ * Same colour and same weight as `.link`, deliberately: the heading is still the
+ * trip's name and demoting it visually would make an untold entry look like a
+ * lesser trip rather than a trip whose text is not written yet. What it does not
+ * get is `.link:hover`'s underline or the `::after` overlay — nothing about it
+ * offers to be clicked, which is the whole point.
+ */
+.titleText {
+  color: var(--text-strong);
 }
 
 .link:hover {
@@ -287,4 +344,51 @@
 .card:hover .cta {
   background: var(--accent-quiet);
   border-color: var(--text-accent);
+}
+
+/**
+ * « Récit à venir » (TIW-18) — what stands where `.cta` stands on a told card.
+ *
+ * **Deliberately not a pill.** `.cta` is a bordered chip because it says "this is
+ * readable", and a reader has learnt that a chip on a card means "go here". This
+ * says the opposite, so it must not wear the same clothes: plain text, muted,
+ * with a small dot before it that is `content:`-generated decoration and carries
+ * no meaning of its own.
+ *
+ * **Nothing here is the only channel.** The sentence is a real text node in the
+ * accessibility tree — the one announced decoration on this card, and the reason
+ * is on the JSX — so a reader who does not see the muted colour, the dot, or the
+ * absent chip still hears « Récit à venir ». That is 1.4.1 satisfied by the text
+ * itself rather than by a second visual channel.
+ *
+ * `margin-block-start: auto` matches `.cta`, so an untold card's last line sits
+ * at the same baseline as a told card's read affordance and a mixed row does not
+ * look ragged.
+ */
+.pending {
+  margin: 0;
+  margin-block-start: auto;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+/**
+ * The dot. A `::before` and not a character in the message, because it is not
+ * language: putting "• " in `fr.json` would make a translator carry punctuation,
+ * and several screen readers announce a generated glyph exactly never — which is
+ * what it is for. Sized in `em` so it follows the line it sits on.
+ */
+.pending::before {
+  content: "";
+  flex: none;
+  inline-size: 0.5em;
+  block-size: 0.5em;
+  border: 1px solid var(--control-border);
+  border-radius: 50%;
 }

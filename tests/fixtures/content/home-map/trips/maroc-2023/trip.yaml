@@ -1,0 +1,51 @@
+# Le cinquième voyage, ajouté par TIW-18 : celui dont le récit n'est pas écrit.
+#
+# Ce qu'il rend observable, et que les quatre autres ne pouvaient pas :
+#   - un pays teinté dans l'état distinct (MA n'est atteint que par lui) ;
+#   - une balise qui ne mène PAS vers /fr/voyages/<slug>, puisqu'il n'y a pas
+#     de page — l'adresse de repli est l'entrée de ce voyage dans la liste ;
+#   - une fiche portant « Récit à venir » au lieu d'un lien, dans « Derniers
+#     voyages » comme dans la liste complète ;
+#   - une ligne « Maroc 1 voyage récit à venir » dans l'équivalent textuel,
+#     sans lien vers une page inexistante.
+#
+# Marrakech est choisie pour une raison mesurée : ses coordonnées tombent
+# STRICTEMENT à l'intérieur de l'emprise des quatre autres balises (Cusco à
+# l'ouest et au sud, Tokyo à l'est, Reykjavik au nord). Le cadre reste donc
+# « 177.3 0 764.4 398.2 » à l'unité près, et les tests qui l'affirment n'ont
+# pas eu à être retouchés pour une raison qui n'est pas la leur.
+#
+# Sans photo, comme trois des quatre autres : la vignette de repli est ce que
+# le ticket refait, et cette fiche l'exerce avec l'état non raconté par-dessus.
+slug: maroc-2023
+title: Maroc, sud et Atlas
+startDate: 2023-02-05
+endDate: 2023-02-14
+places:
+  - slug: marrakech
+    name: Marrakech
+    countryCode: MA
+    coordinates: { lat: 31.6295, lon: -8.0083 }
+steps:
+  - kind: stay
+    placeSlug: marrakech
+    startDate: 2023-02-05
+    endDate: 2023-02-14
+
+# Antérieure au 2026-01-05 de « perou-bolivie-2023 », donc le badge « nouveau
+# récit » ne bouge pas — et de toute façon `freshestTrip` écarte un voyage non
+# raconté avant même de comparer les dates.
+#
+# Les DEUX dates sont contraintes, et la première l'a été par un échec. Avec un
+# « startDate » d'octobre 2024, ce voyage devenait le deuxième plus récent et
+# entrait dans les trois cartes de « Derniers voyages » — ce qui en chassait
+# « perou-bolivie-2023 », c'est-à-dire précisément le voyage que cette fixture
+# fait porter le badge, et « fresh-trip.populated.spec.ts » l'a dit. Février 2023
+# le place quatrième par date de voyage : la liste des trois derniers ne bouge
+# pas, et la fiche « Récit à venir » reste exercée sur l'accueil par le panneau
+# de la carte, qui rend la même carte de voyage.
+publishedAt: 2023-02-20
+
+# Le champ de ce ticket. Il se lit « le voyage a eu lieu, le récit n'est pas
+# écrit » — voir content/README.md, « Un voyage sans récit ».
+story: unwritten

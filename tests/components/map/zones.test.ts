@@ -21,6 +21,7 @@ const mark = (slug: string, startDate: string, x: number, y: number): TripMark =
   placeName: slug,
   startDate,
   href: `/fr/voyages/${slug}`,
+  story: "written",
   point: { x, y },
 });
 
