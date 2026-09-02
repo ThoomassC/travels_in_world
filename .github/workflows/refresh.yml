@@ -1,0 +1,114 @@
+# The daily rebuild — the half of TIW-19's freshness criterion that no amount of
+# code can supply.
+#
+# WHY IT EXISTS. The badge on the newest récit disappears sixty days after
+# publication. Every route of this site is prerendered, so that decision is bytes
+# written during `next build` and nobody rewrites them: with no deployment, the
+# badge of a récit published seventy days ago is still in the HTML being served.
+# `docs/fraicheur-au-prerendu.md` argues that against the two alternatives — a
+# CSS-only expiry, which cannot exist, and a third client component, which would
+# move the error rather than remove it — and this file is what the chosen branch
+# owes in return.
+#
+# WHAT IT BUYS, EXACTLY. The badge expires at the first build after its sixtieth
+# day. With this workflow the worst case is 24 h plus a build; without it, never.
+# That is the whole of the difference, and it is a bounded number rather than a
+# promise.
+#
+# It changes nothing on the day a récit is published: publishing IS a deployment.
+# The gap this closes is the opposite one — a journal that has published nothing
+# for two months, which is precisely when a stale "Nouveau récit" is most wrong.
+#
+# WHY A DEPLOY HOOK AND NOT A JOB THAT BUILDS. A build here would produce
+# artefacts nothing serves. The site is deployed by Vercel from `main`, so the
+# only thing that can refresh the served bytes is Vercel building them, and a
+# Deploy Hook is the one URL that asks it to without a commit. No `contents:
+# write`, no empty commit, no tag: this workflow writes nothing to the
+# repository, which is why its permissions below are `{}`.
+#
+# WHAT IS NOT IN THE REPOSITORY, and it is deliberate rather than forgotten: the
+# hook URL is a secret, because it triggers a production deployment for anyone
+# who holds it. Create it in Vercel → Settings → Git → Deploy Hooks (branch
+# `main`) and store it as the repository secret `VERCEL_DEPLOY_HOOK_URL`. Until
+# then this workflow stops on a message naming the secret and what its absence
+# costs — it does NOT fail red every morning, because a check that is red for a
+# known reason is a check somebody switches off, and it would be the one keeping
+# the badge honest.
+name: Rafraîchissement
+
+on:
+  schedule:
+    # 04:17 UTC. A quarter past the hour rather than on it: GitHub queues the
+    # whole platform's `0 * * * *` jobs together and delays them, and a rebuild
+    # that is meant to be daily has no reason to join that crowd. Cron here is
+    # always UTC, which is also the timezone `src/app/build-day.ts` reads the day
+    # in — so the rebuild and the day it computes cannot disagree about which day
+    # it is.
+    - cron: "17 4 * * *"
+  # And by hand, which is what makes this testable at all: the schedule alone
+  # would have to be believed until tomorrow morning.
+  workflow_dispatch:
+
+# This workflow reads nothing and writes nothing. It sends one HTTP request.
+permissions: {}
+
+# One refresh at a time. Two overlapping runs would ask Vercel for two
+# deployments of identical bytes, and the second would cancel the first's.
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  redeploy:
+    name: Redéployer pour rafraîchir les badges
+    runs-on: ubuntu-latest
+    # A scheduled workflow runs on the default branch whatever branches exist, so
+    # nothing here needs a checkout: there is no code to run, only a URL to call.
+    steps:
+      - name: Vérifier que le hook de déploiement est configuré
+        id: hook
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "${HOOK}" ]; then
+            {
+              echo "### Rafraîchissement non configuré"
+              echo
+              echo "Le secret \`VERCEL_DEPLOY_HOOK_URL\` est absent, donc aucun"
+              echo "déploiement n'a été déclenché."
+              echo
+              echo "**Ce que ça coûte :** le badge « nouveau récit » est calculé au"
+              echo "build. Sans rebuild périodique, il ne disparaît pas au bout de"
+              echo "60 jours — il reste tant que rien n'est publié. Voir"
+              echo "\`docs/fraicheur-au-prerendu.md\`."
+              echo
+              echo "**Pour l'activer :** Vercel → Settings → Git → Deploy Hooks,"
+              echo "branche \`main\`, puis stocker l'URL dans le secret de dépôt"
+              echo "\`VERCEL_DEPLOY_HOOK_URL\`."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Déclencher le déploiement
+        if: steps.hook.outputs.configured == 'true'
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          # `--fail` so an HTTP error is an exit code and not a body printed as
+          # if it had worked, and `--silent --show-error` so the URL — which is
+          # the secret — never reaches the log through curl's progress meter.
+          # `-o /dev/null` for the same reason: a hook's response echoes nothing
+          # useful and this job has nothing to read.
+          #
+          # `--retry 3` with a backoff: a transient 5xx must not skip a day, and
+          # the hook is idempotent — asking twice for a deployment of identical
+          # bytes costs a deployment, never a wrong page.
+          curl --fail --silent --show-error \
+               --retry 3 --retry-delay 5 --retry-all-errors \
+               --max-time 30 \
+               -o /dev/null \
+               -X POST "${HOOK}"
+
+          echo "Déploiement demandé à Vercel." >> "${GITHUB_STEP_SUMMARY}"
