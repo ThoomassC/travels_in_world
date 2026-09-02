@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   tallyVisitedCountries,
+  untoldOnlyCountryCodes,
   type CountingTrip,
   type CountryLabels,
   type VisitedCountryTally,
@@ -18,7 +19,23 @@ import {
  * about real names build their own labels and say so.
  */
 
-const trip = (slug: string, ...countryCodes: string[]): CountingTrip => ({ slug, countryCodes });
+/**
+ * `story` defaults to `"written"`, which keeps every case that predates TIW-18
+ * reading as it did. The untold state is spelled out by {@link untoldTrip}, so no
+ * fixture in this file is untold without saying so at the call site.
+ */
+const trip = (slug: string, ...countryCodes: string[]): CountingTrip => ({
+  slug,
+  countryCodes,
+  story: "written",
+});
+
+/** The same, for a trip whose récit is not written. */
+const untoldTrip = (slug: string, ...countryCodes: string[]): CountingTrip => ({
+  slug,
+  countryCodes,
+  story: "unwritten",
+});
 
 /** Labels that do not localise: the name is the code. */
 const CODE_LABELS: CountryLabels = {
@@ -176,5 +193,84 @@ describe("tallyVisitedCountries", () => {
       "japon-2025",
       "japon-2024",
     ]);
+  });
+});
+
+/**
+ * **Which countries the map must tint differently** (TIW-18) — the countries
+ * every one of whose trips is untold.
+ *
+ * The condition is "every", not "any", and that is the whole rule. A country
+ * holding one written récit and one untold journey has a story to read: tinting
+ * it as "à venir" would tell the reader there is nothing there while a récit sits
+ * one click away. The distinct state means *nothing here is written yet*, so a
+ * single told trip is enough to take a country out of it.
+ *
+ * Pure and code-only, with no locale and no geometry: the map component receives
+ * a set of codes and partitions its own tinted shapes with it, which is what
+ * keeps `@/map` untouched — no second projection, and no third bucket to thread
+ * through the geometry façade.
+ */
+describe("untoldOnlyCountryCodes", () => {
+  it("answers nothing at all for a journal whose every récit is written", () => {
+    expect(untoldOnlyCountryCodes(TRIPS)).toEqual(new Set());
+  });
+
+  it("answers nothing for an empty journal, rather than throwing", () => {
+    // Today's production state: `content/trips` is empty until TIW-24.
+    expect(untoldOnlyCountryCodes([])).toEqual(new Set());
+  });
+
+  it("names a country whose only trip is untold", () => {
+    const trips = [...TRIPS, untoldTrip("maroc-2026", "MA")];
+
+    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set(["MA"]));
+  });
+
+  /**
+   * The case the "every" rule exists for, and the one an "any" implementation
+   * gets wrong: Japan holds two written récits in `TRIPS`, so an untold third
+   * journey there must not take the whole country out of the read state.
+   */
+  it("leaves a country alone when one of its trips is written", () => {
+    const trips = [...TRIPS, untoldTrip("japon-2026", "JP")];
+
+    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set());
+  });
+
+  /**
+   * A trip crossing two countries carries its state into both — the same reading
+   * `tallyVisitedCountries` takes of a multi-country trip, and the reason
+   * `visitedCountryCodes` counts a country reached only by a move as visited.
+   */
+  it("carries an untold trip's state into every country it crosses", () => {
+    const trips = [untoldTrip("sahara-2026", "MA", "MR", "DZ")];
+
+    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set(["MA", "MR", "DZ"]));
+  });
+
+  /**
+   * The mixed case, spelled out on one collection rather than assembled from the
+   * two above: a country can be told, untold, or told-by-one-of-two, and the
+   * answer has to hold all three at once.
+   */
+  it("partitions a mixed journal country by country", () => {
+    const trips = [
+      trip("japon-2025", "JP"),
+      untoldTrip("japon-2026", "JP"), // JP still told
+      untoldTrip("maroc-2026", "MA"), // MA untold
+      untoldTrip("perou-2026", "PE", "BO"), // both untold
+      trip("bolivie-2024", "BO"), // …except BO, which is told
+    ];
+
+    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set(["MA", "PE"]));
+  });
+
+  it("counts a country listed twice by one untold trip once", () => {
+    // `visitedCountryCodes` de-duplicates upstream; this refuses to depend on it,
+    // the same posture `tallyVisitedCountries` records.
+    const trips = [untoldTrip("maroc-2026", "MA", "MA")];
+
+    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set(["MA"]));
   });
 });

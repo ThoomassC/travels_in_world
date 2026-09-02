@@ -53,7 +53,7 @@ export const dynamicParams = false;
 const withdrawnSlugs: ReadonlySet<string> = new Set(readSlugHistory(process.env).withdrawn);
 
 /**
-* The gallery grid's `id`. Named here rather than inside `PhotoGallery`, which
+ * The gallery grid's `id`. Named here rather than inside `PhotoGallery`, which
  * renders several times per page — one grid per stay that has photos — and cannot
  * invent a unique one for each.
  */

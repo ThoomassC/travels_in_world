@@ -5,13 +5,19 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 // caught by the `"**/map/*"` half of the geometry façade's guard, which compares
 // strings and cannot tell `src/components/map` from a relative spelling of
 // `src/map`. See the header of `src/components/map/index.ts`.
-import { VisitedCountries, WorldMap, type TripMark } from "@/components/map";
+import {
+  untoldOnlyCountryCodes,
+  VisitedCountries,
+  WorldMap,
+  type TripMark,
+} from "@/components/map";
 import { FreshTripBanner } from "@/components/trips/fresh-trip-banner";
 import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { LatestTrips } from "@/components/trips/latest-trips";
 import { TripCard } from "@/components/trips/trip-card";
 import { listTripSummaries } from "@/content/trips";
 import { freshestTrip } from "@/domain/freshness";
+import { hasStory } from "@/domain/trip";
 import { buildWorldGeometry, projectPoint } from "@/map";
 import { localePathname } from "@/i18n/pathname";
 import { tripPath, tripsPath } from "@/i18n/paths";
@@ -92,6 +98,29 @@ export default async function HomePage({ params }: HomePageProps) {
   });
 
   /**
+   * **The third tint** (TIW-18): the countries every one of whose trips is untold.
+   *
+   * Partitioned here, from a set of *codes*, and never asked of `@/map`. The
+   * geometry façade projects the world once per build and returns one tinted
+   * subset; a third bucket would have meant either widening its signature or
+   * projecting twice, for a distinction that is entirely a property of the
+   * content. This page already holds both façades, so it is where the join
+   * belongs — and the arithmetic itself is `untoldOnlyCountryCodes`, a pure
+   * function the map suite covers case by case.
+   *
+   * `visited` and `untold` are handed over **disjoint**. The tidier-looking
+   * alternative — `visited` keeping every tinted country, `untold` painted over a
+   * subset of it — does not work: the dashed stroke's gaps would show the solid
+   * stroke underneath and the two states would render identically.
+   */
+  const untoldCodes = untoldOnlyCountryCodes(trips);
+  const isUntold = (country: { readonly code: string | null }): boolean =>
+    country.code !== null && untoldCodes.has(country.code);
+
+  const toldCountries = world.visited.filter((country) => !isUntold(country));
+  const untoldCountries = world.visited.filter(isUntold);
+
+  /**
    * One marker per trip, anchored where its first step arrives — the same
    * anchoring `buildCatalogue` files a trip under, so the map and the listing
    * agree about where a trip "is".
@@ -116,8 +145,40 @@ export default async function HomePage({ params }: HomePageProps) {
             // descending rather than trusting the order this list arrives in.
             startDate: trip.startDate,
             placeName: trip.firstArrival.name,
-            href: localePathname({ href: tripPath(trip.slug), locale }),
+            /**
+             * **Where this marker leads, and the one decision the map layer does
+             * not take** (ADR 0003: the component renders `mark.href` as-is).
+             *
+             * A trip whose récit is written gets its own page. A trip whose récit
+             * is not has none — `tripStaticParams` never built one — so pointing
+             * at `tripPath(slug)` would render a 404 into sixty markers' worth of
+             * HTML with a green build. The destination is chosen from what
+             * certainly exists: the trip's own entry in the listing, which is
+             * exactly where « Récit à venir », its dates and its countries are
+             * written. Same move `visited-countries.tsx` records making after
+             * measuring that its `#pays-xx` fragment dangled.
+             *
+             * The fragment is `#voyage-<slug>`, the id `TripCatalogue` puts on
+             * each entry — the same scheme the trip page uses to point back at a
+             * marker on this page, so one spelling identifies a trip's entry on
+             * whichever page holds one. `tests/e2e/dead-links.populated.spec.ts`
+             * follows every href of both pages and checks the fragment resolves.
+             *
+             * **Why the marker stays a link at all**, since it can no longer be
+             * "the trip's page": the three alternatives each break something. No
+             * marker leaves the country tinted with nothing to explain it and no
+             * panel to open; an `<a>` with no `href` has no link role, so the
+             * panel would open under a mouse and be unreachable by keyboard
+             * (2.1.1); a `<button>` is dead without JavaScript, on a map whose
+             * whole point is working without any.
+             */
+            href: hasStory(trip)
+              ? localePathname({ href: tripPath(trip.slug), locale })
+              : localePathname({ href: `${tripsPath()}#voyage-${trip.slug}`, locale }),
             point,
+            // Read by the marker's accessible name and by its dot's shape, never
+            // by its `href` — see above.
+            story: trip.story,
             // The halo and the "— nouveau récit" suffix on this marker's
             // accessible name. Compared against the one answer resolved above,
             // never recomputed per marker.
@@ -198,7 +259,8 @@ export default async function HomePage({ params }: HomePageProps) {
         */}
         <WorldMap
           countries={world.countries}
-          visited={world.visited}
+          visited={toldCountries}
+          untold={untoldCountries}
           marks={marks}
           world={{ width: world.width, height: world.height }}
           tripCards={tripCards}

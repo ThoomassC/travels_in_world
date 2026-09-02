@@ -14,7 +14,18 @@ import type { CountingTrip, CountryLabels } from "@/components/map/countries";
  * fallback and no test of its own beyond the end-to-end one.
  */
 
-const trip = (slug: string, ...countryCodes: string[]): CountingTrip => ({ slug, countryCodes });
+const trip = (slug: string, ...countryCodes: string[]): CountingTrip => ({
+  slug,
+  countryCodes,
+  story: "written",
+});
+
+/** The same, for a trip whose récit is not written (TIW-18). */
+const untoldTrip = (slug: string, ...countryCodes: string[]): CountingTrip => ({
+  slug,
+  countryCodes,
+  story: "unwritten",
+});
 
 /** Japan twice, and one trip crossing Peru and Bolivia. */
 const TRIPS: readonly CountingTrip[] = [
@@ -280,5 +291,123 @@ describe("VisitedCountries", () => {
 
       expect(counted).toBe(60);
     });
+  });
+});
+
+/**
+ * **A country whose récits are not written** (TIW-18), in the map's textual
+ * equivalent.
+ *
+ * This block is where the acceptance criterion's two halves actually meet, and
+ * where the bug lived before this ticket. The row of a country holding exactly
+ * one trip links **straight to that trip's page**, which is more precise than any
+ * listing section — a decision this component records making, after measuring
+ * that its first `#pays-xx` fragment dangled. The moment a trip can exist without
+ * a page, that same precision becomes a 404: one untold trip in one country, and
+ * the map's equivalent points at an address the build never wrote.
+ *
+ * It is also the channel that makes the distinct country tint legible at all. The
+ * `<svg>` is `aria-hidden` (ADR 0003) and a dashed stroke says nothing to a
+ * screen reader, so « récit à venir » on the row is what carries the third state
+ * in words — WCAG 1.4.1 satisfied by text rather than by a second colour.
+ */
+describe("VisitedCountries — a country whose récit is not written", () => {
+  const MIXED: readonly CountingTrip[] = [
+    ...TRIPS,
+    untoldTrip("maroc-2026", "MA"),
+    untoldTrip("chili-2026", "CL"),
+    trip("chili-2020", "CL"),
+  ];
+
+  const NAMED: CountryLabels = {
+    countryName: (code) => ({ ...NAMES, CL: "Chili", MA: "Maroc" })[code] ?? code,
+    compare: new Intl.Collator("fr").compare,
+  };
+
+  it("never links a country whose only trip has no page", () => {
+    renderCountries({ trips: MIXED, labels: NAMED });
+
+    const row = screen.getByRole("link", { name: /^Maroc/ });
+
+    /**
+     * The listing, not `/fr/voyages/maroc-2026`. It is chosen because it
+     * certainly exists *and* because it holds the answer: an untold trip is
+     * rendered there, with its dates, its countries and « Récit à venir ».
+     */
+    expect(row).toHaveAttribute("href", "/fr/voyages");
+  });
+
+  it("says « récit à venir » on that row, in words", () => {
+    renderCountries({ trips: MIXED, labels: NAMED });
+
+    const row = screen.getByRole("link", { name: /^Maroc/ });
+
+    // Inside the link's own accessible name, like the trip count beside it: a
+    // screen reader announces the link and not its neighbours.
+    expect(row).toHaveAccessibleName(`Maroc ${tripsLabel(1)} ${frMessages.map.countryStoryToCome}`);
+  });
+
+  it("still links a country holding one written récit straight to its page", () => {
+    renderCountries({ trips: MIXED, labels: NAMED });
+
+    // The behaviour this ticket must not regress: Iceland has exactly one trip
+    // and it is written, so the precise link stays precise.
+    expect(screen.getByRole("link", { name: /^Islande/ })).toHaveAttribute(
+      "href",
+      "/fr/voyages/islande-2022"
+    );
+  });
+
+  /**
+   * The mixed country, and the case that separates "any" from "every". Chile
+   * holds one written récit and one untold journey: there *is* something to read,
+   * so the row must not say « récit à venir » — and with two trips it goes to the
+   * listing, which is the pre-existing rule and not a new one.
+   */
+  it("says nothing about the state of a country that holds one written récit", () => {
+    renderCountries({ trips: MIXED, labels: NAMED });
+
+    const row = screen.getByRole("link", { name: /^Chili/ });
+
+    expect(row).toHaveAccessibleName(`Chili ${tripsLabel(2)}`);
+    expect(row).toHaveAttribute("href", "/fr/voyages");
+  });
+
+  /**
+   * A country with one written and one untold trip could link to the written one
+   * — and deliberately does not. The row announces "2 voyages", so sending the
+   * reader to one of them names a destination the label does not, which is the
+   * 2.4.4 defect this component's `#pays-xx` note already paid for once.
+   */
+  it("does not single out the one readable trip of a two-trip country", () => {
+    renderCountries({ trips: MIXED, labels: NAMED });
+
+    expect(screen.getByRole("link", { name: /^Chili/ })).not.toHaveAttribute(
+      "href",
+      "/fr/voyages/chili-2020"
+    );
+  });
+
+  it("counts an untold trip in its country's total", () => {
+    renderCountries({ trips: MIXED, labels: NAMED });
+
+    /**
+     * "Where has he been" includes a country he went to and has not written up —
+     * the whole point of the state. This is also what keeps the row agreeing with
+     * the `<figcaption>` beside it, which counts `visited + untold`.
+     */
+    expect(screen.getByRole("link", { name: /^Maroc/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(6);
+  });
+
+  it("leaves a journal whose every récit is written exactly as it was", () => {
+    renderCountries();
+
+    // No wording added, no link changed: the branch must not leak into the
+    // ordinary case, which is every journal until an author uses the field.
+    expect(screen.getByRole("link", { name: /^Islande/ })).toHaveAccessibleName(
+      `Islande ${tripsLabel(1)}`
+    );
+    expect(screen.queryByText(frMessages.map.countryStoryToCome)).toBeNull();
   });
 });

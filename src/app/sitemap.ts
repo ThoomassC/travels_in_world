@@ -112,8 +112,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
      * listing — it is rendered there, with its dates and its countries. Only its own
      * address is missing.
      */
-    ...trips
-      .filter(hasStory)
-      .flatMap((trip) => localisedEntry(tripPath(trip.slug), trip.endDate)),
+    ...trips.filter(hasStory).flatMap((trip) => localisedEntry(tripPath(trip.slug), trip.endDate)),
   ];
 }

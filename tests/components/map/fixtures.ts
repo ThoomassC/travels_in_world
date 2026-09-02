@@ -187,6 +187,9 @@ export function tripMark(overrides: Partial<TripMark> = {}): TripMark {
     placeName: "Tokyo",
     href: "/fr/voyages/japon-2024",
     point: { x: 800, y: 150 },
+    // Written by default: `story` is required on `TripMark` (TIW-18), and the
+    // framing rules this file serves read neither it nor `isNew`.
+    story: "written",
     ...overrides,
   };
 }

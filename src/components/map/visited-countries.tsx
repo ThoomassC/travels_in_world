@@ -124,11 +124,37 @@ export function VisitedCountries({
              * Several: the whole listing. Neither can dangle, because both are
              * routes rather than fragments.
              */
-            const [onlyTrip] = country.tripSlugs;
+            const [onlyTold] = country.toldTripSlugs;
+            /**
+             * **`toldTripSlugs` and not `tripSlugs`** (TIW-18), and this one word
+             * is where the "no dead link" criterion is won or lost on this
+             * component. The precise branch links to a trip's *own page*; the
+             * moment a trip can exist without one, reading the wider list points
+             * at an address `tripStaticParams` never built. One untold trip in
+             * one country was enough.
+             *
+             * The two conditions are both needed and say different things.
+             * `tripSlugs.length === 1` is the pre-existing rule — a row announcing
+             * "2 voyages" must not name one of them, which is the 2.4.4 defect the
+             * `#pays-xx` note above already paid for. `onlyTold !== undefined` is
+             * the new one: that single trip must have a page.
+             */
             const href =
-              country.tripSlugs.length === 1 && onlyTrip !== undefined
-                ? tripHref(onlyTrip)
+              country.tripSlugs.length === 1 && onlyTold !== undefined
+                ? tripHref(onlyTold)
                 : allTripsHref;
+            /**
+             * Whether **nothing** in this country is written yet — the same
+             * "every, not any" rule `untoldOnlyCountryCodes` applies to the tint,
+             * so the row and the drawing cannot disagree about one country.
+             *
+             * This is what carries the distinct tint in words. The `<svg>` is
+             * `aria-hidden` and a dashed stroke says nothing to a screen reader,
+             * so without this line the third state would be a colour-and-pattern
+             * distinction with no textual channel at all — WCAG 1.4.1, and the
+             * exact gap the audit of TIW-20 found in the *first* tint.
+             */
+            const nothingWritten = country.toldTripSlugs.length === 0;
 
             return (
               <li key={country.code}>
@@ -164,6 +190,23 @@ export function VisitedCountries({
                   <span className={styles.trips}>
                     {t("countryTrips", { count: country.tripSlugs.length })}
                   </span>
+                  {/*
+                    Inside the link's accessible name, like the count beside it and
+                    for the same reason: a screen reader announces the link and not
+                    its neighbours, so a note left outside would be a fact the
+                    keyboard never hears.
+
+                    The explicit space is load-bearing for the reason recorded
+                    above — whether two sibling flex items contribute a separator
+                    to an accessible name is up to the engine, and « 1 voyagerécit
+                    à venir » is what the markup gives without it.
+                  */}
+                  {nothingWritten ? (
+                    <>
+                      {" "}
+                      <span className={styles.pending}>{t("countryStoryToCome")}</span>
+                    </>
+                  ) : null}
                 </a>
               </li>
             );

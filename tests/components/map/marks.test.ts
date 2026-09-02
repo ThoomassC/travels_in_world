@@ -229,12 +229,19 @@ describe("placeMarks — what it does to the trip it carries", () => {
   it("adds no field to the trip and removes none", () => {
     const placed = placeMarks([tripMark()], WORLD_FRAME);
 
+    /**
+     * Enumerated rather than counted, so a field arriving or leaving has to be
+     * acknowledged here — which is the whole job of this case. `story` joined the
+     * list with TIW-18; `isNew` is absent because `tripMark()` leaves the optional
+     * field out entirely.
+     */
     expect(Object.keys(placed[0]?.mark ?? {}).sort()).toEqual([
       "href",
       "placeName",
       "point",
       "slug",
       "startDate",
+      "story",
       "title",
     ]);
     expect(Object.keys(placed[0] ?? {}).sort()).toEqual(["leftPercent", "mark", "topPercent"]);

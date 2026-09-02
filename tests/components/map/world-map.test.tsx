@@ -65,6 +65,12 @@ function tripMark(index: number): TripMark {
     // Scattered across the world box so that 60 markers really do frame the
     // whole world, rather than all landing on one pixel.
     point: { x: 40 + ((index * 13) % 880), y: 30 + ((index * 7) % 440) },
+    /**
+     * Written by default, so the sixty-marker cases read as they did before
+     * TIW-18. Every untold marker below is built by spreading over this one and
+     * saying `story: "unwritten"` at the call site.
+     */
+    story: "written",
   };
 }
 
@@ -76,6 +82,25 @@ const CENTRED_MARK: TripMark = {
   placeName: "Tokyo",
   href: "/fr/voyages/japon-2024",
   point: { x: 480, y: 250 },
+  story: "written",
+};
+
+/**
+ * A trip whose récit is not written (TIW-18).
+ *
+ * Its `href` is what the page hands over for this state — the listing, at the
+ * fragment of this trip's own entry — because its page does not exist. The
+ * component renders `mark.href` as-is (ADR 0003), so the assertion below is that
+ * the component does not *replace* it, which is exactly the mistake a
+ * `tripPath(slug)` computed here would be.
+ */
+const UNTOLD_MARK: TripMark = {
+  ...CENTRED_MARK,
+  slug: "maroc-2026",
+  title: "Maroc 2026",
+  placeName: "Marrakech",
+  href: "/fr/voyages#voyage-maroc-2026",
+  story: "unwritten",
 };
 
 const SIXTY_MARKS: readonly TripMark[] = Array.from({ length: 60 }, (_, index) => tripMark(index));
@@ -484,6 +509,7 @@ describe("WorldMap — the newest récit's marker", () => {
     placeName: "Cusco",
     href: "/fr/voyages/perou-2019",
     point: { x: 200, y: 300 },
+    story: "written",
   };
 
   /** The same name the component builds, assembled from the catalogue. */
@@ -557,5 +583,198 @@ describe("WorldMap — the newest récit's marker", () => {
     for (const item of items) {
       expect(item.querySelectorAll("span[aria-hidden='true']").length).toBeGreaterThanOrEqual(2);
     }
+  });
+});
+
+/**
+ * **A trip whose récit is not written** (TIW-18), on the map.
+ *
+ * Two things have to be true at once here, and they pull in opposite directions.
+ * The trip must be *present* — the country tinted, the marker placed, the panel
+ * able to open on it — because "visited but not written up" is exactly the state
+ * the field exists to make visible. And it must lead **nowhere that does not
+ * exist**, which on this layer means the marker's `href` is the page's business
+ * and its wording is this component's.
+ *
+ * The marker stays a real `<a href>`, and that is a decision rather than an
+ * oversight. Three alternatives were considered and each breaks something ADR
+ * 0003 or WCAG holds:
+ *
+ * - **no marker at all** — the country would be tinted with nothing to explain
+ *   why, and the panel the criterion asks for could never open;
+ * - **an `<a>` with no `href`** — no link role, so it is not focusable and not
+ *   activable by keyboard; the panel would open under a mouse and be unreachable
+ *   otherwise, a 2.1.1 failure;
+ * - **a `<button>`** — focusable, but dead without JavaScript, on a map whose
+ *   whole point is that it works with none.
+ *
+ * So the href points at something that certainly exists — the listing entry of
+ * this very trip — which is the same move `visited-countries.tsx` records making
+ * when its `#pays-xx` fragment turned out to dangle.
+ */
+describe("WorldMap — a trip whose récit is not written", () => {
+  const untoldName = (mark: TripMark): string =>
+    frMessages.map.markLabelToCome
+      .replace("{title}", mark.title)
+      .replace("{place}", mark.placeName);
+
+  it("still places the marker, and keeps it a real link", () => {
+    renderMap({ marks: [UNTOLD_MARK], visited: [], untold: [country("MA", "Maroc")] });
+
+    const link = screen.getByRole("link", { name: untoldName(UNTOLD_MARK) });
+
+    // Focusable, activable by keyboard, and navigable with no JavaScript — the
+    // three properties the alternatives in this block's header each give up.
+    expect(link).toHaveAttribute("href", "/fr/voyages#voyage-maroc-2026");
+  });
+
+  it("renders the href it was given and never rebuilds one", () => {
+    /**
+     * The component constructs no URL (ADR 0003), and this is the case where a
+     * `tripPath(mark.slug)` slipped in here would be a dead address rather than a
+     * merely redundant one — so it is worth asserting on the exact string.
+     */
+    renderMap({ marks: [UNTOLD_MARK] });
+
+    expect(screen.getByRole("link").getAttribute("href")).toBe("/fr/voyages#voyage-maroc-2026");
+  });
+
+  it("says « récit à venir » in the marker's own accessible name", () => {
+    renderMap({ marks: [UNTOLD_MARK] });
+
+    /**
+     * In the one text node that is already doing two jobs — the link's accessible
+     * name and the hover/focus bubble — and not in an `aria-label`, an
+     * `aria-describedby` or a visually hidden twin. The same decision TIW-19's
+     * badge took one message over, and for the same reason: it is the only
+     * spelling that reaches a screen reader, a mouse and a keyboard at once with
+     * nothing to keep in step.
+     */
+    expect(screen.getByRole("link", { name: untoldName(UNTOLD_MARK) })).toBeInTheDocument();
+    expect(screen.getByText(untoldName(UNTOLD_MARK))).toBeInTheDocument();
+  });
+
+  it("marks the dot with an attribute, so the state is not carried by colour alone", () => {
+    const { container } = renderMap({ marks: [UNTOLD_MARK, CENTRED_MARK] });
+
+    /**
+     * `data-story` and not a second class name, exactly as TIW-19's `data-new`:
+     * the client component's `closest("a[data-trip]")` never looks at classes, so
+     * the interaction layer is untouched. The visual distinction it drives is a
+     * hollow dot — a *shape* difference, so a reader who cannot separate the hues
+     * still sees two kinds of marker — and the accessible name says it in words
+     * regardless.
+     */
+    const flagged = container.querySelectorAll("[data-story='unwritten']");
+
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0]).toHaveAttribute("data-trip", "maroc-2026");
+  });
+
+  it("keeps a told marker's own name and label untouched", () => {
+    renderMap({ marks: [CENTRED_MARK, UNTOLD_MARK] });
+
+    // The branch must not leak: a written récit reads exactly as it did.
+    expect(screen.getByRole("link", { name: linkName(CENTRED_MARK) })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: untoldName(UNTOLD_MARK) })).toBeInTheDocument();
+  });
+
+  it("never says both « nouveau récit » and « récit à venir » about one marker", () => {
+    /**
+     * Unreachable through the real pipeline — `freshestTrip` skips untold trips
+     * before it compares — but `isNew` is a prop, and the two are independent at
+     * this boundary. « Nouveau récit » on a trip whose récit is not written is the
+     * map announcing something it also says does not exist.
+     */
+    renderMap({ marks: [{ ...UNTOLD_MARK, isNew: true }] });
+
+    expect(screen.getByRole("link", { name: untoldName(UNTOLD_MARK) })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /nouveau récit/ })).toBeNull();
+  });
+
+  it("still opens its zone's panel, which is where « Récit à venir » is read", () => {
+    /**
+     * The criterion asks for the panel to say it, so the marker has to be able to
+     * open one: `data-zone` is what the client component reads, and dropping it
+     * for this state would have made the panel unreachable for exactly the trips
+     * that need it. The card's own wording is `TripCard`'s business and is
+     * asserted there.
+     */
+    const { container } = renderMap({
+      marks: [UNTOLD_MARK],
+      tripCards: new Map([["maroc-2026", <p key="card">Récit à venir</p>]]),
+    });
+
+    expect(container.querySelector("a[data-trip='maroc-2026']")).toHaveAttribute("data-zone");
+  });
+});
+
+/**
+ * **The third tint** (TIW-18): a country every one of whose trips is untold.
+ *
+ * Drawn as its own `<g>` layer rather than tinted in place, and the partition
+ * matters more than the layer. If the untold shapes stayed in `visited` and the
+ * new layer only painted *over* them, the dashed stroke's gaps would show the
+ * solid stroke underneath and the two states would look identical — the reason
+ * `visited` here means "reached by at least one written récit" and the two lists
+ * are disjoint.
+ */
+describe("WorldMap — the untold country layer", () => {
+  const MOROCCO = country("MA", "Maroc");
+
+  it("draws an untold country in a layer of its own", () => {
+    const visited = [country("JP", "Japon")];
+    const { container } = renderMap({ visited, untold: [MOROCCO], marks: [CENTRED_MARK] });
+
+    // Background, told, untold: three layers, and the untold one last so it is
+    // painted above a neighbour drawn before it.
+    const layers = layersOf(container);
+
+    expect(layers).toHaveLength(3);
+    expect(layers[2]?.querySelectorAll("path")).toHaveLength(1);
+  });
+
+  it("renders no third layer at all when every récit is written", () => {
+    const { container } = renderMap({ visited: [country("JP", "Japon")], marks: [CENTRED_MARK] });
+
+    // An empty `<g>` is not a rendering: today's production state — and every
+    // journal with no untold trip — must emit exactly the two layers it did.
+    expect(layersOf(container)).toHaveLength(2);
+  });
+
+  it("counts an untold country in the caption's total, like any other", () => {
+    renderMap({
+      visited: [country("JP", "Japon")],
+      untold: [MOROCCO],
+      marks: [CENTRED_MARK, UNTOLD_MARK],
+    });
+
+    /**
+     * "2 pays" and not "1 pays": the caption answers *where has he been*, and a
+     * country visited without being written about has still been visited. The
+     * distinction belongs to the tint and to `VisitedCountries`, not to this
+     * count — which is also what keeps the caption agreeing with the textual
+     * equivalent beside it, since that list counts trips per country the same way.
+     */
+    expect(screen.getByText(/2 voyages, 2 pays/)).toBeInTheDocument();
+  });
+
+  it("adds the untold paths to the total drawn, without dropping any", () => {
+    const visited = COUNTRIES.slice(0, 2);
+    const untold = COUNTRIES.slice(2, 4);
+    const { container } = renderMap({ visited, untold, marks: [CENTRED_MARK] });
+
+    expect(container.querySelectorAll("path")).toHaveLength(
+      COUNTRIES.length + visited.length + untold.length
+    );
+  });
+
+  it("is absent from the drawing when there is no drawing at all", () => {
+    // The failed-geometry branch: a sentence replaces the box, and no layer of
+    // any kind is emitted. `untold` must not resurrect an `<svg>`.
+    const { container } = renderMap({ countries: [], visited: [], untold: [MOROCCO], marks: [] });
+
+    expect(container.querySelector("svg")).toBeNull();
+    expect(screen.getByText(frMessages.map.unavailable)).toBeInTheDocument();
   });
 });
