@@ -19,6 +19,7 @@
     "test:lint": "vitest run --config vitest.lint.config.ts",
     "test:e2e": "npm run test:e2e:content && playwright test",
     "test:e2e:content": "playwright test --config playwright.content.config.ts",
+    "test:perf": "playwright test --config tests/perf/playwright.perf.config.ts",
     "typecheck": "tsc --noEmit",
     "pretest": "npm run validate:content",
     "validate:content": "node --import ./scripts/runtime/register-typescript.mts scripts/validate-content.ts",
