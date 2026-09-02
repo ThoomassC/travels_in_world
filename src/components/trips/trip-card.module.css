@@ -134,6 +134,43 @@
   flex: 1;
 }
 
+/**
+ * The "nouveau récit" chip (TIW-19).
+ *
+ * **Text first, chip second**, and the ordering is the whole accessibility of
+ * it: the element holds a real sentence, so deleting every declaration below
+ * leaves the information on the page. Nothing here carries meaning on its own —
+ * no colour-only distinction to fail WCAG 1.4.1, no animation to neutralise
+ * under `prefers-reduced-motion`, no icon to decode. The animated halo lives on
+ * the map's marker, because a 44 px dot has no room for a word; a card does.
+ *
+ * `--accent-quiet` fill with a `--text-accent` label, the pair the map's visited
+ * countries already use (7.03:1 against neutral land, measured there), and an
+ * `--accent-quiet-border` edge so the chip keeps a shape in the dark theme where
+ * the fill is a 16 % wash.
+ *
+ * `align-self: start` and `max-content` so the chip is as wide as its word and
+ * not as wide as the card — the default in a flex column is to stretch.
+ *
+ * No `text-transform: uppercase`: several screen readers spell a short
+ * upper-case string out letter by letter, and "N-O-U-V-E-A-U" is not the label.
+ */
+.badge {
+  align-self: start;
+  inline-size: max-content;
+  max-inline-size: 100%;
+  margin: 0;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--accent-quiet-border);
+  border-radius: var(--radius-pill);
+  background: var(--accent-quiet);
+  color: var(--text-accent);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+}
+
 .title {
   margin: 0;
   font-size: var(--text-md);

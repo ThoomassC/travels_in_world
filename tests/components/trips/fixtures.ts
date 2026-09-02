@@ -21,6 +21,10 @@ export function tripEntry(overrides: Partial<TripEntry> = {}): TripEntry {
     title: "Japon, printemps 2024",
     startDate: "2024-04-12",
     endDate: "2024-04-22",
+    // A different day from `endDate` on purpose: the freshness derivation reads
+    // this one, and a consumer reading the wrong field would be invisible here if
+    // the two agreed.
+    publishedAt: "2024-05-02",
     duration: { nights: 10, days: 11 },
     countryCodes: ["JP"],
     coverPhotoSrc: "/photos/japon-2024/tokyo.jpg",
@@ -42,6 +46,7 @@ export function tripIn(countryCode: string, index: number): TripEntry {
     title: `Voyage ${countryCode} ${index}`,
     startDate: `${year}-06-01`,
     endDate: `${year}-06-08`,
+    publishedAt: `${year}-07-01`,
     duration: { nights: 7, days: 8 },
     countryCodes: [countryCode],
     firstArrival: { name: `Ville ${index}`, countryCode },

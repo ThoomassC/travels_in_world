@@ -139,6 +139,34 @@ export function formatDateRange(locale: string, startDate: string, endDate: stri
 }
 
 /**
+ * One calendar day, spelled out — "2 mai 2024". The home page's "nouveau récit"
+ * banner uses it for `publishedAt`, and nothing else does today.
+ *
+ * **The same memoised formatter `formatDateRange` uses**, which is the only
+ * reason this is three lines and not a fourth `Intl.DateTimeFormat` in the
+ * repository: `timeZone: "UTC"` and the day/month/year fields are declared once
+ * at the top of this file, so a change there moves the range and the single day
+ * together.
+ *
+ * **Named `formatPublicationDay` and not `formatDay`, deliberately.**
+ * `src/components/timeline/dates.ts` already exports a `formatDay` — with the
+ * arguments the *other* way round, `(date, locale)`, because that module follows
+ * its own layer's convention while this one puts the locale first everywhere.
+ * Two functions sharing a name with mirrored signatures is a defect that
+ * typechecks perfectly, since both arguments are always strings.
+ *
+ * The fallback is `formatDateRange`'s, for the reason recorded there: `TripEntry`
+ * is a structural type, `Intl` throws a `RangeError` on an invalid `Date`, and
+ * one bad day taking `next build` down over a banner is a far worse failure than
+ * a banner printing a raw `2024-05-02`.
+ */
+export function formatPublicationDay(locale: string, day: string): string {
+  const instant = utcInstant(day);
+
+  return instant === null ? day : dateFormatterFor(locale).format(instant);
+}
+
+/**
  * A country's localised name, or the code itself when ICU has never heard of it.
  *
  * ICU echoes its input back rather than answering `undefined` for an unknown

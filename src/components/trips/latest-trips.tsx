@@ -32,9 +32,24 @@ export type LatestTripsProps = {
   /** Already ordered by the content façade: `startDate` descending, then `slug`. */
   readonly trips: readonly TripEntry[];
   readonly locale: Locale;
+  /**
+   * The slug of the journal's newest récit, when there is a fresh one (TIW-19).
+   *
+   * A slug and not a boolean per card: the page resolves it once and every
+   * placement compares against the same answer, which is what makes "le voyage le
+   * plus récent le porte, et seulement lui" a property of the data rather than a
+   * discipline. `undefined` — no publication inside the window — is a state this
+   * block renders unchanged, badge-less.
+   *
+   * The fresh trip may well not be among the three shown here: it is the newest
+   * *publication*, and this list is the newest *journeys*. That is the ticket's
+   * own trap and the correct outcome — no badge appears in this block then, and
+   * the banner above still announces it.
+   */
+  readonly freshSlug?: string;
 };
 
-export function LatestTrips({ trips, locale }: LatestTripsProps): ReactElement {
+export function LatestTrips({ trips, locale, freshSlug }: LatestTripsProps): ReactElement {
   const t = useTranslations("home");
   const latest = latestTrips(trips, LATEST_TRIP_COUNT);
 
@@ -64,7 +79,12 @@ export function LatestTrips({ trips, locale }: LatestTripsProps): ReactElement {
       <ul className={cardStyles.grid} role="list">
         {latest.map((trip) => (
           <li key={trip.slug}>
-            <TripCard trip={trip} locale={locale} headingLevel={3} />
+            <TripCard
+              trip={trip}
+              locale={locale}
+              headingLevel={3}
+              isNew={trip.slug === freshSlug}
+            />
           </li>
         ))}
       </ul>

@@ -1,0 +1,96 @@
+/* =============================================================================
+   The "nouveau récit" banner — the home page's pointer to the newest story
+   (TIW-19).
+
+   No colour is declared here; every value comes from `src/styles/tokens.css`,
+   which is what keeps the dark theme working without this file knowing that it
+   exists. No animation either: the banner carries a sentence, and a sentence
+   needs no motion to be read. The one animated thing this ticket ships is the
+   map marker's halo, and it lives in `world-map.module.css` with its own
+   `prefers-reduced-motion` block.
+   ============================================================================ */
+
+/**
+ * A plate, and deliberately a quiet one.
+ *
+ * It sits above the map on the first screen, where TIW-13's criterion asks for a
+ * sentence, the map **and** the visible start of the latest-trips block. So the
+ * banner is three short lines with no image and no call-to-action button: at a
+ * 1152 × 800 desktop it costs about 110 px, which the map's own `45vh` cap
+ * absorbs.
+ *
+ * `--control-border` and not `--border-subtle`: the latter measures 1.37:1 and
+ * its own declaration in `tokens.css` says `decorative only`. This box is what
+ * separates an announcement from the page's introduction, so its edge is a
+ * graphical object required to understand the content (WCAG 1.4.11, ≥ 3:1).
+ */
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--control-border);
+  /* The accent edge is the one visual flourish, and it is redundant with the
+     chip and the wording above it — nothing here is the only channel for
+     "this is new" (WCAG 1.4.1). */
+  border-inline-start: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+/**
+ * The chip. Same wording, same shape and same tokens as `.badge` in
+ * `trip-card.module.css` — one fact must not have two looks across two
+ * placements — and the same reasoning applies in full: it holds real text, so
+ * removing every rule below leaves the information on the page.
+ *
+ * Not extracted into a shared module: two eight-line rule sets in the two files
+ * that use them are cheaper to read than a third stylesheet, and CSS Modules
+ * has no inheritance that would not cost an import in both components anyway.
+ * If a third placement ever needs the chip, that is the moment to extract it.
+ */
+.flag {
+  align-self: start;
+  inline-size: max-content;
+  max-inline-size: 100%;
+  margin: 0;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--accent-quiet-border);
+  border-radius: var(--radius-pill);
+  background: var(--accent-quiet);
+  color: var(--text-accent);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+
+.link {
+  color: var(--text-strong);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+/**
+ * The publication date — the half of this banner that stays true when the badge
+ * does not.
+ *
+ * `docs/fraicheur-au-prerendu.md` is why it is here and not optional: the site is
+ * prerendered, so a badge outlives its sixty days until the next build, and a
+ * dated announcement lets the reader judge for themselves. Styled as secondary
+ * text, never hidden.
+ */
+.published {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}

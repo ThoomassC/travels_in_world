@@ -464,3 +464,100 @@ describe("WorldMap", () => {
     });
   });
 });
+
+/**
+ * The newest récit's marker — the first of TIW-19's three placements.
+ *
+ * Two channels, and the second is the one that decides whether the criterion is
+ * met: an animated halo, and the marker's **accessible name**. jsdom computes no
+ * animation and no `@media`, so what is assertable here is the markup the halo
+ * hangs off and the words a screen reader receives — which is exactly the half
+ * that must not depend on motion. The `prefers-reduced-motion` rule itself lives
+ * in `world-map.module.css` and is exercised end to end in
+ * `tests/e2e/fresh-trip.populated.spec.ts`.
+ */
+describe("WorldMap — the newest récit's marker", () => {
+  const OLDER: TripMark = {
+    slug: "perou-2019",
+    title: "Pérou 2019",
+    startDate: "2019-08-01",
+    placeName: "Cusco",
+    href: "/fr/voyages/perou-2019",
+    point: { x: 200, y: 300 },
+  };
+
+  /** The same name the component builds, assembled from the catalogue. */
+  const freshLinkName = (mark: TripMark): string =>
+    frMessages.map.markLabelNew.replace("{title}", mark.title).replace("{place}", mark.placeName);
+
+  it("marks no marker when the journal has no fresh récit", () => {
+    const { container } = renderMap({ marks: [CENTRED_MARK, OLDER] });
+
+    expect(container.querySelectorAll("[data-new]")).toHaveLength(0);
+    expect(screen.getByRole("link", { name: linkName(CENTRED_MARK) })).toBeInTheDocument();
+  });
+
+  it("says so in the marker's accessible name, not only in the animation", () => {
+    /**
+     * The case that makes the badge exist for a screen reader. An implementation
+     * that only added `data-new` and let CSS pulse would pass every visual
+     * review and fail here — "le badge reste identifiable sans l'animation
+     * (libellé textuel, pas seulement une animation)".
+     */
+    renderMap({ marks: [{ ...CENTRED_MARK, isNew: true }, OLDER] });
+
+    expect(
+      screen.getByRole("link", { name: freshLinkName(CENTRED_MARK) })
+    ).toBeInTheDocument();
+  });
+
+  it("marks exactly one marker, and it is the one asked for", () => {
+    const { container } = renderMap({ marks: [{ ...CENTRED_MARK, isNew: true }, OLDER] });
+
+    const marked = container.querySelectorAll("[data-new]");
+
+    expect(marked).toHaveLength(1);
+    // The attribute sits on the `<a>`, beside `data-trip` and `data-zone` — the
+    // element the halo lives inside and the one the stylesheet keys off.
+    expect(marked[0]?.getAttribute("data-trip")).toBe(CENTRED_MARK.slug);
+  });
+
+  it("leaves the older markers with their ordinary name", () => {
+    renderMap({ marks: [{ ...CENTRED_MARK, isNew: true }, OLDER] });
+
+    expect(screen.getByRole("link", { name: linkName(OLDER) })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: freshLinkName(OLDER) })).toBeNull();
+  });
+
+  it("keeps the marker a plain link to its trip", () => {
+    /**
+     * The halo is decoration over an unchanged marker: same href, same 44 px
+     * target, same `data-trip` the interaction layer reads. A badge that turned
+     * the newest trip into a different kind of control would break the map's own
+     * criterion that a marker navigates without JavaScript.
+     */
+    renderMap({ marks: [{ ...CENTRED_MARK, isNew: true }] });
+
+    const link = screen.getByRole("link", { name: freshLinkName(CENTRED_MARK) });
+
+    expect(link).toHaveAttribute("href", CENTRED_MARK.href);
+    expect(link).toHaveAttribute("data-trip", CENTRED_MARK.slug);
+  });
+
+  it("renders the halo on every marker so no target changes size", () => {
+    /**
+     * The halo element exists on all of them and is lit by `[data-new]` in CSS.
+     * Rendering it only on the fresh marker would make that one `<a>` a
+     * different box from its neighbours, and a 44 px target that changes size is
+     * a target that moves under the reader's finger.
+     */
+    const { container } = renderMap({ marks: [{ ...CENTRED_MARK, isNew: true }, OLDER] });
+
+    const items = container.querySelectorAll("li");
+
+    expect(items).toHaveLength(2);
+    for (const item of items) {
+      expect(item.querySelectorAll("span[aria-hidden='true']").length).toBeGreaterThanOrEqual(2);
+    }
+  });
+});

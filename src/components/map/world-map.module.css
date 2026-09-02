@@ -320,6 +320,91 @@
   transform: scale(1.3);
 }
 
+/* =============================================================================
+   The newest récit's halo — TIW-19.
+
+   Which marker is "new" is decided at BUILD time and everything below is only
+   the rendering of that decision; `docs/fraicheur-au-prerendu.md` is where the
+   decision itself, and what its granularity costs, are argued.
+   ============================================================================ */
+
+/**
+ * The halo. Rendered on **every** marker and lit only under `[data-new]`, for the
+ * reason the component records: a ring that existed on one marker alone would
+ * have to size itself, and a 44 px target whose box changes is a target that
+ * moves under the reader's finger.
+ *
+ * `position: absolute` inside the grid-centred link, so it costs no layout and
+ * cannot push the dot off its projected point; `pointer-events: none` so it can
+ * never be the thing under the cursor when the marker is clicked. Invisible by
+ * default through `scale: 0` rather than `display: none`, so nothing has to be
+ * un-hidden when it lights up.
+ */
+.halo {
+  position: absolute;
+  inline-size: var(--space-3);
+  block-size: var(--space-3);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-pill);
+  pointer-events: none;
+  scale: 0;
+  opacity: 0;
+}
+
+/**
+ * **The animated state, and it is never the only channel.** The same marker's
+ * accessible name says "— nouveau récit" in words, so a reader who cannot see
+ * the pulse loses nothing at all. That is the acceptance criterion, and it is met
+ * in the markup rather than here.
+ *
+ * `scale` and `opacity` only — the two properties a compositor animates without
+ * laying out or painting anything else. No `width`, no `box-shadow` spread, no
+ * `filter`: there are sixty markers on the page, of which exactly one animates,
+ * and it must cost nothing on a phone. The ring reaches 2.4 × a 12 px dot, which
+ * stays inside the 44 px target, so it never bleeds into a neighbour's hit area.
+ */
+.link[data-new] .halo {
+  animation: haloPulse 2.4s ease-out infinite;
+}
+
+@keyframes haloPulse {
+  0% {
+    scale: 1;
+    opacity: 0.85;
+  }
+  70% {
+    scale: 2.4;
+    opacity: 0;
+  }
+  100% {
+    scale: 2.4;
+    opacity: 0;
+  }
+}
+
+/**
+ * **Under `prefers-reduced-motion`, and the distinction survives it.**
+ *
+ * `src/styles/tokens.css` already carries a blanket reduce block that clamps
+ * every animation to 0.01 ms. Leaning on it would have *deleted* this channel
+ * rather than calmed it: the halo would freeze on whichever keyframe it stopped
+ * at, and 0 % is the only visible one, so the ring would simply never appear —
+ * for exactly the readers who asked for less motion, not for less information.
+ *
+ * So the reduced state is written out: no animation, and a **static** ring in its
+ * place. Same colour, same geometry, nothing moving. The marker stays visibly
+ * marked, its accessible name still says why, and the page is still. The same
+ * posture `photo-lightbox.module.css` takes towards that blanket rule — it is a
+ * safety net, never a design.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .link[data-new] .halo {
+    animation: none;
+    scale: 1.9;
+    opacity: 0.9;
+  }
+}
+
 /**
  * The marker's tooltip, and it is the SAME text node as its accessible name.
  *
