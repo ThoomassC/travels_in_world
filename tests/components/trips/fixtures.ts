@@ -29,6 +29,12 @@ export function tripEntry(overrides: Partial<TripEntry> = {}): TripEntry {
     countryCodes: ["JP"],
     coverPhotoSrc: "/photos/japon-2024/tokyo.jpg",
     firstArrival: { name: "Tokyo", countryCode: "JP" },
+    /**
+     * Written by default, so the sixty-trip cases and every listing test that
+     * predates TIW-18 read as they did. The untold state is always spelled out at
+     * the call site that wants it — there is no fixture whose name implies it.
+     */
+    story: "written",
     ...overrides,
   };
 }

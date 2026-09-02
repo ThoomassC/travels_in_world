@@ -1,3 +1,5 @@
+import type { StoryState } from "@/domain/schema";
+
 /**
  * What the listing reads of a trip, and nothing more.
  *
@@ -37,11 +39,28 @@ export type TripEntry = {
   readonly duration: { readonly nights: number; readonly days: number };
   /** Every country the itinerary touches, ascending by code. */
   readonly countryCodes: readonly string[];
-  /** Absent for a trip with no photo yet — the card draws a placeholder then. */
+  /** Absent for a trip with no photo yet — the card draws its fallback tile then. */
   readonly coverPhotoSrc?: string;
   /**
    * Where the first step arrives. The listing reads its `countryCode` to file
    * the trip, and its `name` to say where the itinerary begins.
    */
   readonly firstArrival: { readonly name: string; readonly countryCode: string };
+  /**
+   * Whether the récit is written (TIW-18) — `"written"` or `"unwritten"`.
+   *
+   * **Required, and typed as the domain's union rather than as a boolean.** A card
+   * reads it to decide whether its title is a link *at all*: an untold trip has no
+   * page, so `tripPath(slug)` would be a dead address. Required is what makes that
+   * decision unmissable — a caller assembling a `TripEntry` cannot omit the field
+   * and inherit "has a page" by default, which is the direction `hasStory` exists
+   * to refuse.
+   *
+   * The type arrives through an `import type`, which TypeScript erases before any
+   * module resolution: nothing of the domain enters this layer's runtime graph, so
+   * the whole listing still renders under jsdom from a literal. Re-declaring
+   * `"written" | "unwritten"` here would be a second copy of a contract to drift
+   * from the first, which is the one thing this narrowing file refuses to do.
+   */
+  readonly story: StoryState;
 };

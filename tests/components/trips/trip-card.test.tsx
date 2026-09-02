@@ -143,6 +143,107 @@ describe("TripCard", () => {
 });
 
 /**
+ * **The fallback thumbnail** (TIW-18), and what it replaced.
+ *
+ * A trip with no photograph used to get a `<div>` filled with a token gradient:
+ * `aria-hidden`, carrying nothing, and — measured in the served HTML of the
+ * populated fixture — three of them on `/fr/voyages` out of four cards. That is
+ * the "emplacement gris" the acceptance criterion refuses by name.
+ *
+ * The criterion offers two shapes, a mini-map of the route or a typographic tile
+ * carrying the title and the country. The mini-map is out on the document budget
+ * and the reason is arithmetic rather than taste: a drawing needs country shapes,
+ * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` refuses to prune them
+ * because that makes the geometry depend on the content, and the world's paths
+ * measure 30.1 KB brotli *once* in a document — against a 100 KB budget, with
+ * sixty cards on a listing. A route polyline with no coastline under it is not a
+ * map, it is a squiggle.
+ *
+ * So: the tile. What it carries is the **country and the year**, not the title,
+ * and that is a deliberate reading of the criterion rather than an omission — the
+ * card's heading is the very next element, and a tile repeating it reads as a
+ * rendering fault. It stays `aria-hidden` for the reason `.cta` does: every word
+ * in it is already in the card's own facts, so announcing it would say the same
+ * things twice.
+ */
+describe("TripCard — the fallback thumbnail", () => {
+  const noCover = (overrides: Partial<ReturnType<typeof tripEntry>> = {}) =>
+    card({ trip: tripEntry({ coverPhotoSrc: undefined, ...overrides }) });
+
+  it("shows no image and no broken source when the trip has no photo", () => {
+    const { container } = noCover();
+
+    /**
+     * The criterion's "aucune icône d'image cassée" is a property of the markup,
+     * not of the styling: an `<img>` with an empty or absent `src` is exactly what
+     * paints the browser's broken-image glyph, so the assertion is that there is no
+     * `<img>` element at all.
+     */
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("picture")).toBeNull();
+  });
+
+  /**
+   * The year is queried as an **exact** text node, which is what makes these
+   * cases precise: the card's facts render "12–22 avril 2024", so a bare `2024`
+   * can only be the tile's own line. Same trick for the country — with a tile
+   * there are two nodes reading "Japon", with a cover there is one.
+   */
+  it("fills the thumbnail with the country and the year, as real text", () => {
+    noCover();
+
+    // Real text nodes and not a `content:` pseudo-element or a background image:
+    // strip every rule from the stylesheet and the tile still says what it says.
+    expect(screen.getByText("2024")).toBeInTheDocument();
+    expect(screen.getAllByText("Japon")).toHaveLength(2);
+  });
+
+  it("keeps the tile out of the accessibility tree, since the card already says both", () => {
+    noCover();
+
+    /**
+     * The country is in the card's facts and the year is inside its date range, so
+     * an announced tile would repeat two things a screen reader has just been
+     * given. Asserted as counts: three facts and one heading, exactly what a card
+     * with a real cover exposes.
+     */
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
+    expect(screen.getByText("2024").closest("[aria-hidden='true']")).not.toBeNull();
+  });
+
+  it("names every country of a trip that crossed several", () => {
+    noCover({ countryCodes: ["BO", "PE"] });
+
+    // Through the same `countryListOf` the facts use, so the tile cannot say
+    // "Bolivie, Pérou" while the line below says "Bolivie et Pérou".
+    expect(screen.getAllByText("Bolivie et Pérou")).toHaveLength(2);
+  });
+
+  it("still renders a tile for a trip whose countries are unknown", () => {
+    /**
+     * Unreachable through the façade — `TripSchema` demands at least one place —
+     * but the tile must degrade to the year rather than to an empty box or to the
+     * word "undefined". Same posture as the countries line right beside it.
+     */
+    const { container } = noCover({ countryCodes: [] });
+
+    expect(screen.getByText("2024")).toBeInTheDocument();
+    expect(container.textContent).not.toContain("undefined");
+  });
+
+  it("leaves a card that has a cover showing the photograph and nothing else", () => {
+    const { container } = card();
+
+    // The tile is the *absence* branch, and adding it must not lay a caption over
+    // every real cover in the listing.
+    expect(container.querySelector("img")).toHaveAttribute("src", "/photos/japon-2024/tokyo.jpg");
+    expect(screen.queryByText("2024")).toBeNull();
+    expect(screen.getAllByText("Japon")).toHaveLength(1);
+  });
+});
+
+/**
  * The "nouveau récit" chip — the third of TIW-19's three placements.
  *
  * What is asserted here is deliberately not *which* trip is new: that is
@@ -197,5 +298,122 @@ describe("TripCard — the new-story badge", () => {
       screen.getByRole("heading", { level: 3, name: "Japon, printemps 2024" })
     ).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
+  });
+});
+
+/**
+ * **A trip whose récit is not written** (TIW-18), as a card sees it.
+ *
+ * This is the acceptance criterion's hardest half — "aucun lien vers une page
+ * inexistante n'est rendu" — and a card is where it is easiest to get wrong,
+ * because the title has been a link since TIW-20 and nothing about an untold trip
+ * looks different upstream. `tripStaticParams` has stopped building the page;
+ * these cases are what stop the card pointing at it anyway.
+ *
+ * What replaces the link is **real text**, announced, and that is the one place
+ * this card differs from every other decoration it carries. `.cta` and the
+ * fallback tile are `aria-hidden` because the link beside them already says what
+ * they say. Here there *is* no link, so « Récit à venir » is the only thing that
+ * tells a reader why — hiding it would leave a screen reader with a title, three
+ * facts and no explanation of why this entry goes nowhere.
+ */
+describe("TripCard — a trip whose récit is not written", () => {
+  const untold = (overrides: Partial<ReturnType<typeof tripEntry>> = {}) =>
+    card({ trip: tripEntry({ story: "unwritten", ...overrides }) });
+
+  it("renders no link at all, because the page does not exist", () => {
+    untold();
+
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+  });
+
+  it("renders no anchor element either, not even one without an href", () => {
+    const { container } = untold();
+
+    /**
+     * Asserted on the element and not only on the role. An `<a>` with no `href`
+     * has no link role — so a `queryAllByRole("link")` of zero would be satisfied
+     * by a placeholder anchor, which is the shape this would take if somebody
+     * "kept the markup and dropped the href". It would still be a dead affordance
+     * under the card-wide `::after` overlay.
+     */
+    expect(container.querySelectorAll("a")).toHaveLength(0);
+  });
+
+  it("still names the trip in a heading, at the level it was given", () => {
+    untold({ title: "Maroc, printemps 2026" });
+
+    // Losing the link must not lose the heading: a listing walked by heading is
+    // how a screen-reader reader scans sixty entries.
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Maroc, printemps 2026" })
+    ).toBeInTheDocument();
+  });
+
+  it("says « Récit à venir » in words a screen reader meets", () => {
+    untold();
+
+    const notice = screen.getByText(frMessages.trips.cardStoryToCome);
+
+    expect(notice).toBeInTheDocument();
+    // Not hidden, unlike `.cta` and the tile: with no link on the card, this is
+    // the only thing that says why the entry leads nowhere.
+    expect(notice.closest("[aria-hidden='true']")).toBeNull();
+  });
+
+  it("drops the read affordance rather than showing both", () => {
+    untold();
+
+    // "Lire le récit" beside "Récit à venir" would be the card contradicting
+    // itself in two adjacent lines.
+    expect(screen.queryByText(frMessages.trips.cardRead)).toBeNull();
+  });
+
+  it("keeps its dates, its countries and its duration", () => {
+    untold();
+
+    /**
+     * The whole point of the state: the trip is *in* the journal. An untold entry
+     * that showed only a title would be the empty frame the ticket refuses — it
+     * carries exactly what a told entry carries, minus the story.
+     */
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getByText("Japon")).toBeInTheDocument();
+    expect(screen.getByText("11 jours")).toBeInTheDocument();
+  });
+
+  it("shows its cover when it has one, and the fallback tile when it does not", () => {
+    const { container } = untold();
+    expect(container.querySelector("img")).toHaveAttribute("src", "/photos/japon-2024/tokyo.jpg");
+
+    const { container: bare } = card({
+      trip: tripEntry({ story: "unwritten", coverPhotoSrc: undefined }),
+    });
+    expect(bare.querySelector("img")).toBeNull();
+  });
+
+  /**
+   * A told trip is untouched by all of the above — the assertion that keeps this
+   * a *branch* and not a rewrite of the card.
+   */
+  it("leaves a told trip with its link and its read affordance", () => {
+    card();
+
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByText(frMessages.trips.cardRead)).toBeInTheDocument();
+    expect(screen.queryByText(frMessages.trips.cardStoryToCome)).toBeNull();
+  });
+
+  /**
+   * The badge and this state cannot co-occur through the real pipeline —
+   * `freshestTrip` never returns an untold trip — but `TripCard` takes a boolean
+   * from a caller, so the two props are independent here. The card must not
+   * announce a *new récit* it also says is unwritten.
+   */
+  it("never announces a new récit on a trip that has none", () => {
+    card({ trip: tripEntry({ story: "unwritten" }), isNew: true });
+
+    expect(screen.queryByText(frMessages.trips.cardNew)).toBeNull();
+    expect(screen.getByText(frMessages.trips.cardStoryToCome)).toBeInTheDocument();
   });
 });
