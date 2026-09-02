@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 // loads specs as real ESM (package.json is `type: "module"`), where Node mandates
 // it for JSON, while Vite resolves JSON imports itself.
 import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
+import { auditPage, describeViolations } from "./support/axe";
 
 /**
  * The photo viewer, against a production build — which is the only place its
@@ -352,5 +353,85 @@ test.describe("on a 320 px screen", () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth
     );
     expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
+
+/**
+ * **A trip with no photograph at all** — the first acceptance criterion of TIW-18,
+ * and the one that turned out to be already met.
+ *
+ * It is pinned here rather than reimplemented, because *already met* is a claim
+ * about the served bytes and nothing in the suite was checking it. The trip page
+ * omits the gallery section, the cover and the viewer by three separate
+ * conditions in three different places (`galleryPhotos.length > 0`,
+ * `cover === null`, `viewer.length > 0`), and any one of them could be relaxed by
+ * an edit that looked like tidying — leaving an empty `<section>` under a heading
+ * promising photos, which is exactly the "cadre vide" the ticket is named after.
+ *
+ * `japon-2025` is the trip: one stay in Osaka, no `photos` key at all, so the
+ * schema's `.default([])` is what the page receives — the ordinary shape of a
+ * `trip.yaml` that never mentions photographs.
+ */
+test.describe("a trip with no photograph", () => {
+  const BARE_TRIP = "/fr/voyages/japon-2025";
+
+  test("renders no image element, so there is no broken-image glyph to paint", async ({ page }) => {
+    await page.goto(BARE_TRIP);
+
+    /**
+     * Asserted on the *elements* and not on the styling, because that is what the
+     * criterion is about: an `<img>` with an absent or empty `src` is precisely
+     * what makes a browser draw its broken-image icon, and a `<picture>` commits
+     * to whichever `<source>` it selected (ADR 0014). No element, nothing to
+     * break.
+     */
+    await expect(page.locator("img")).toHaveCount(0);
+    await expect(page.locator("picture")).toHaveCount(0);
+  });
+
+  test("omits the gallery section rather than showing an empty one", async ({ page }) => {
+    await page.goto(BARE_TRIP);
+
+    /**
+     * The heading is the thing that must not exist. "Photos du voyage" over
+     * nothing promises something nobody has undertaken to deliver — and it is a
+     * heading, so a screen-reader reader walking the page by heading is sent to an
+     * empty chapter.
+     */
+    await expect(page.getByRole("heading", { name: frMessages.trip.photosHeading })).toHaveCount(0);
+
+    // The two chapters that do belong to every trip are still there, so this does
+    // not pass by the page having failed to render.
+    await expect(page.getByRole("heading", { name: frMessages.trip.mapHeading })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: frMessages.trip.timelineHeading })
+    ).toBeVisible();
+  });
+
+  test("mounts no viewer, since nothing could ever open it", async ({ page }) => {
+    await page.goto(BARE_TRIP);
+
+    /**
+     * A `<dialog>` with no photograph in it is a dialog no trigger can reach, and
+     * it would still be in the document for a screen reader to meet. The count is
+     * zero rather than "not visible": `<dialog>` is hidden until `showModal`, so
+     * "not visible" would pass on a page that shipped one.
+     */
+    await expect(page.locator("dialog")).toHaveCount(0);
+    await expect(page.locator("[data-photo-index]")).toHaveCount(0);
+  });
+
+  test("has no WCAG 2.2 AA violation axe can find", async ({ page }) => {
+    /**
+     * The photoless page audited in its own right. The populated audits elsewhere
+     * run on `/fr` and `/fr/voyages`; a trip page with every optional block absent
+     * is a different document, and "no empty frame" is precisely the kind of
+     * defect that shows up as an empty landmark or a heading with no content.
+     */
+    await page.goto(BARE_TRIP);
+    const report = await auditPage(page);
+
+    expect(report.violations, describeViolations(report)).toEqual([]);
+    expect(report.passes).toBeGreaterThan(10);
   });
 });
