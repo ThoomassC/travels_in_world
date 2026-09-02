@@ -37,8 +37,9 @@ par TIW-31 puis recontrôlée par TIW-33 :
   ensemble clos de trois, littéralement :
   `client/components/http-access-fallback/http-access-fallback.js:35-40` déclare
   `{ NOT_FOUND: 404, FORBIDDEN: 403, UNAUTHORIZED: 401 }`, et `ALLOWED_CODES`
-  n'est rien d'autre que les valeurs de cet objet. Aucun `gone()` n'existe, ni
-  dans la version installée ni sur `canary` au 2026-09-01.
+  n'est rien d'autre que les valeurs de cet objet. Aucun `gone()` n'existe dans
+  la version installée, vérifié ici ; TIW-31 rapporte la même lecture sur
+  `canary` au 2026-09-01, et cette moitié-là n'a pas été rejouée.
 - Un Route Handler, lui, sait rendre 410, et cesse d'être prérendu à l'instant
   où il le fait. **Le même handler sort `○` en rendant 200 et `ƒ` en rendant
   410**, et la ligne qui le décide est `export/routes/app-route.js:95` :
@@ -226,8 +227,8 @@ route à la demande réintroduirait exactement le trou décrit au constat 2.
    que le `.meta` accepte de porter » : cette seconde moitié n'a jamais rien
    signalé, puisque le `.meta` accepte déjà n'importe quel statut au-dessus de 300
    (`export/routes/app-page.js:129-142`, corrigé plus haut). Le signal utile est
-   donc l'unique : une interruption prérendable côté rendu. Vérifié absent au
-   **2026-09-01**, version installée et `canary`. Ce jour-là, le premier
+   donc l'unique : une interruption prérendable côté rendu. Absent de la version
+   installée, et de `canary` au **2026-09-01** selon TIW-31. Ce jour-là, le premier
    renoncement tombe de lui-même et servir un 410 devient une ligne plutôt qu'un
    choix d'architecture.
 2. **Une mesure du corps que rend une règle `status` de `vercel.json`**, prise
