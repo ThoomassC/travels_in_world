@@ -357,3 +357,34 @@ commande aura besoin d'une projection.
    prix : une dépendance à peser contre le budget d'`AGENTS.md`.
 
 Aucun de ces signaux n'est présent aujourd'hui.
+
+> **Note (TIW-33, 2026-09-01).** Le signal 3 s'est produit, la phrase de clôture
+> ci-dessus est donc dépassée pour lui — et **la frontière n'a pas bougé d'une
+> ligne**. La décision est écrite en entier dans
+> `docs/adr/0015-un-artefact-genere-traverse-une-frontiere.md` ; ce qui suit est
+> ce que cette ADR-ci en retient.
+>
+> **Ce que le signal annonçait de juste.** Un consommateur a réellement eu besoin
+> d'une **valeur** du dossier gardé et pas seulement d'un type, et le remède
+> prévu est celui qui a été retenu : un artefact généré, servi comme donnée.
+> `src/basemap-coverage.ts` — la liste des 174 pays que le millésime livré sait
+> dessiner — est lu par `src/content/validate.ts`, qui n'importe donc ni
+> `world-atlas`, ni la façade, ni quoi que ce soit du dossier.
+>
+> **Ce qu'il annonçait de faux, en deux points.** Ce n'est pas un composant
+> client : c'est un script Node. Cette liste d'invalidation nommait le seul
+> consommateur qu'elle voyait ne pas pouvoir traverser la frontière, celui qui
+> est de l'autre côté du bundler — or la frontière en a **deux** côtés
+> infranchissables, et le second, Node nu, était déjà connu au moment où ce
+> document a été écrit (« Vitest échoue **à la résolution** », plus haut). Il n'a
+> simplement pas été reconnu comme le même problème. Et l'artefact n'est pas
+> « généré au build » : il est généré par une commande et **committé**, parce que
+> son consommateur tourne dans le hook `prebuild`, donc avant que `next build`
+> ait pu produire quoi que ce soit.
+>
+> La formulation qui aurait couvert les deux cas : **une couche qui ne peut pas
+> atteindre une couche gardée lit un texte qu'une commande a extrait de
+> celle-ci** — quel que soit le côté de la frontière où elle se trouve, et quel
+> que soit le moment où la commande a tourné.
+>
+> Les signaux 1, 2 et 4 restent absents.
