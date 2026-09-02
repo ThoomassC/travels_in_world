@@ -75,10 +75,14 @@ export function weighFiles(files: readonly WeighedFile[]): WeightSummary {
  * `12,3 Mo`, or `84 Ko` under a megabyte — the same spelling and the same switch
  * as `index-photos-report.ts`, for the same measured reason.
  *
- * The kilobyte branch is not cosmetic here either: the repository carries exactly
- * one tracked image today (`public/opengraph-default.png`, TIW-23) and one decimal
- * of a megabyte printed it as « 0,0 Mo » — a line whose only job is to say what
- * the repository weighs, saying nothing. The megabyte stays for the total once
+ * The kilobyte branch is not cosmetic here either: the roots this guard weighs
+ * carry exactly one image today (`public/opengraph-default.png`, TIW-23) and one
+ * decimal of a megabyte printed it as « 0,0 Mo » — a line whose only job is to say
+ * what the repository weighs, saying nothing.
+ *
+ * "The roots this guard weighs", not "the repository": this comment said the latter
+ * and it was false. `git ls-files` tracks 18 images, 78 351 bytes, and seventeen of
+ * them sit outside `IMAGE_ROOTS` — fixtures and brand icons, excluded on purpose. The megabyte stays for the total once
  * real photographs land, which is what the 150 Mo threshold is compared against.
  */
 function formatWeight(bytes: number): string {
@@ -98,10 +102,26 @@ export function formatWeightReport(summary: WeightSummary): readonly string[] {
   const limit = formatWeight(PHOTO_WEIGHT_LIMIT_BYTES);
 
   if (summary.fileCount === 0) {
-    return [`Aucune image suivie par git pour l'instant — rien à peser (seuil : ${limit}).`];
+    return [
+      `Aucune image de contenu suivie par git pour l'instant — rien à peser (seuil : ${limit}).`,
+    ];
   }
 
-  const headline = `${summary.fileCount} image${summary.fileCount > 1 ? "s" : ""} suivie${summary.fileCount > 1 ? "s" : ""} par git, ${formatWeight(summary.totalBytes)} sur un seuil de ${limit}.`;
+  /**
+   * « de contenu », et le mot fait tout le travail.
+   *
+   * Sans lui la ligne se lisait comme un décompte du dépôt entier, et elle était
+   * fausse : mesuré le 2026-09-02, `git ls-files` suit **18** images pour 78 351
+   * octets, dont une seule sous les racines que ce garde pèse. Les dix-sept autres
+   * sont les fixtures de `tests/fixtures/content/**` et les deux icônes de marque —
+   * **66 % des octets d'image du dépôt sont hors de ce budget**, délibérément (voir
+   * `IMAGE_ROOTS` dans `scripts/photo-weight.ts` : ce budget vise le contenu, qui
+   * grossit, et non le code, qui ne grossit pas).
+   *
+   * Un garde qui annonce « 1 image suivie par git » dans un dépôt qui en suit
+   * dix-huit apprend au lecteur à ne pas le croire.
+   */
+  const headline = `${summary.fileCount} image${summary.fileCount > 1 ? "s" : ""} de contenu suivie${summary.fileCount > 1 ? "s" : ""} par git, ${formatWeight(summary.totalBytes)} sur un seuil de ${limit}.`;
 
   if (!summary.overLimit) {
     return [headline];

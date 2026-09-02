@@ -83,9 +83,14 @@ describe("the report", () => {
   });
 
   /**
-   * The repository carries exactly one tracked image today — TIW-23's default
+   * The roots this guard weighs carry exactly one image today — TIW-23's default
    * share card — and one decimal of a megabyte printed the whole report as
    * « 0,0 Mo », which is a line saying nothing on the one subject it exists for.
+   *
+   * "The roots this guard weighs", not "the repository": this comment said the
+   * latter and it was false. Measured 2026-09-02, `git ls-files` tracks 18 images
+   * for 78 351 bytes; seventeen are fixtures and brand icons, outside `IMAGE_ROOTS`
+   * on purpose.
    */
   it("counts in kilobytes below a megabyte, so a small repository is still legible", () => {
     const lines = formatWeightReport(weighFiles([file("public/share.png", 84_000)])).join("\n");
@@ -111,6 +116,37 @@ describe("the report", () => {
     expect(lines).toContain("public/photos/x/a.jpg");
     expect(lines).toMatch(/stockage externe/i);
     expect(lines).toMatch(/URL absolue/i);
+  });
+
+  /**
+   * The word « de contenu » in the headline, and it is load-bearing rather than
+   * decorative — which is why it gets a case of its own.
+   *
+   * Without it the line reads as a count of the whole repository, and as such it
+   * was false: the guard weighs `public/` and `content/` only, so it printed
+   * « 1 image suivie par git » in a repository tracking eighteen of them — 66 % of
+   * the image bytes here sit in `tests/fixtures/content/**` and in the two brand
+   * icons, excluded on purpose because this budget is about content, which grows,
+   * and not about code, which does not.
+   *
+   * A guard whose own report overstates its reach teaches the reader to discount
+   * it, and a discounted guard is a guard that no longer guards. Asserted on both
+   * branches, because the empty case is the one a fresh clone actually sees.
+   */
+  it("scopes its count to content, not to every image the repository tracks", () => {
+    const one = formatWeightReport(weighFiles([file("public/share.png", 84_000)])).join("\n");
+    const none = formatWeightReport(weighFiles([])).join("\n");
+
+    expect(one).toContain("1 image de contenu suivie par git");
+    expect(none).toContain("Aucune image de contenu suivie par git");
+
+    // The plural has to agree with the added words, which is exactly the kind of
+    // thing an interpolated message gets wrong once and keeps wrong.
+    const two = formatWeightReport(
+      weighFiles([file("public/a.jpg", 1_000), file("content/b.jpg", 2_000)])
+    ).join("\n");
+
+    expect(two).toContain("2 images de contenu suivies par git");
   });
 
   it("says nothing is tracked yet rather than reporting 0 Mo of photos", () => {
