@@ -15,6 +15,8 @@
   },
   "trips": {
     "skipToContent": "Aller au contenu",
+    "noticeLabel": "État du carnet",
+    "noticeBody": "Le carnet est en cours d’écriture : les lieux se posent sur la carte, les récits et les photos suivent.",
     "navLabel": "Navigation principale",
     "navMap": "Carte",
     "navAll": "Tous les voyages",
