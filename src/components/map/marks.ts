@@ -13,6 +13,23 @@ import type { Frame, Point } from "./frame";
  * Next — and it means a new field on `TripSummary` cannot break the map.
  */
 export type TripMark = {
+  /**
+   * **Which kind of thing this marker names** (TIW-36), and a required
+   * discriminator rather than an optional one.
+   *
+   * The map now carries two: a trip, and a *visited place* — somewhere the
+   * journal has been with no journey written for it, therefore with no date, no
+   * step and no page (`docs/lieux-visites.md`). The two render differently in
+   * three ways: their accessible name, their dot, and whether a zone's panel can
+   * offer them a card.
+   *
+   * Required, and the direction it fails in is the reason. Defaulted to `"trip"`
+   * the way `isNew` is defaulted to absent, a third kind added later would
+   * silently inherit "has a card and a page"; required, it has no rendering at
+   * all until somebody decides on one, and the compiler asks the page — the only
+   * place that builds these.
+   */
+  readonly kind: "trip";
   /** The trip's slug, used as the React key and nowhere else. */
   readonly slug: string;
   readonly title: string;
@@ -72,8 +89,59 @@ export type TripMark = {
   readonly story: StoryState;
 };
 
+/**
+ * **A place the journal has been to, with no journey attached** (TIW-36), reduced
+ * to what a marker needs.
+ *
+ * Deliberately *not* a `TripMark` with holes in it, and the fields it does not
+ * have are the point: no `startDate` and no `title`, because a visited place has
+ * no date — a journey's dates are a fact about somebody's life and none is
+ * invented — and no `story`, because there is no récit to be in one state or
+ * another about. What is left is a name, a country, a destination and two
+ * numbers.
+ *
+ * Same discipline as `TripMark` for everything else: the `href` arrives already
+ * built by the page (ADR 0003 — this layer constructs no URL), and it points at
+ * the place's own entry in the map's textual equivalent, `#lieu-<slug>`, which is
+ * on the very document the marker is drawn on. That is the destination "chosen
+ * from what certainly exists" that `visited-countries.tsx` recorded moving to
+ * after measuring a dangling `#pays-xx`, and it is what makes a place's marker a
+ * real link with no page in existence anywhere.
+ */
+export type PlaceMark = {
+  readonly kind: "place";
+  /** The place's slug — the React key, the `<li>` id and the fragment's tail. */
+  readonly slug: string;
+  /** « Rouen ». The only name a place has; there is no title beside it. */
+  readonly placeName: string;
+  /**
+   * The country, localised upstream by `Intl.DisplayNames`.
+   *
+   * Part of the marker's accessible name, and not decoration: « Roses » and
+   * « Valence » are each the name of a town in two different countries, and two of
+   * the fourteen places this ticket loads are exactly that pair. A marker
+   * announcing « Valence » alone tells a screen-reader user nothing about which
+   * one they have landed on.
+   */
+  readonly countryName: string;
+  /** Already locale-prefixed by the page; the component never builds a URL. */
+  readonly href: string;
+  /** Projected into the world box, not geographic. */
+  readonly point: Point;
+};
+
+/**
+ * Anything the drawing can carry a marker for.
+ *
+ * The functions below — the placing, the coincidence spread — read `point` and
+ * nothing else, so they take the union. `zonesOf` does not: a zone exists to
+ * offer several *trips* under one activation, and it stays typed on
+ * {@link TripMark} for the reason written there.
+ */
+export type MapMark = TripMark | PlaceMark;
+
 export type PlacedMark = {
-  readonly mark: TripMark;
+  readonly mark: MapMark;
   /** Distance from the frame's left edge, in percent of its width. */
   readonly leftPercent: number;
   /** Distance from the frame's top edge, in percent of its height. */
@@ -113,7 +181,7 @@ const round = (value: number): number => Number(value.toFixed(DECIMALS));
  * word of complaint. `Number.isFinite` rejects `NaN`, both infinities and every
  * non-number in one call, which is the only reading of "has an area" that holds.
  */
-export function placeMarks(marks: readonly TripMark[], frame: Frame): readonly PlacedMark[] {
+export function placeMarks(marks: readonly MapMark[], frame: Frame): readonly PlacedMark[] {
   const measurable =
     Number.isFinite(frame.x) &&
     Number.isFinite(frame.y) &&

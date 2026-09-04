@@ -9,13 +9,14 @@ import {
   untoldOnlyCountryCodes,
   VisitedCountries,
   WorldMap,
+  type PlaceMark,
   type TripMark,
 } from "@/components/map";
 import { FreshTripBanner } from "@/components/trips/fresh-trip-banner";
 import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { LatestTrips } from "@/components/trips/latest-trips";
 import { TripCard } from "@/components/trips/trip-card";
-import { listTripSummaries } from "@/content/trips";
+import { listTripSummaries, listVisitedPlaces } from "@/content/trips";
 import { freshestTrip } from "@/domain/freshness";
 import { hasStory } from "@/domain/trip";
 import { buildWorldGeometry, projectPoint } from "@/map";
@@ -66,6 +67,23 @@ export default async function HomePage({ params }: HomePageProps) {
    * would cost no second disk read — only a second projection of the same trips.
    */
   const trips = await listTripSummaries();
+  /**
+   * **The second collection** (TIW-36): the places the journal has been to with no
+   * journey written for them, so with no date, no step and no page. `content/`
+   * holds fourteen of them today and no trip at all.
+   *
+   * Read here, beside the trips, because this page is already the one file holding
+   * both façades — and because the two answers have to be joined before either
+   * the drawing or the list beside it can be right: the map tints a country as
+   * soon as *anything* reaches it, and a textual equivalent built from the trips
+   * alone would say « Aucun pays sur la carte pour l'instant » under five tinted
+   * countries and fourteen markers.
+   *
+   * Sequential and not a `Promise.all`, for the reason written above: the façade
+   * memoises its parse for the whole build, so nothing is waiting on I/O here and
+   * pairing them would suggest a waterfall exists where there is none.
+   */
+  const places = await listVisitedPlaces();
   const t = await getTranslations("home");
 
   /**
@@ -91,9 +109,18 @@ export default async function HomePage({ params }: HomePageProps) {
   const fresh = freshestTrip(trips, buildDay());
 
   const world = buildWorldGeometry({
-    // Duplicates are the normal case — several trips share a country — and
-    // `buildWorldGeometry` de-duplicates on its side. Flattening is all this owes.
-    visitedCountryCodes: trips.flatMap((trip) => [...trip.countryCodes]),
+    // Duplicates are the normal case — several trips share a country, and a
+    // country holds several visited places — and `buildWorldGeometry`
+    // de-duplicates on its side. Flattening is all this owes.
+    //
+    // **The places are in here** (TIW-36), which is what tints the five countries
+    // of a journal holding no récit at all. `validate:content` has already refused
+    // a code the basemap cannot draw, from either collection, so nothing reaching
+    // this call can throw inside the prerender — the loop TIW-29 and TIW-30 closed.
+    visitedCountryCodes: [
+      ...trips.flatMap((trip) => [...trip.countryCodes]),
+      ...places.map((place) => place.countryCode),
+    ],
     locale,
   });
 
@@ -113,7 +140,7 @@ export default async function HomePage({ params }: HomePageProps) {
    * subset of it — does not work: the dashed stroke's gaps would show the solid
    * stroke underneath and the two states would render identically.
    */
-  const untoldCodes = untoldOnlyCountryCodes(trips);
+  const untoldCodes = untoldOnlyCountryCodes(trips, places);
   const isUntold = (country: { readonly code: string | null }): boolean =>
     country.code !== null && untoldCodes.has(country.code);
 
@@ -139,6 +166,8 @@ export default async function HomePage({ params }: HomePageProps) {
       ? []
       : [
           {
+            // The discriminator the map layer narrows on (TIW-36) — see `TripMark`.
+            kind: "trip",
             slug: trip.slug,
             title: trip.title,
             // Read only by `zonesOf`, which sorts a zone's panel by date
@@ -183,6 +212,54 @@ export default async function HomePage({ params }: HomePageProps) {
             // accessible name. Compared against the one answer resolved above,
             // never recomputed per marker.
             isNew: trip.slug === fresh?.slug,
+          },
+        ];
+  });
+
+  /**
+   * **One marker per visited place** (TIW-36), anchored on the place itself —
+   * there is no itinerary to take a first arrival from, which is the whole
+   * difference.
+   *
+   * `flatMap` for `projectPoint`'s `null`, exactly as above: a marker built from a
+   * declined coordinate would carry `NaN` percentages, which the browser ignores,
+   * so it would be an invisible link with nothing in the console to say so. And
+   * the `<figcaption>` counts this list, so the figure a reader is told about
+   * stays true to what was drawn.
+   *
+   * **Where a place's marker leads, and why it is a link at all.** It has no page
+   * — `src/content/loader.ts` has no door that could produce an address for one,
+   * which is what makes « aucun lien vers une page inexistante » a property of
+   * the build rather than a discipline. So the destination is chosen from what
+   * certainly exists: the place's own entry in `VisitedCountries`, below the map
+   * on this very document, which carries `id="lieu-<slug>"`. Same move
+   * `visited-countries.tsx` records making after measuring that its `#pays-xx`
+   * fragment dangled, and the same one an untold trip's marker makes.
+   *
+   * A bare fragment and not a path, and `localePathname` is still what builds it:
+   * an href that does not begin with `/` is handed back untouched, which is
+   * exactly right here — the anchor is in this document, so there is no locale
+   * segment to lose and no page to reach. The rule of invariant 2 is respected
+   * rather than side-stepped: no URL is assembled outside `src/i18n/**`.
+   */
+  const placeMarks: readonly PlaceMark[] = places.flatMap((place) => {
+    const point = projectPoint(place.coordinates);
+
+    return point === null
+      ? []
+      : [
+          {
+            kind: "place",
+            slug: place.slug,
+            placeName: place.name,
+            // Localised here, where `Intl.DisplayNames` lives, and never in the
+            // map layer — which knows no locale. « Valence » and « Roses » each
+            // name a town in two countries, and two of the fourteen places this
+            // journal holds are that pair, so the country is part of the marker's
+            // accessible name rather than decoration.
+            countryName: countryNameOf(locale, place.countryCode),
+            href: localePathname({ href: `#lieu-${place.slug}`, locale }),
+            point,
           },
         ];
   });
@@ -262,6 +339,7 @@ export default async function HomePage({ params }: HomePageProps) {
           visited={toldCountries}
           untold={untoldCountries}
           marks={marks}
+          places={placeMarks}
           world={{ width: world.width, height: world.height }}
           tripCards={tripCards}
         />
@@ -292,6 +370,7 @@ export default async function HomePage({ params }: HomePageProps) {
         */}
         <VisitedCountries
           trips={trips}
+          places={places}
           labels={{
             countryName: (code) => countryNameOf(locale, code),
             compare: collatorFor(locale).compare,

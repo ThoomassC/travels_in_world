@@ -232,11 +232,13 @@ describe("placeMarks — what it does to the trip it carries", () => {
     /**
      * Enumerated rather than counted, so a field arriving or leaving has to be
      * acknowledged here — which is the whole job of this case. `story` joined the
-     * list with TIW-18; `isNew` is absent because `tripMark()` leaves the optional
-     * field out entirely.
+     * list with TIW-18 and `kind` with TIW-36, when the map gained a second kind
+     * of marker; `isNew` is absent because `tripMark()` leaves the optional field
+     * out entirely.
      */
     expect(Object.keys(placed[0]?.mark ?? {}).sort()).toEqual([
       "href",
+      "kind",
       "placeName",
       "point",
       "slug",

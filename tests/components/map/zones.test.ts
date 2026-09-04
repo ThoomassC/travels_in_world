@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { frameAround } from "@/components/map/frame";
 import { placeMarks, spreadCoincident, type TripMark } from "@/components/map/marks";
-import { ZONE_RADIUS_PERCENT, worldPointOf, zonesOf } from "@/components/map/zones";
+import { ZONE_RADIUS_PERCENT, tripEntriesOf, worldPointOf, zonesOf } from "@/components/map/zones";
 
 /**
  * Which markers a reader would take for one place, and what the panel therefore
@@ -16,6 +16,7 @@ import { ZONE_RADIUS_PERCENT, worldPointOf, zonesOf } from "@/components/map/zon
 const WORLD = { width: 960, height: 500 };
 
 const mark = (slug: string, startDate: string, x: number, y: number): TripMark => ({
+  kind: "trip",
   slug,
   title: slug,
   placeName: slug,
@@ -29,7 +30,9 @@ const mark = (slug: string, startDate: string, x: number, y: number): TripMark =
 const WHOLE = frameAround([], WORLD);
 
 const place = (marks: readonly TripMark[], frame = WHOLE) =>
-  spreadCoincident(placeMarks(marks, frame), frame);
+  // `tripEntriesOf` is the narrowing `zonesOf` asks for since TIW-36, when the
+  // map gained a second kind of marker a zone cannot offer. These are all trips.
+  tripEntriesOf(spreadCoincident(placeMarks(marks, frame), frame));
 
 /**
  * Indexed access, without the non-null assertion this repository's sources do
@@ -293,7 +296,7 @@ describe("zonesOf", () => {
     // Unreachable through `frameAround`, which throws for a world with none, and
     // through `placeMarks`, which answers nothing for a frame with none. Asserted
     // because the alternative is a marker whose activation opens no panel at all.
-    const placed = placeMarks([mark("a", "2024-01-01", 1, 1)], WHOLE);
+    const placed = tripEntriesOf(placeMarks([mark("a", "2024-01-01", 1, 1)], WHOLE));
     const zones = zonesOf(placed, { viewBox: "", x: 0, y: 0, width: 0, height: 0 });
 
     expect(zones).toHaveLength(1);

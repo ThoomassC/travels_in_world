@@ -59,6 +59,25 @@
 }
 
 /**
+ * Each entry is a **column**: the country's pill, and under it the dateless
+ * places it holds (TIW-36).
+ *
+ * An element selector inside a module, which is not renamed — so this is
+ * `.list_hash > li` and reaches nothing else. It is written on the item rather
+ * than on a class of its own because there is exactly one shape of entry, and a
+ * class would be a name for "the thing the list is made of".
+ *
+ * `align-items: flex-start` so the pill keeps its content width instead of
+ * stretching to the widest place name under it.
+ */
+.list > li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+/**
  * The whole row is the target, name and count together.
  *
  * `min-block-size: 2.75rem` — 44 px at the root size — for the same reason the
@@ -73,6 +92,9 @@
  * use of *colour*, and neither channel here is colour).
  */
 .link {
+  /* `margin: 0` because this class is also worn by a `<p>` — the row of a country
+     with no trip to lead to — and a paragraph brings the browser's own margins. */
+  margin: 0;
   display: inline-flex;
   align-items: baseline;
   gap: var(--space-2);
@@ -103,7 +125,13 @@
  * this same token pair for a pill, in favour of `--control-border`. This file
  * briefly re-introduced the token that comparison rejected.
  */
-.link:hover {
+/**
+ * `a.link` and not `.link`, since TIW-36: a country reached only by dateless
+ * places has no trip to lead to, so its row is a `<p>` carrying the same class —
+ * see the component. A `<p>` that lit up under the pointer would promise a
+ * navigation it cannot perform.
+ */
+a.link:hover {
   background: var(--accent-quiet);
 }
 
@@ -161,5 +189,46 @@
   color: var(--text-muted);
   font-size: var(--text-sm);
   font-style: italic;
+  white-space: nowrap;
+}
+
+/**
+ * **The visited places of one country** — TIW-36.
+ *
+ * Nested under the country rather than given a section of their own, because the
+ * *join* between the two channels is precisely what the accessibility audit of
+ * TIW-20 found missing on this page: five countries on one side, four cities on
+ * the other, and nothing saying which city was in which country.
+ *
+ * Plain text and not links, and that is the content of the decision rather than
+ * a style: a visited place has **no page** — `src/content/loader.ts` has no door
+ * that could produce an address for one — so each entry carries the
+ * `id="lieu-<slug>"` that its own marker on the map points at, and the anchor is
+ * the destination. Nothing here is a target, so nothing here owes 44 px.
+ *
+ * `--text-muted` at `--text-sm`, the pair `.trips` above already measures on this
+ * background: 5.85:1 in the light theme, 13.70:1 in the dark one — text needs
+ * 4.5:1 at this size. Quieter than the country name, because a place is a detail
+ * of the country it sits under and not a second fact beside it.
+ */
+.places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  margin: 0;
+  padding-inline: var(--space-4);
+  list-style: none;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/**
+ * A separator that is **not** a `::after` bullet: a punctuation character
+ * injected by CSS is read out by some screen readers and absent from the DOM for
+ * every tool that reads it, so the visual separation is the gap above and the
+ * comma-free list is what a reader hears. `white-space: nowrap` keeps
+ * « Les Sables-d'Olonne » from breaking across two lines in the middle of a name.
+ */
+.place {
   white-space: nowrap;
 }

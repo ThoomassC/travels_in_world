@@ -35,10 +35,10 @@
 
 export { WorldMap } from "./world-map";
 export type { MapCountry, WorldMapProps } from "./world-map";
-export type { TripMark } from "./marks";
+export type { MapMark, PlaceMark, TripMark } from "./marks";
 export { VisitedCountries } from "./visited-countries";
 export type { VisitedCountriesProps } from "./visited-countries";
-export type { CountingTrip, CountryLabels, VisitedCountryTally } from "./countries";
+export type { CountingPlace, CountingTrip, CountryLabels, VisitedCountryTally } from "./countries";
 /**
  * A **value** export, unlike everything above it, and the only one on this list.
  *

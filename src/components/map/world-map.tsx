@@ -2,8 +2,8 @@ import { Fragment, type CSSProperties, type ReactElement, type ReactNode } from 
 import { useTranslations } from "next-intl";
 import { frameAround, type WorldBox } from "./frame";
 import { MapViewport, type MapViewportZone } from "./map-viewport";
-import { placeMarks, spreadCoincident, type TripMark } from "./marks";
-import { worldPointOf, zonesOf } from "./zones";
+import { placeMarks, spreadCoincident, type MapMark, type PlaceMark, type TripMark } from "./marks";
+import { tripEntriesOf, worldPointOf, zonesOf } from "./zones";
 import styles from "./world-map.module.css";
 
 /**
@@ -115,6 +115,23 @@ export type WorldMapProps = {
   readonly untold?: readonly MapCountry[];
   /** One marker per published trip, already projected and already sorted upstream. */
   readonly marks: readonly TripMark[];
+  /**
+   * One marker per **visited place** (TIW-36) — somewhere the journal has been
+   * with no journey written for it, so with no date, no step and no page.
+   *
+   * A second list and not a widened `marks`, which is the decision this prop
+   * records. The two kinds are laid out together — the frame is fitted around all
+   * of them, and `spreadCoincident` nudges a place off a trip it lands on — but
+   * they are *not* interchangeable: a zone offers trips under one activation and
+   * offers them with a card, and a place has none. Keeping them apart in the
+   * signature is what makes that impossible to forget here, and it is why the
+   * caption can count them separately rather than calling fourteen places
+   * fourteen voyages.
+   *
+   * Optional, because a journal with no dateless place is the ordinary case — and
+   * was this repository's whole state until TIW-36.
+   */
+  readonly places?: readonly PlaceMark[];
   /** The projected world box — `{ width: 960, height: 500 }` in production. */
   readonly world: WorldBox;
   /**
@@ -171,11 +188,25 @@ type FigureStyle = CSSProperties & Record<"--world-aspect", string>;
 const shapeKey = (country: MapCountry, index: number): string =>
   `${country.code ?? "unassigned"}-${index}`;
 
+/**
+ * A marker's identity in the document: `voyage-<slug>` for a trip,
+ * `lieu-<slug>` for a visited place (TIW-36).
+ *
+ * One function for the React key *and* the `<li>` id, so the two cannot drift —
+ * and namespaced by kind because the two collections have separate slug
+ * namespaces. `voyage-<slug>` is not a new spelling: it is the fragment the trip
+ * page has always linked back to, and `lieu-<slug>` is the one a place's own
+ * marker points at in the list under the map.
+ */
+const markKey = (mark: MapMark): string =>
+  `${mark.kind === "trip" ? "voyage" : "lieu"}-${mark.slug}`;
+
 export function WorldMap({
   countries,
   visited,
   untold = [],
   marks,
+  places = [],
   world,
   tripCards,
 }: WorldMapProps): ReactElement {
@@ -185,7 +216,7 @@ export function WorldMap({
   // knows both the markers and the world, and a `Frame` in props would let a
   // caller hand over a viewBox that disagrees with the marker percentages.
   const frame = frameAround(
-    marks.map((mark) => mark.point),
+    [...marks, ...places].map((mark) => mark.point),
     world
   );
   /**
@@ -194,7 +225,7 @@ export function WorldMap({
    * spread nudges coincident markers onto a small circle so each keeps some
    * exposed area. It is a mitigation, not a separation — see `spreadCoincident`.
    */
-  const placed = spreadCoincident(placeMarks(marks, frame), frame);
+  const placed = spreadCoincident(placeMarks([...marks, ...places], frame), frame);
 
   /**
    * Which markers a reader would take for one place, and therefore which trips
@@ -202,7 +233,7 @@ export function WorldMap({
    * server rendered — `zonesOf` records why it is not re-clustered as the reader
    * zooms, and what that buys.
    */
-  const zones = zonesOf(placed, frame);
+  const zones = zonesOf(tripEntriesOf(placed), frame);
   const zoneOfTrip = new Map(
     zones.flatMap((zone) => zone.marks.map((entry) => [entry.mark.slug, zone.id] as const))
   );
@@ -218,6 +249,26 @@ export function WorldMap({
    * no longer has to pass a number it computed for a stylesheet it does not own.
    */
   const figureStyle: FigureStyle = { "--world-aspect": String(world.width / world.height) };
+
+  /**
+   * The clauses the caption is made of — the ones that carry something, in
+   * reading order.
+   *
+   * Nothing here is a total: a trip and a dateless visited place are not the same
+   * kind of thing, and « 14 voyages » over a journal holding no récit at all is
+   * exactly the invented fact this repository refuses. An absent clause is
+   * dropped rather than rendered as a zero, because a sentence that opens on
+   * « aucun voyage publié » describes what is missing instead of what the drawing
+   * shows.
+   *
+   * Counted from what the page published — never from `placed` — so a marker the
+   * frame could not place cannot quietly shrink the number the reader is told.
+   */
+  const captionParts = [
+    marks.length > 0 ? t("summaryTrips", { count: marks.length }) : undefined,
+    places.length > 0 ? t("summaryPlaces", { count: places.length }) : undefined,
+    t("summaryCountries", { count: visited.length + untold.length }),
+  ].filter((part): part is string => part !== undefined);
 
   /**
    * **Whether there is a drawing at all**, and the one state that would render an
@@ -315,8 +366,18 @@ export function WorldMap({
               duplicate `id` is possible.
             */
             <li
-              key={mark.slug}
-              id={`voyage-${mark.slug}`}
+              /*
+                Namespaced by kind (TIW-36), because the two collections have
+                separate slug namespaces: `content/places.yaml` may legitimately
+                hold a place called « annecy » while a trip is called « annecy »
+                too — `/voyages/annecy` and `#lieu-annecy` are different
+                addresses, and the validator refuses only the case that really is
+                one thing twice (the same *place* slug in both collections).
+                Un-namespaced, that pair would emit a duplicate `id` and React
+                would keep one of the two markers.
+              */
+              key={markKey(mark)}
+              id={markKey(mark)}
               className={styles.mark}
               style={markStyle}
             >
@@ -339,15 +400,25 @@ export function WorldMap({
               <a
                 className={styles.link}
                 href={mark.href}
-                data-trip={mark.slug}
-                data-zone={zoneOfTrip.get(mark.slug)}
+                /*
+                  `data-trip` on a trip only (TIW-36). It is the whole interface
+                  between this list and the client component, which reads it
+                  through `closest("a[data-trip]")` — so a visited place carrying
+                  it would have its activation intercepted for a panel that has no
+                  card to show, and the marker would answer nothing at all. Absent,
+                  the link simply navigates, with or without JavaScript, which is
+                  the one behaviour a place needs.
+                */
+                {...(mark.kind === "trip"
+                  ? { "data-trip": mark.slug, "data-zone": zoneOfTrip.get(mark.slug) }
+                  : { "data-place": mark.slug })}
                 /*
                   TIW-19's badge on the map. An attribute and not a second class
                   name, so the halo below is one CSS rule keyed on it and the
                   client component's `closest("a[data-trip]")` reading is
                   untouched — it never looks at classes.
                 */
-                data-new={mark.isNew === true ? "" : undefined}
+                data-new={mark.kind === "trip" && mark.isNew === true ? "" : undefined}
                 /*
                   TIW-18's third state. An attribute and not a class name, the
                   same reasoning as `data-new`: `map-viewport.tsx` reads markers
@@ -361,7 +432,18 @@ export function WorldMap({
                   exists (the trip's entry in the listing), and a disabled-looking
                   link that still navigates is worse than either.
                 */
-                data-story={mark.story === "unwritten" ? "unwritten" : undefined}
+                data-story={
+                  mark.kind === "trip" && mark.story === "unwritten" ? "unwritten" : undefined
+                }
+                /*
+                  A visited place gets its own dot shape (TIW-36) — a small ring,
+                  distinct from both the solid trip dot and the hollow untold one
+                  — so the three states differ by *shape* and not by hue alone.
+                  The accessible name below says it in words as well; a
+                  distinction carried by a drawing does not exist for the readers
+                  who cannot see it.
+                */
+                data-kind={mark.kind === "place" ? "place" : undefined}
               >
                 <span className={styles.dot} aria-hidden="true" />
                 {/*
@@ -415,11 +497,21 @@ export function WorldMap({
                     written is the map promising something it also says does not
                     exist. Of the two, "récit à venir" is the one a reader needs.
                   */}
-                  {mark.story === "unwritten"
-                    ? t("markLabelToCome", { title: mark.title, place: mark.placeName })
-                    : mark.isNew === true
-                      ? t("markLabelNew", { title: mark.title, place: mark.placeName })
-                      : t("markLabel", { title: mark.title, place: mark.placeName })}
+                  {/*
+                    A visited place has no title to put in front of its city, so
+                    it gets a wording of its own rather than an empty slot in the
+                    trips' one: « Rouen, France — lieu visité, récit à venir ».
+                    The country is in it because « Valence » and « Roses » each
+                    name a town in two countries, and two of the fourteen places
+                    this journal holds are that pair.
+                  */}
+                  {mark.kind === "place"
+                    ? t("markLabelPlace", { place: mark.placeName, country: mark.countryName })
+                    : mark.story === "unwritten"
+                      ? t("markLabelToCome", { title: mark.title, place: mark.placeName })
+                      : mark.isNew === true
+                        ? t("markLabelNew", { title: mark.title, place: mark.placeName })
+                        : t("markLabel", { title: mark.title, place: mark.placeName })}
                 </span>
               </a>
             </li>
@@ -567,9 +659,24 @@ export function WorldMap({
           trips per country over the whole collection — and would quietly shrink
           the number the day a récit went unwritten.
         */}
-        {showsWholeWorld
-          ? t("summary", { trips: marks.length, countries: visited.length + untold.length })
-          : t("summaryCropped", { trips: marks.length, countries: visited.length + untold.length })}
+        {/*
+          **Three parts joined here, and not one message with three slots**
+          (TIW-36). The caption has to be true in states that are not variations
+          of one sentence: fourteen visited places and no trip at all is this
+          journal's own state today, and an ICU message with a `=0` branch per
+          count reads « aucun voyage publié, 14 lieux visités, 5 pays » — a
+          sentence that opens on what is missing. Joining the parts that carry
+          something means the caption says what the drawing *shows*.
+
+          `marks.length` and `places.length` and never a total: a trip and a
+          dateless place are not the same thing, and « 14 voyages » over a journal
+          holding no récit is exactly the invented fact this repository refuses.
+
+          Counted from what the page published — `marks`, `places`, `visited`,
+          `untold` — and never from `placed`, so a marker the frame could not
+          place cannot quietly shrink the number the reader is told.
+        */}
+        {`${showsWholeWorld ? t("summaryWorld") : t("summaryCropped")}${captionParts.join(", ")}`}
       </figcaption>
     </figure>
   );
