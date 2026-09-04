@@ -1,0 +1,104 @@
+/* =============================================================================
+   The journal-state notice — one line under the header, on every page under
+   `[locale]`, for as long as the journal holds no récit (TIW-35).
+
+   No colour is declared here; every value comes from `src/styles/tokens.css`,
+   which is what keeps the dark theme working without this file knowing that it
+   exists. No animation, no icon, no border and no plate: the client asked for
+   "une ligne, pas un encart", and a sentence needs none of those to be read.
+   ============================================================================ */
+
+/**
+ * **A line, aligned on the page's own measure.**
+ *
+ * `max-width` / `margin-inline` / `padding-inline` are copied from `.header` in
+ * `site-nav.module.css` and from the global `main` rule, so the notice's first
+ * letter sits above the header's first letter and above the page's first letter.
+ * Three different alignments in the top 100 px of every page would read as a
+ * mistake.
+ *
+ * `--text-muted` on the page background, which is the pairing `.intro` on the home
+ * page already uses on the same background — so it is a contrast this repository's
+ * axe audits have measured in both themes rather than one this file is asking to
+ * be trusted on. It is redeclared under both dark blocks of `tokens.css`, and
+ * `tests/e2e/journal-notice.spec.ts` audits the served page in the two schemes.
+ *
+ * The one thing that marks this as chrome rather than prose is its size and its
+ * position, not a colour — nothing here is the only channel for anything (WCAG
+ * 1.4.1), because the sentence *is* the information.
+ */
+.notice {
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+  padding: var(--space-2) var(--space-5) 0;
+}
+
+.body {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  /**
+   * Tighter than the document's 1.6 and deliberately so: this is a single line of
+   * chrome, not a paragraph to read at length, and 1.6 spends 8 px of the first
+   * screen on air inside one line.
+   *
+   * **And no `max-width`, which is the opposite of what every other paragraph in
+   * this repository does — measured, not assumed.** The first version carried
+   * `max-width: 70ch`, the measure `.intro` uses; at `--text-sm` that is about
+   * 490 px, so the sentence wrapped to two lines and the band came out at **47 px**
+   * instead of 28. A measure exists to stop a reader losing the start of the next
+   * line, and it earns its keep on a paragraph; here it bought a second line on a
+   * one-sentence notice the client asked to keep to one. The sentence renders at
+   * about 690 px, so it fits on one line in the 1104 px content column from roughly
+   * 740 px of viewport upwards, and wraps below that — which is where the wrapping
+   * belongs.
+   */
+  line-height: 1.4;
+}
+
+/**
+ * **The whole of why this notice costs nothing at the fold, and it is a
+ * measurement rather than a preference.**
+ *
+ * TIW-13's criterion asks the first screen to carry a sentence, the map and the
+ * start of the latest-trips block, and TIW-19 already had to compact its own banner
+ * from 122 px to 40 px to keep it. Measured on the served build of the empty
+ * journal, before a line of this file existed, the map's `<figure>` ends at:
+ *
+ *   1152 x 800   bottom 715   ->  85 px of room under the fold
+ *   1280 x 720   bottom 696   ->  24 px of room under the fold
+ *
+ * **24 px** is what decided this rule. A band added under the header costs a line
+ * of text plus its air — 28 px at the very least — so it fitted at 1152 x 800 and
+ * *overflowed* at 1280 x 720. Compressing the type until 24 px was enough would
+ * mean 12 px of body copy on every page of the site to buy 15 px on one, which is
+ * a bad trade.
+ *
+ * So the notice does not create a band: it sits in the one that already existed.
+ * `main { padding-block-start: var(--section-space) }` is 92 px at 1152 and 102 px
+ * at 1280 of pure decoration above the `<h1>`, and this rule spends part of it.
+ *
+ * Two properties of the selector, both load-bearing:
+ *
+ * - **it undoes itself.** It is an adjacency, so the day `holdsNoStory` answers
+ *   `false` the notice is not rendered, `main` has no preceding sibling, and the
+ *   full `--section-space` comes back. There is nothing to remember to revert —
+ *   which is the same reasoning as deriving the banner from the content in the
+ *   first place (`docs/le-bandeau-des-recits-a-venir.md`).
+ * - **`--space-7` is `3rem`, exactly the floor of `--section-space`'s `clamp()`.**
+ *   So where the whitespace was already at its minimum — narrow viewports, where
+ *   vertical room is scarcest and the sentence wraps to two or three lines — this
+ *   rule takes nothing away. It bites only where the band was generous. That is
+ *   why it is this token and not a smaller one.
+ *
+ * `main` is an element selector inside a CSS Module, so it is not hashed and the
+ * rule really does reach the page's `<main>`; the class is what scopes it to
+ * documents where the notice is present. The specificity (0,1,1) beats the global
+ * `main` rule in `tokens.css` (0,0,1) without an `!important`.
+ *
+ * The figures after this rule are in the ticket's report, and the guard that keeps
+ * them true is `tests/e2e/journal-notice.spec.ts`, which measures the served page
+ * at both viewports. A measured number with no test drifts.
+ */
+.notice + main {
+  padding-block-start: var(--space-7);
+}

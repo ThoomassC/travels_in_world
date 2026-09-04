@@ -49,6 +49,51 @@ export function hasStory(trip: { readonly story: StoryState }): boolean {
   return trip.story === "written";
 }
 
+/**
+ * **Whether the journal holds no récit at all — the whole of TIW-35's rule.**
+ *
+ * The collective negation of {@link hasStory}, and it lives here rather than beside
+ * the banner that renders it for the reason every rule in this folder does: it is a
+ * function of the collection and of nothing else, so it is assertable without React,
+ * without a disk and without a clock. `docs/le-bandeau-des-recits-a-venir.md` carries
+ * the arbitration — derived from the content rather than declared by a switch; this
+ * is the one place the answer is computed.
+ *
+ * **True in two states, and the second is the point.** An empty collection — the
+ * repository's own until the first `trip.yaml` lands — and a collection whose every
+ * trip is `story: unwritten`, which is how a journey arrives when the places are
+ * known and the dates are not (TIW-18). A rule written `trips.length === 0` would
+ * leave exactly the reader this banner exists for with no explanation: the one
+ * looking at tinted countries and markers with not one récit behind them.
+ *
+ * **`!trips.some(hasStory)`, never `trips.every((t) => t.story === "unwritten")`.**
+ * The two read the same today and part company the day {@link StoryState} gains a
+ * member. This spelling fails *closed* — an unknown state is not a readable récit,
+ * so the banner stays and its sentence stays true — where the other fails open and
+ * would hide the banner on a journal nobody can read a word of. Same direction, and
+ * the same reason, as the equality in `hasStory` right above.
+ *
+ * **What it deliberately does not take: a day.** This is the one line that keeps
+ * TIW-35 out of the arbitration `docs/fraicheur-au-prerendu.md` had to make for
+ * TIW-19. The freshness rule takes `today` as an argument, so its badge outlives its
+ * window until the next build; this predicate reads the collection alone, so
+ * publishing the first récit — which *is* a commit, therefore a build — takes the
+ * banner out of the bytes of that very build. Do not "improve" it by handing it a
+ * date: there is nothing a date could decide here.
+ *
+ * **And it is why the two banners cannot both appear.** `freshestTrip` skips untold
+ * trips *before* comparing, so `holdsNoStory(trips)` and a "nouveau récit" answer are
+ * mutually exclusive by construction rather than by an arbitration three components
+ * have to keep. `tests/app/journal-notice-pipeline.test.ts` proves the pair over real
+ * collections.
+ *
+ * Structural, like every derivation here, so a parsed `Trip`, a `TripSummary` and a
+ * component's own narrowed entry are all assignable.
+ */
+export function holdsNoStory(trips: readonly { readonly story: StoryState }[]): boolean {
+  return !trips.some(hasStory);
+}
+
 export type PerPersonBudget = {
   readonly amountCents: number;
   readonly currency: Budget["currency"];

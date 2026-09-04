@@ -3,7 +3,10 @@ import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { JournalNotice } from "@/components/site/journal-notice";
 import { SiteNav } from "@/components/site/site-nav";
+import { listTripSummaries } from "@/content/trips";
+import { holdsNoStory } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
 import { routing } from "@/i18n/routing";
 import "@/styles/tokens.css";
@@ -96,6 +99,30 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
    */
   const t = await getTranslations({ locale, namespace: "trips" });
 
+  /**
+   * **Whether the journal holds a récit at all** — the notice below, and TIW-35.
+   *
+   * Read here rather than declared by a constant somebody has to remember to turn
+   * off; `docs/le-bandeau-des-recits-a-venir.md` carries the arbitration, and the
+   * short version is that the two banners of the home page then become mutually
+   * exclusive by construction instead of by an arbitration nobody would maintain.
+   *
+   * **This is a disk read in a layout, so it is worth being precise about what it
+   * costs and what it does not.** The façade memoises its parse for the whole life
+   * of a build, and `src/app/[locale]/page.tsx` calls it too, so this is not a
+   * second read of `content/trips` — measured in the ticket's report. And it does
+   * **not** de-statify the tree: invariant 1 is about reading the *request* — a
+   * header, a cookie, the URL — and a file read at build time is exactly what
+   * prerendering is made of. `npm run test:build` is what confirms the outcome
+   * rather than this comment.
+   *
+   * Not a `Promise.all` with `getTranslations` above: the two are independent, but
+   * awaiting a memoised parse and a message catalogue in sequence costs one
+   * microtask, and pairing them would suggest a waterfall exists where there is
+   * none.
+   */
+  const noRecitYet = holdsNoStory(await listTripSummaries());
+
   return (
     <html lang={locale}>
       <body>
@@ -145,6 +172,37 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
             is.
           */}
           <SiteNav locale={locale} />
+          {/*
+            The journal-state notice (TIW-35), and its three positions in this file
+            are each a decision.
+
+            **In the layout**, because "visible sur toutes les pages sous
+            `[locale]`" is a criterion, and a line each page has to remember to
+            render is not one. `src/app/not-found.tsx` sits above this segment and
+            therefore does not carry it, which is what the criterion says.
+
+            **After the nav and before `<main>`.** After, so a screen reader meets
+            the site's navigation before a note about the site's state, and so the
+            notice is not the first thing announced on every single page load.
+            Before `<main>`, so it is outside what the skip link jumps to: a reader
+            who has read the sentence once skips it with the rest of the chrome on
+            the next fifty-nine pages, and the notice adds no tab stop of its own to
+            pay for that.
+
+            **Adjacent to `<main>`, and that adjacency is load-bearing** — the
+            stylesheet's `.notice + main` rule is what makes this notice cost
+            nothing at the fold instead of pushing the map off the first screen.
+            Inserting anything between the two silently gives back the 60-odd pixels
+            it reclaims, at both reference viewports. `journal-notice.module.css`
+            carries the measurement.
+
+            Rendered only when there is nothing to read. `JournalNotice` takes no
+            props, so this branch is the whole of the condition and cannot be a
+            component quietly returning `null` — the same shape as
+            `FreshTripBanner` on the home page, and the pair can never both appear
+            (`holdsNoStory` in `src/domain/trip.ts`).
+          */}
+          {noRecitYet ? <JournalNotice /> : null}
           {children}
         </NextIntlClientProvider>
       </body>

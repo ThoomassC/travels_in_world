@@ -7,6 +7,7 @@ import {
   durationOf,
   firstArrivalOf,
   hasStory,
+  holdsNoStory,
   summaryOf,
   visitedCountryCodes,
 } from "@/domain/trip";
@@ -388,6 +389,76 @@ describe("hasStory", () => {
   it("reads a parsed trip, whose story key is always present", () => {
     expect(hasStory(TripSchema.parse(minimalTripInput()))).toBe(true);
     expect(hasStory(TripSchema.parse(minimalTripInput({ story: "unwritten" })))).toBe(false);
+  });
+});
+
+/**
+ * `holdsNoStory` — TIW-35's rule, and the whole of what decides whether the site
+ * wears its "les récits arrivent" banner.
+ *
+ * **The case that carries the ticket is the third one below**: a journal that holds
+ * trips, all of them untold. That is the state TIW-18 made expressible and the state
+ * the first fourteen places arrive in — known places, unknown dates — and it is
+ * exactly the reader the banner exists for. An implementation reading
+ * `trips.length === 0` passes rows one and two and fails only that one.
+ *
+ * **The fourth is the one that matters most**, because it is the criterion "absent
+ * quand il ne doit pas". One written récit among untold ones is a journal with
+ * something to read, so the banner goes — and it goes on the first published récit,
+ * not on the majority of them.
+ */
+describe("holdsNoStory", () => {
+  const untold = { story: "unwritten" } as const;
+  const told = { story: "written" } as const;
+
+  it.each([
+    { label: "an empty journal — the repository's own state today", trips: [], expected: true },
+    { label: "one untold trip", trips: [untold], expected: true },
+    { label: "several trips, every one untold", trips: [untold, untold, untold], expected: true },
+    {
+      label: "one written récit among untold ones",
+      trips: [untold, told, untold],
+      expected: false,
+    },
+    { label: "the written récit last", trips: [untold, untold, told], expected: false },
+    { label: "one written récit alone", trips: [told], expected: false },
+    { label: "every récit written", trips: [told, told], expected: false },
+  ])("answers $expected for $label", ({ trips, expected }) => {
+    expect(holdsNoStory(trips)).toBe(expected);
+  });
+
+  /**
+   * The exact complement of `hasStory`, over the schema's own list rather than over
+   * literals — so the day `STORY_STATES` gains a member, the two predicates cannot
+   * drift apart in silence. A third state must not be a récit for either of them.
+   */
+  it("is false for exactly the states hasStory accepts", () => {
+    for (const story of STORY_STATES) {
+      expect(holdsNoStory([{ story }])).toBe(!hasStory({ story }));
+    }
+  });
+
+  it("reads parsed trips, whose story key is always present", () => {
+    const written = TripSchema.parse(minimalTripInput());
+    const unwritten = TripSchema.parse(minimalTripInput({ story: "unwritten" }));
+
+    expect(holdsNoStory([unwritten])).toBe(true);
+    expect(holdsNoStory([unwritten, written])).toBe(false);
+  });
+
+  /**
+   * Reads and never reorders. The content façade memoises its projections for the
+   * whole life of a build and hands the same array to every page, so a predicate
+   * that sorted or filtered in place would corrupt the collection for every page
+   * rendered after it — the defect `summaryOf` copies its arrays against.
+   */
+  it("leaves the collection it was given untouched", () => {
+    const trips = [untold, told, untold];
+    const before = [...trips];
+
+    holdsNoStory(trips);
+
+    expect(trips).toEqual(before);
   });
 });
 
