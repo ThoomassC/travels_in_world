@@ -161,10 +161,16 @@ cinq routes, à l'octet et au chunk** — 123,2 Ko en 7 chunks sur `/fr`, 120,0 
 identiques à la référence relevée sur `c1a0c51`. Le document a pris **+0,2 Ko** sur `/fr`
 (38,6 → 38,8) et sur `/fr/a-propos` (5,7 → 5,9), **+0,1 Ko** sur `/fr/voyages` (5,5 → 5,6) et
 **rien** sur `/_not-found` — deux clés de message sérialisées partout, plus la phrase là où
-elle est rendue, exactement la mécanique du paragraphe ci-dessus. Une nuance de méthode plus
-que de chiffre : le paragraphe TIW-18 annonce `/fr` à 38,7 Ko, et le même relevé sur
-`c1a0c51` en donne 38,6 — 0,1 Ko d'écart, non instruit, mentionné parce qu'un chiffre qu'on
-n'a pas remesuré soi-même n'est pas une mesure.
+elle est rendue, exactement la mécanique du paragraphe ci-dessus.
+
+TIW-35 signalait ici un écart « non instruit » : son paragraphe TIW-18 annonce `/fr` à
+38,7 Ko et le relevé sur `c1a0c51` en donne 38,6. **Instruit, et ce n'était pas une
+contradiction** : les deux chiffres ont été pris sur _deux commits différents_, donc ils
+mesuraient deux états du site et non deux fois le même. Le relevé courant, sur `develop`
+@ `5eb9528` après la fusion de TIW-35, est de **39 773 octets, soit 38,84 Ko** — et c'est
+lui qui vaut. La leçon garde sa valeur et c'est pourquoi la trace reste : un chiffre sans son
+commit n'est pas comparable, et deux chiffres qu'on croit divergents peuvent simplement
+dater d'ailleurs. Chaque relevé de ce fichier porte donc le commit sur lequel il a été pris.
 
 Et un coût qui n'est pas en octets : **le layout de `[locale]` lit désormais le contenu**
 (`listTripSummaries()`, pour décider du bandeau de TIW-35). Ce n'est ni une seconde lecture
