@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listTripSummaries } from "@/content/loader";
+import { listTripSummaries, listVisitedPlaces } from "@/content/loader";
 import { freshestTrip } from "@/domain/freshness";
 import { holdsNoStory } from "@/domain/trip";
-import { fixtureRoots, temporaryContent, tripYaml } from "../content/support";
+import { fixtureRoots, placesYaml, temporaryContent, tripYaml } from "../content/support";
 
 /**
  * TIW-35's rule over the **whole pipeline**: YAML on disk → `TripSchema` →
@@ -26,6 +26,14 @@ import { fixtureRoots, temporaryContent, tripYaml } from "../content/support";
  * halves of the same question over the same fixtures, and a reader who has read one
  * should recognise the shape of the other.
  */
+
+/** One dateless place, with its coordinates — the schema refuses a place without. */
+const ROUEN = {
+  slug: "rouen",
+  name: "Rouen",
+  countryCode: "FR",
+  coordinates: { lat: 49.44313, lon: 1.09932 },
+} as const;
 
 /** A day inside every fixture's freshness window, so the pairing below is testable at all. */
 const A_DAY_IN_THE_WINDOW = "2026-01-06";
@@ -155,5 +163,62 @@ describe("the two banners of the home page", () => {
     expect(trips[0]?.publishedAt).toBe("2024-05-02");
     expect(holdsNoStory(trips)).toBe(true);
     expect(freshestTrip(trips, "2024-05-03")).toBeUndefined();
+  });
+});
+
+/**
+ * **The banner against the second collection** — TIW-36.
+ *
+ * TIW-35 derives the banner from the content rather than from a switch, which is
+ * what makes a contradictory state unreachable. TIW-36 adds a second collection
+ * to that content, so the question this block answers is whether the derivation
+ * is still *right* rather than merely still green: fourteen dateless places on
+ * the map is exactly the state the banner's own sentence describes — « les lieux
+ * se posent sur la carte, les récits et les photos suivent » — and it would be a
+ * defect either way round, a banner that went out under a journal with no récit
+ * or one that stayed on once a récit was published.
+ *
+ * The answer is that `holdsNoStory` reads trips and a visited place is not one,
+ * so the two collections cannot pull the predicate in opposite directions. That
+ * is a property of the *design* — `docs/lieux-visites.md` weighs it against the
+ * alternative, a third `story` state, which would have put dateless entries
+ * straight into this predicate's input — and it is asserted here rather than
+ * argued, because « a place is not a trip » is exactly the kind of claim that
+ * stops being true when somebody widens a door.
+ */
+describe("the banner and the visited places", () => {
+  it("stays on for a journal that holds places and no récit", async () => {
+    const content = temporaryContent({}, [], placesYaml([ROUEN]));
+
+    try {
+      vi.stubEnv("TIW_CONTENT_DIR", content.contentDir);
+      vi.stubEnv("TIW_PLACES_FILE", content.placesFile);
+
+      // The places really are there — otherwise this asserts the empty case twice.
+      expect(await listVisitedPlaces()).toHaveLength(1);
+      expect(holdsNoStory(await listTripSummaries())).toBe(true);
+    } finally {
+      content.cleanup();
+    }
+  });
+
+  /**
+   * And it goes out as soon as one récit is written, places or no places. This is
+   * the direction that would break if a place ever entered the predicate's input:
+   * the banner would stay on over a published récit, telling a reader there is
+   * nothing to read while a story sits one click away.
+   */
+  it("goes out for a journal that holds a récit beside its places", async () => {
+    const content = temporaryContent({ "japon-2024": tripYaml() }, [], placesYaml([ROUEN]));
+
+    try {
+      vi.stubEnv("TIW_CONTENT_DIR", content.contentDir);
+      vi.stubEnv("TIW_PLACES_FILE", content.placesFile);
+
+      expect(await listVisitedPlaces()).toHaveLength(1);
+      expect(holdsNoStory(await listTripSummaries())).toBe(false);
+    } finally {
+      content.cleanup();
+    }
   });
 });
