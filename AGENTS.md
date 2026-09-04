@@ -82,9 +82,23 @@ dossier qu'on n'a pas nommé ». Nous sommes à deux. Le prochain module transve
 ici sans que la question du dossier soit tranchée.
 
 `src/content/**` **ne le porte pas**, délibérément : c'est du code Node exécutable, que
-`npm run validate:content`, `npm run geocode`, `npm run new-trip` et Vitest chargent sous Node
-nu, hors contexte React, où `server-only` jette. Un alias Vitest peut neutraliser ce paquet en
+`npm run validate:content`, `npm run geocode`, `npm run geocode:places`, `npm run new-trip`
+et Vitest chargent sous Node nu, hors contexte React, où `server-only` jette. Un alias Vitest peut neutraliser ce paquet en
 test ; aucun alias ne s'applique aux scripts CLI, et c'est eux qui décident.
+
+**Il y a une seconde collection de contenu depuis TIW-36, et une porte de plus.**
+`content/places.yaml` porte les **lieux visités** — des endroits où le carnet est allé sans
+qu'un récit les raconte, donc sans date, sans étape et sans page. Les quatre portes de
+`src/content/loader.ts` sont cinq, et la cinquième, `listVisitedPlaces`, entre dans la paire
+qui **rend** sans avoir de contrepartie dans celle qui **refuse une adresse** : il n'existe ni
+`findVisitedPlace` ni `visitedPlaceStaticParams`, ni maintenant ni comme trou à combler. Cette
+absence _est_ la garantie — aucune fonction de ce dépôt ne peut produire l'adresse d'un lieu,
+donc aucun chemin de code ne peut y mener. Le coût réel de deux collections est une
+duplication possible, et elle est **refusable** plutôt que libre : un slug de lieu déclaré à
+la fois là et dans le `places[]` d'un voyage est refusé par les deux couches, brouillons
+compris, puisque c'est dans un brouillon que la promotion se fait. Voir
+`docs/lieux-visites.md`, qui pèse cette voie contre l'autre — un troisième état de `story` —
+et mesure ce qui casse dans chacune.
 
 **Le garde est posé — c'est fait, depuis TIW-11** — et il vit sur **un seul** fichier,
 `src/content/trips.ts` : `import "server-only"` en première instruction, puis des réexports,
@@ -165,6 +179,23 @@ elle est rendue, exactement la mécanique du paragraphe ci-dessus. Une nuance de
 que de chiffre : le paragraphe TIW-18 annonce `/fr` à 38,7 Ko, et le même relevé sur
 `c1a0c51` en donne 38,6 — 0,1 Ko d'écart, non instruit, mentionné parce qu'un chiffre qu'on
 n'a pas remesuré soi-même n'est pas une mesure.
+
+Ce que TIW-36 a coûté, même méthode, deux builds du **même code** — l'un avec
+`TIW_PLACES_FILE` pointé sur un fichier qui n'existe pas, l'autre sur les quatorze lieux —
+pour que le relevé isole le contenu et non la fonctionnalité : **zéro octet de JS sur les
+cinq routes, à l'octet et au chunk** (123,18 Ko en 7 chunks sur `/fr`, 119,99 Ko en 6 sur
+`/fr/voyages` et `/fr/a-propos`, 111,21 Ko en 5 sur `/_not-found` et `/_global-error`,
+identiques des deux côtés). Quatorze balises et cinq lignes de pays coûtent **+1,96 Ko** de
+document sur `/fr` — 38,76 → **40,72 Ko brotli**, 275 763 → 306 347 octets bruts — pour un
+plafond de 100 Ko, donc il reste **59,3 Ko**. Rien du tout sur `/fr/a-propos`, et +0,02 Ko
+sur `/fr/voyages` : les clés de message ajoutées, sérialisées partout, la mécanique des deux
+paragraphes ci-dessus. Le budget des tracés du planisphère ne bouge pas d'un octet — les
+balises sont du HTML posé au-dessus du dessin, pas de la donnée de chemin.
+
+À noter, parce que c'est une mesure et non un arrondi : le relevé « avant » de ce ticket
+donne `/fr` à 38,76 Ko là où TIW-35 annonce 38,8 — le code de TIW-36 a _retiré_ du document
+en remplaçant deux longs messages ICU par cinq courts. C'est en dessous de la précision que
+ces paragraphes affichent, et c'est dit plutôt qu'absorbé.
 
 Et un coût qui n'est pas en octets : **le layout de `[locale]` lit désormais le contenu**
 (`listTripSummaries()`, pour décider du bandeau de TIW-35). Ce n'est ni une seconde lecture
