@@ -24,6 +24,7 @@
     "pretest": "npm run validate:content",
     "validate:content": "node --import ./scripts/runtime/register-typescript.mts scripts/validate-content.ts",
     "geocode": "node --import ./scripts/runtime/register-typescript.mts scripts/geocode.ts",
+    "geocode:places": "node --import ./scripts/runtime/register-typescript.mts scripts/geocode-places.ts",
     "new-trip": "node --import ./scripts/runtime/register-typescript.mts scripts/new-trip.ts",
     "index-photos": "node --import ./scripts/runtime/register-typescript.mts scripts/index-photos.ts",
     "check:photo-weight": "node --import ./scripts/runtime/register-typescript.mts scripts/photo-weight.ts",
