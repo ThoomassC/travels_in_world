@@ -85,6 +85,7 @@ describe("the skeleton, seen by validate:content", () => {
       contentDir: workspace.contentDir,
       publicDir: workspace.publicDir,
       repoRoot: workspace.repoRoot,
+      placesFile: workspace.placesFile,
     });
 
     expect(validation.findings).toHaveLength(2);

@@ -7,18 +7,26 @@ import {
 } from "@/basemap-coverage";
 import { CountryCodeSchema } from "@/domain/geo";
 import { derivativeSources } from "@/domain/photo";
-import { TripSchema } from "@/domain/schema";
+import { TripSchema, VisitedPlacesSchema } from "@/domain/schema";
 import { isAssignedCountryCode } from "@/iso-3166";
 import {
   createDirectoryCache,
   displayPath,
   lookupFile,
   readTripCollection,
+  readVisitedPlacesFile,
   stringAt,
   TRIP_FILE_NAME,
   valueAt,
+  VISITED_PLACES_FILE_NAME,
 } from "./collection";
-import type { DirectoryCache, TripFile, YamlProblem } from "./collection";
+import type {
+  DirectoryCache,
+  Locate,
+  TripFile,
+  VisitedPlacesFile,
+  YamlProblem,
+} from "./collection";
 import {
   diagnose,
   RULE_COVER_EMPTY,
@@ -67,12 +75,30 @@ export type ValidationRequest = {
   readonly publicDir: string;
   /** Absolute path used to shorten every path that appears in a message. */
   readonly repoRoot: string;
+  /**
+   * Absolute path of the visited-places file (TIW-36) — a *file*, and beside the
+   * trips directory rather than inside it, because that directory refuses a loose
+   * `.yaml` at its own root.
+   *
+   * Required, so that no caller can validate a collection while silently leaving
+   * half of it unread. A places file outside this command's reach would reopen
+   * exactly the loop TIW-29 closed: a `countryCode` clearing validation and then
+   * killing `next build` in the middle of prerendering `/fr`, with a message
+   * telling the author to run the command that had just declared the file sound.
+   */
+  readonly placesFile: string;
 };
 
 export function validateContent(request: ValidationRequest): ContentValidation {
   const contentDir = displayPath(request.repoRoot, request.contentDir);
   const collection = readTripCollection(request.contentDir);
-  const nothingRead = { contentDir, tripCount: 0, validCount: 0, failedCount: 0 };
+  const nothingRead = {
+    contentDir,
+    tripCount: 0,
+    validCount: 0,
+    failedCount: 0,
+    placeCount: 0,
+  };
 
   if (collection.state === "missing-directory") {
     return {
@@ -104,6 +130,14 @@ export function validateContent(request: ValidationRequest): ContentValidation {
 
   /** Slug declared in a file → the first file that declared it. */
   const slugOwners = new Map<string, string>();
+  /**
+   * Place slug → the trip that declares it, collected while the trips are walked
+   * so the places file can be told which trip already holds one of its cities.
+   * Filled from the raw document rather than from a parsed trip, for the reason
+   * `assetFindings` gives: a trip with a schema fault elsewhere still contributes
+   * its place slugs, so one run reports every problem.
+   */
+  const placeOwners = new Map<string, string>();
   const structural = strayFileFindings(collection.strayFiles, request);
   const findings: ContentFinding[] = [...structural];
   const directories = createDirectoryCache();
@@ -115,16 +149,226 @@ export function validateContent(request: ValidationRequest): ContentValidation {
       validCount += 1;
     }
     findings.push(...own);
+    collectPlaceOwners(trip, placeOwners);
   }
+
+  const visited = visitedPlacesFindings(request, placeOwners);
+  findings.push(...visited.findings);
 
   return {
     contentDir,
     tripCount: collection.files.length,
     validCount,
     failedCount: collection.files.length - validCount,
-    structuralCount: structural.length,
+    /**
+     * A places-file problem is counted here and not against a trip, because it
+     * belongs to no trip — the definition this field already carries. Without
+     * that, the summary would read "1 voyage validé, 0 en erreur" under a non-zero
+     * exit code, which is the contradiction `structuralCount` exists to prevent.
+     */
+    structuralCount: structural.length + visited.findings.length,
+    placeCount: visited.placeCount,
     findings,
   };
+}
+
+/**
+ * The place slugs a trip declares, indexed by slug, for the disjunction rule
+ * below. First declaration wins, so a slug two trips somehow share is attributed
+ * to the file the report reaches first — the ambiguity is `duplicateSlugFindings`'
+ * business, not this map's.
+ */
+function collectPlaceOwners(trip: TripFile, owners: Map<string, string>): void {
+  if (trip.state !== "parsed") {
+    return;
+  }
+  const places = valueAt(trip.value, ["places"]);
+  if (!Array.isArray(places)) {
+    return;
+  }
+
+  const tripSlug = stringAt(trip.value, ["slug"]) ?? trip.directory;
+
+  places.forEach((_place, index) => {
+    const slug = stringAt(trip.value, ["places", index, "slug"]);
+    if (slug !== undefined && !owners.has(slug)) {
+      owners.set(slug, tripSlug);
+    }
+  });
+}
+
+/* ------------------------------------------------------- the visited places -- */
+
+/**
+ * `content/places.yaml`, judged (TIW-36) — the places the journal has been to
+ * with no journey attached.
+ *
+ * **Every rule here already existed**, and that is the design rather than a
+ * coincidence: a visited place *is* an element of a trip's `places[]`, so the
+ * field shapes are identical (`places[0].coordinates`, `places[0].countryCode`)
+ * and both the diagnosis catalogue and the country-code notches apply verbatim.
+ * The two things that had to be written for this file are the two that are
+ * genuinely its own: the repair command, which names no slug, and the disjunction
+ * with the trips.
+ *
+ * **No file is not a fault**, exactly as in the loader: a journal holding no
+ * dateless place is the ordinary case and the resting state after the last
+ * promotion. Only a *near-miss on the name* is reported from the absent state,
+ * because that one is a file the author has written and the CI will not find.
+ */
+type VisitedPlacesOutcome = {
+  readonly findings: readonly ContentFinding[];
+  /** How many places were read — 0 when there is no file, which is not a fault. */
+  readonly placeCount: number;
+};
+
+/** The command that fills a missing coordinate in — no slug, one file. */
+const GEOCODE_PLACES_COMMAND = "npm run geocode:places";
+
+function visitedPlacesFindings(
+  request: ValidationRequest,
+  placeOwners: ReadonlyMap<string, string>
+): VisitedPlacesOutcome {
+  const read = readVisitedPlacesFile(request.placesFile);
+  const file = displayPath(request.repoRoot, read.absolutePath);
+
+  if (read.state === "absent") {
+    return read.similarName === undefined
+      ? { findings: [], placeCount: 0 }
+      : {
+          placeCount: 0,
+          findings: [
+            {
+              file,
+              problem: `le fichier s'appelle ${quoted(read.similarName)}, pas ${quoted(VISITED_PLACES_FILE_NAME)}`,
+              action:
+                "renomme-le : la casse compte sur le système de fichiers de la CI, pas sur celui d'un Mac",
+            },
+          ],
+        };
+  }
+
+  if (read.state === "unreadable") {
+    return {
+      placeCount: 0,
+      findings: [
+        {
+          file,
+          problem: `le fichier n'est pas lisible : ${escapeControls(read.reason)}`,
+          action: "vérifie les droits — il est là, il ne s'ouvre pas",
+        },
+      ],
+    };
+  }
+
+  if (read.state === "malformed") {
+    return {
+      placeCount: 0,
+      findings: read.problems.map((problem) => ({
+        file,
+        ...(problem.location === undefined ? {} : { location: problem.location }),
+        problem: `YAML invalide : ${escapeControls(problem.message)}`,
+        action: yamlAction(problem),
+      })),
+    };
+  }
+
+  const declared = valueAt(read.value, ["places"]);
+  const placeCount = Array.isArray(declared) ? declared.length : 0;
+
+  const collected: ContentFinding[] = [
+    ...unsafeKeyFindings(read, file),
+    ...placesSchemaFindings(read, file),
+    ...countryCodeFindings(read, file),
+    ...alreadyInATripFindings(read, file, placeOwners),
+  ];
+
+  return { placeCount, findings: sortByPosition(deduplicate(collected)) };
+}
+
+/**
+ * The schema's own refusals, worded by the same catalogue the trips use.
+ *
+ * `tripSlug` is the empty string and `geocodeCommand` is the places command:
+ * nothing in this file has a slug to name, and the catalogue only reads
+ * `tripSlug` to build the two repair commands — one of which (`index-photos`)
+ * cannot fire at all here, since a visited place declares no photo.
+ */
+function placesSchemaFindings(
+  document: Extract<VisitedPlacesFile, { state: "parsed" }>,
+  file: string
+): readonly ContentFinding[] {
+  const result = VisitedPlacesSchema.safeParse(document.value);
+  if (result.success) {
+    return [];
+  }
+
+  const context = {
+    document: document.value,
+    tripSlug: "",
+    geocodeCommand: GEOCODE_PLACES_COMMAND,
+  };
+
+  return result.error.issues
+    .flatMap((issue) => diagnose(issue, context))
+    .map((entry) => ({
+      file,
+      field: entry.field,
+      ...locationOf(document, entry.field),
+      problem: entry.problem,
+      action: entry.action,
+      ...(entry.command === undefined ? {} : { command: entry.command }),
+    }));
+}
+
+/**
+ * **A place declared here that a trip already declares** — the refusal that makes
+ * two collections one source of truth.
+ *
+ * `docs/lieux-visites.md` accepts that a separate collection is a second place
+ * for the same city to live, and rests the answer on this rule: the divergence is
+ * *refused*, so promoting a place into a trip cannot half-happen. Until the four
+ * lines are removed from this file, nothing validates and nothing builds.
+ *
+ * Reported **here and not on the trip**, because this is the file to edit: the
+ * trip is the one that now tells the story, and the finding names it so the
+ * author can see why. And reported on `places[i].slug` rather than on the file, so
+ * the line printed is the line to delete.
+ *
+ * A place slug matching a *trip* slug is a different namespace — `/voyages/<slug>`
+ * against `#lieu-<slug>` — and is deliberately not this rule's business.
+ */
+function alreadyInATripFindings(
+  document: Extract<VisitedPlacesFile, { state: "parsed" }>,
+  file: string,
+  placeOwners: ReadonlyMap<string, string>
+): readonly ContentFinding[] {
+  const places = valueAt(document.value, ["places"]);
+  if (!Array.isArray(places)) {
+    return [];
+  }
+
+  const findings: ContentFinding[] = [];
+
+  places.forEach((_place, index) => {
+    const field: FieldPath = ["places", index, "slug"];
+    const slug = stringAt(document.value, field);
+    const owner = slug === undefined ? undefined : placeOwners.get(slug);
+
+    if (slug === undefined || owner === undefined) {
+      return;
+    }
+
+    findings.push({
+      file,
+      field,
+      ...locationOf(document, field),
+      problem: `le lieu ${quoted(slug)} est aussi déclaré par le voyage ${quoted(owner)} : c'est le même lieu dans deux collections`,
+      action: `retire-le d'ici si ce voyage le raconte désormais — un lieu visité est ce qui n'a pas encore de récit`,
+    });
+  });
+
+  return findings;
 }
 
 /**
@@ -269,7 +513,7 @@ function displaySlug(slug: string): string {
  * document, which still has the key.
  */
 function unsafeKeyFindings(
-  trip: Extract<TripFile, { state: "parsed" }>,
+  trip: LocatedDocument & { readonly unsafeKeys: readonly FieldPath[] },
   file: string
 ): readonly ContentFinding[] {
   return trip.unsafeKeys.map((field) => ({
@@ -281,12 +525,24 @@ function unsafeKeyFindings(
   }));
 }
 
+/**
+ * A parsed YAML document, reduced to the two things every rule below reads of
+ * one: what the author wrote, and where.
+ *
+ * Both `TripFile` and `VisitedPlacesFile` are assignable to it in their `parsed`
+ * state, which is what lets the rules that only look at `places[]` — the country
+ * codes, the coordinates, the whole diagnosis catalogue — serve the two
+ * collections without a second transcription. Narrowing rather than accepting a
+ * union: a rule that reads `trip.directory` has no business being shared.
+ */
+type LocatedDocument = { readonly value: unknown; readonly locate: Locate };
+
 /** `location` omitted rather than set to `undefined`: the field is optional. */
 function locationOf(
-  trip: Extract<TripFile, { state: "parsed" }>,
+  document: LocatedDocument,
   field: FieldPath
 ): { readonly location?: ContentFinding["location"] } {
-  const location = trip.locate(field);
+  const location = document.locate(field);
 
   return location === undefined ? {} : { location };
 }
@@ -333,7 +589,11 @@ function schemaFindings(
     return [];
   }
 
-  const context = { document: trip.value, tripSlug };
+  const context = {
+    document: trip.value,
+    tripSlug,
+    geocodeCommand: `npm run geocode ${tripSlug}`,
+  };
   const diagnoses = result.error.issues.flatMap((issue) => diagnose(issue, context));
 
   /**
@@ -519,10 +779,7 @@ const UNASSIGNED_CODE_NOTES = new Map<string, { readonly why: string; readonly a
  * {@link assetFindings} gives: a file with a schema error elsewhere still gets its
  * country codes checked, so one run reports every problem.
  */
-function countryCodeFindings(
-  trip: Extract<TripFile, { state: "parsed" }>,
-  file: string
-): readonly ContentFinding[] {
+function countryCodeFindings(trip: LocatedDocument, file: string): readonly ContentFinding[] {
   const places = valueAt(trip.value, ["places"]);
   if (!Array.isArray(places)) {
     return [];

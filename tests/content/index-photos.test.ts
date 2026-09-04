@@ -83,6 +83,7 @@ function findings(current: PhotoWorkspace): readonly string[] {
     contentDir: current.contentDir,
     publicDir: current.publicDir,
     repoRoot: current.repoRoot,
+    placesFile: current.placesFile,
   }).findings.map((finding) => finding.problem);
 }
 

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  MINI_MAP_MIN_WIDTH_FRACTION,
-  miniMapFrame,
-} from "@/components/timeline/mini-map-frame";
+import { MINI_MAP_MIN_WIDTH_FRACTION, miniMapFrame } from "@/components/timeline/mini-map-frame";
 
 /**
  * The mini-map's window onto the world, and why it is not
@@ -60,8 +57,20 @@ describe("miniMapFrame", () => {
    * the marker overlay aligned with the countries underneath it. */
   it.each([
     { label: "a single point", points: [{ x: 700, y: 200 }] },
-    { label: "a wide pair", points: [{ x: 100, y: 250 }, { x: 900, y: 250 }] },
-    { label: "a tall pair", points: [{ x: 500, y: 60 }, { x: 500, y: 440 }] },
+    {
+      label: "a wide pair",
+      points: [
+        { x: 100, y: 250 },
+        { x: 900, y: 250 },
+      ],
+    },
+    {
+      label: "a tall pair",
+      points: [
+        { x: 500, y: 60 },
+        { x: 500, y: 440 },
+      ],
+    },
     {
       label: "a cluster",
       points: [
@@ -79,7 +88,13 @@ describe("miniMapFrame", () => {
   it.each([
     { label: "top-left corner", points: [{ x: 2, y: 2 }] },
     { label: "bottom-right corner", points: [{ x: 958, y: 498 }] },
-    { label: "full span", points: [{ x: 0, y: 0 }, { x: 960, y: 500 }] },
+    {
+      label: "full span",
+      points: [
+        { x: 0, y: 0 },
+        { x: 960, y: 500 },
+      ],
+    },
   ])("stays inside the world box for $label", ({ points }) => {
     const frame = miniMapFrame(points, WORLD);
 
@@ -134,7 +149,13 @@ describe("miniMapFrame", () => {
   /** The `viewBox` is the serialised form of the same four numbers; a mismatch
    * between them would place the markers against a window that is not drawn. */
   it("serialises the viewBox from its own numbers", () => {
-    const frame = miniMapFrame([{ x: 600, y: 150 }, { x: 800, y: 300 }], WORLD);
+    const frame = miniMapFrame(
+      [
+        { x: 600, y: 150 },
+        { x: 800, y: 300 },
+      ],
+      WORLD
+    );
     const parsed = frame.viewBox.split(" ").map(Number);
 
     expect(parsed).toEqual([frame.x, frame.y, frame.width, frame.height]);

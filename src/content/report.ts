@@ -118,16 +118,45 @@ function summary(validation: ContentValidation): readonly string[] {
   ];
 }
 
+/**
+ * The visited places, as a clause added to a sentence that already counts trips
+ * (TIW-36) — `", 14 lieux visités"` — and nothing at all when there are none.
+ *
+ * A second *count* and never a total: a trip and a dateless place are not the
+ * same kind of thing, and one number standing for both would let « 14 voyages
+ * validés » describe a journal holding no récit whatsoever. The empty string for
+ * zero is what keeps every pre-existing sentence byte-identical on a journal with
+ * no places file — which is most of this suite.
+ */
+function placesClause(validation: ContentValidation): string {
+  return validation.placeCount === 0
+    ? ""
+    : `, ${plural(validation.placeCount, "lieu visité", "lieux visités")}`;
+}
+
 export function formatReport(validation: ContentValidation, options: ReportOptions): string {
   const paint = palette(options.color);
 
   if (validation.findings.length === 0) {
     if (validation.tripCount === 0) {
-      return `Aucun voyage dans ${validation.contentDir} : rien à valider.`;
+      /**
+       * **"Rien à valider" is only true when there is nothing at all**, and that
+       * sentence would have become a lie the day a second collection existed:
+       * fourteen places read, parsed and checked, announced as an empty content
+       * directory. The trips directory is still named, because it is still what
+       * was empty.
+       */
+      return validation.placeCount === 0
+        ? `Aucun voyage dans ${validation.contentDir} : rien à valider.`
+        : `Aucun voyage dans ${validation.contentDir}, ${plural(
+            validation.placeCount,
+            "lieu visité validé",
+            "lieux visités validés"
+          )}, aucun problème.`;
     }
-    return `${plural(validation.tripCount, "voyage validé", "voyages validés")} dans ${
-      validation.contentDir
-    }, aucun problème.`;
+    return `${plural(validation.tripCount, "voyage validé", "voyages validés")}${placesClause(
+      validation
+    )} dans ${validation.contentDir}, aucun problème.`;
   }
 
   const blocks = groupByFile(validation.findings).map((group) =>
