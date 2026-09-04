@@ -155,6 +155,24 @@ n'est pas la teinte : ce sont les trois clés de message ajoutées, que
 les rendent pas. C'est la même mécanique que le 1,8 Ko de `photo-viewer.tsx`, à un ordre de
 grandeur en dessous.
 
+Ce que TIW-35 a coûté, même méthode, deux builds du même contenu : **zéro octet de JS sur les
+cinq routes, à l'octet et au chunk** — 123,2 Ko en 7 chunks sur `/fr`, 120,0 Ko en 6 sur
+`/fr/voyages` et `/fr/a-propos`, 111,2 Ko en 5 sur `/_not-found` et `/_global-error`, tous
+identiques à la référence relevée sur `c1a0c51`. Le document a pris **+0,2 Ko** sur `/fr`
+(38,6 → 38,8) et sur `/fr/a-propos` (5,7 → 5,9), **+0,1 Ko** sur `/fr/voyages` (5,5 → 5,6) et
+**rien** sur `/_not-found` — deux clés de message sérialisées partout, plus la phrase là où
+elle est rendue, exactement la mécanique du paragraphe ci-dessus. Une nuance de méthode plus
+que de chiffre : le paragraphe TIW-18 annonce `/fr` à 38,7 Ko, et le même relevé sur
+`c1a0c51` en donne 38,6 — 0,1 Ko d'écart, non instruit, mentionné parce qu'un chiffre qu'on
+n'a pas remesuré soi-même n'est pas une mesure.
+
+Et un coût qui n'est pas en octets : **le layout de `[locale]` lit désormais le contenu**
+(`listTripSummaries()`, pour décider du bandeau de TIW-35). Ce n'est ni une seconde lecture
+disque — la façade mémoïse son parse pour tout le build, et l'accueil l'appelait déjà — ni une
+entorse à l'invariant 1, qui porte sur la lecture de la **requête** et non sur celle d'un
+fichier au build. `npm run test:build` reste ce qui le constate : les cinq routes sont
+toujours prérendues, aucune n'est passée en `ƒ`.
+
 Depuis TIW-12 il y a un **second** budget, que ce paragraphe est le seul endroit à réunir
 avec le premier : les tracés du planisphère sont plafonnés à **34 Ko brotli**, mesurés à
 30,1 Ko avec le millésime `world-atlas` 110m. Ce n'est pas du JS — c'est de la donnée de
@@ -287,6 +305,18 @@ carnet dont le dernier publié serait non raconté alors qu'un récit frais est 
 Le prédicat unique est `hasStory` dans `src/domain/trip.ts`, et son en-tête dit pourquoi
 c'est une égalité et non un `!== "unwritten"` : la première échoue fermée quand un troisième
 état arrive, la seconde ouverte.
+
+**Ce même prédicat décide du bandeau « les récits arrivent » depuis TIW-35**, et c'est ce qui
+rend un état inatteignable au lieu d'arbitrable. `holdsNoStory(trips)` — sa négation
+collective, dans le même module — est vrai quand aucun voyage publié n'a de récit écrit, et le
+layout de `[locale]` rend alors une ligne sur **toutes** les pages du carnet. Comme
+`freshestTrip` écarte les non racontés _avant_ de comparer, les deux bandeaux de l'accueil
+sont **mutuellement exclusifs par construction** : un carnet sans récit ne peut pas produire de
+« Nouveau récit », et un « Nouveau récit » rendu prouve qu'un récit existe. Il n'y a donc pas
+de règle de priorité à tenir entre eux, et c'est exactement ce qu'un interrupteur déclaré
+aurait rouvert. Le bandeau s'éteint au premier récit publié, sans que personne l'éteigne —
+`docs/le-bandeau-des-recits-a-venir.md` porte l'arbitrage, le chiffrage du renvoi et les deux
+mesures de premier écran qui ont décidé sa forme.
 
 Une nuance sur ces quatre lignes, à ne pas surestimer : le seul exécuteur réel de
 `server-only` est le bundler client de `next build`, et aucun test de ce dépôt ne l'exerce.
