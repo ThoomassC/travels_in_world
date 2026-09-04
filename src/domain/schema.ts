@@ -48,6 +48,77 @@ export const PlaceSchema = z.strictObject({
 });
 
 /**
+ * **A place the journal has been to, with no journey attached** — the whole of
+ * `content/places.yaml` (TIW-36).
+ *
+ * It exists because a trip cannot be written without dates, and the fourteen
+ * places this ticket loads have none: a journey's dates are a fact about
+ * somebody's life, and a 1st-of-January of convention would be rendered inside a
+ * `<time>` and dated in an RSS feed as though it were one. So the entity that
+ * carries no date is a different entity, not a `Trip` with holes in it —
+ * `docs/lieux-visites.md` weighs that against the alternative and measures what
+ * each one breaks.
+ *
+ * **`z.array(PlaceSchema)` and never a second declaration of the four fields.**
+ * That single line is what the promotion story rests on: the YAML of a visited
+ * place *is* an element of a trip's `places[]`, so the day a date is known the
+ * edit is a move of contiguous lines, with the slug and the coordinates carried
+ * over verbatim and nothing to geocode again. A copy of the fields would satisfy
+ * every other rule while making that claim quietly false, which is why
+ * `tests/domain/visited-place.test.ts` compares the two readings on the same
+ * inputs rather than trusting this import.
+ *
+ * The three things it therefore refuses for free, through `strictObject`:
+ * `startDate`, `endDate` and `publishedAt`. A field that *accepted* a date is a
+ * field somebody eventually writes an invented one into.
+ *
+ * **Wrapped in an object rather than being the bare array.** `places:` at the top
+ * level is the same key an author already reads in a `trip.yaml`, so the two
+ * files look alike where they are alike; and a document root that is a mapping is
+ * the only shape that can gain a sibling key later without changing what a
+ * reader's eye is trained on.
+ *
+ * **An empty `places:` is accepted**, and that is a decision rather than laxity:
+ * it is the resting state after the last place has been promoted into a trip.
+ * "No file at all" is a different statement, and it is answered by the layer that
+ * reads the disk, which is the only one that can tell the two apart.
+ *
+ * Uniqueness of a slug *between* this file and a trip's `places[]` is not here
+ * and cannot be: this schema sees one file and knows nothing of the collection.
+ * `src/content/loader.ts` refuses it and `src/content/validate.ts` reports it
+ * with a line — the same division of labour `docs/adr/0001-domain-purity.md`
+ * imposes and that trip slugs already follow.
+ */
+export const VisitedPlacesSchema = z
+  .strictObject({
+    places: z.array(PlaceSchema),
+  })
+  .superRefine((file, ctx) => {
+    /**
+     * A slug is what a shared link is made of — the map's marker points at
+     * `#lieu-<slug>` — so two places claiming one leave one of them unreachable
+     * and the other's anchor ambiguous. Reported on the *second* declaration,
+     * because that is the line to delete.
+     *
+     * A shared *name* is not a fault: « Valence » names a city in Spain and a
+     * city in France, and both are in the fourteen this ticket loads.
+     */
+    const seen = new Set<Slug>();
+    file.places.forEach((place, index) => {
+      if (seen.has(place.slug)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["places", index, "slug"],
+          message: `Two visited places share the slug "${place.slug}": every link to one of them is ambiguous.`,
+        });
+      }
+      seen.add(place.slug);
+    });
+  });
+
+export type VisitedPlaces = z.infer<typeof VisitedPlacesSchema>;
+
+/**
  * Closed on purpose: the map draws a different stroke per mode and the timeline
  * prints a different icon, so an unknown mode has no rendering at all. Adding
  * one is a deliberate decision that touches both renderers.

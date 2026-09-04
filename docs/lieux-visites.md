@@ -72,21 +72,21 @@ Ce que j'ai mesuré en lisant les consommateurs, du plus grave au plus anodin :
 5. **`publishedAt` est le champ dont l'obligation est argumentée le plus
    longuement du schéma**, et TIW-18 a déjà refusé de la lever pour
    `story: unwritten` : « making it optional here would hand `PlainDate |
-   undefined` to every consumer to express something none of them asks ». La voie
+undefined` to every consumer to express something none of them asks ». La voie
    2 fait exactement ce que cette note refuse. À noter en sens inverse, parce que
    c'est la seule bonne nouvelle de la voie 2 : `publishedAt` pour un lieu serait
-   *légitime* — « le jour où cette entrée est apparue » est un fait sur le site et
+   _légitime_ — « le jour où cette entrée est apparue » est un fait sur le site et
    non sur le client. Ce sont `startDate` et `endDate` qui ne peuvent pas être
    écrits, et ce sont précisément les deux qui empoisonnent `durationOf`, le tri
    et la fiche.
 
 6. **Ce qui ne casse pas, et qu'il faut créditer** : `hasStory` est écrit
-   `story === "written"` et non `!== "unwritten"` pour échouer *fermé* quand un
+   `story === "written"` et non `!== "unwritten"` pour échouer _fermé_ quand un
    troisième état arrive ; `tests/domain/trip.test.ts` rougit le jour où
    `STORY_STATES` grossit, « so the decision is taken rather than defaulted ». Le
    flux et le plan de site filtrent déjà sur `hasStory`, `freshestTrip` écarte
    déjà les voyages sans récit. Ces quatre-là fonctionneraient. Le troisième état
-   a été *prévu* — mais prévu comme un état de **publication**, pas comme un
+   a été _prévu_ — mais prévu comme un état de **publication**, pas comme un
    voyage sans itinéraire.
 
 7. **Et la duplication que la voie 2 est censée éviter, elle ne l'évite pas — elle
@@ -106,7 +106,7 @@ promu devrait être retiré d'un endroit et écrit dans l'autre — la duplicati
 libre de diverger en silence qui a fait écarter la règle `vercel.json` de TIW-31.
 
 **Elle est répondable, et c'est ce qui tranche** : la divergence est
-*refusable*. Un slug de lieu déclaré à la fois dans `content/places.yaml` et dans
+_refusable_. Un slug de lieu déclaré à la fois dans `content/places.yaml` et dans
 le `places[]` d'un voyage est une erreur de contenu, refusée par le chargeur et
 rapportée avec sa ligne par `npm run validate:content`. La promotion devient
 alors une édition **bruyante** : tant que les quatre lignes n'ont pas été
@@ -118,12 +118,12 @@ Ce que la voie 1 gagne en plus, et qui n'est pas de l'esthétique — quatre cri
 d'acceptation deviennent vrais **par absence** plutôt que par une condition à
 maintenir :
 
-| critère                                             | voie 1                                                       |
-| --------------------------------------------------- | ------------------------------------------------------------ |
+| critère                                             | voie 1                                                         |
+| --------------------------------------------------- | -------------------------------------------------------------- |
 | aucun lien vers une page inexistante                | un lieu n'a **aucune** porte de type `findX` / `xStaticParams` |
-| le flux et le plan de site ne listent pas les lieux  | ils appellent `listTripSummaries()` : un lieu n'y est pas     |
-| le badge « Nouveau » ne désigne jamais un lieu      | `freshestTrip` ne reçoit que des voyages                      |
-| promotion sans réécrire le slug ni les coordonnées   | le bloc YAML d'un lieu **est** un élément de `places[]`       |
+| le flux et le plan de site ne listent pas les lieux | ils appellent `listTripSummaries()` : un lieu n'y est pas      |
+| le badge « Nouveau » ne désigne jamais un lieu      | `freshestTrip` ne reçoit que des voyages                       |
+| promotion sans réécrire le slug ni les coordonnées  | le bloc YAML d'un lieu **est** un élément de `places[]`        |
 
 La dernière ligne est le cœur du dispositif : un lieu visité s'écrit exactement
 comme un lieu de voyage — `slug`, `name`, `countryCode`, `coordinates` — parce
@@ -158,12 +158,12 @@ réglable par `--places <fichier>` et `TIW_PLACES_FILE`, comme `--content` et
 
 ### Les couches, et ce que chacune refuse
 
-| couche                  | ce qu'elle décide                                                     |
-| ----------------------- | --------------------------------------------------------------------- |
-| `src/domain/schema.ts`  | la **forme** : `VisitedPlacesSchema`, qui réutilise `PlaceSchema` tel quel |
-| `src/content/loader.ts` | la **cinquième porte**, `listVisitedPlaces()`, et la disjonction avec les voyages |
-| `src/content/validate.ts` | la même disjonction, avec fichier, ligne, colonne et commande       |
-| `src/app/[locale]/page.tsx` | la jointure des deux façades, comme pour les voyages               |
+| couche                      | ce qu'elle décide                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| `src/domain/schema.ts`      | la **forme** : `VisitedPlacesSchema`, qui réutilise `PlaceSchema` tel quel        |
+| `src/content/loader.ts`     | la **cinquième porte**, `listVisitedPlaces()`, et la disjonction avec les voyages |
+| `src/content/validate.ts`   | la même disjonction, avec fichier, ligne, colonne et commande                     |
+| `src/app/[locale]/page.tsx` | la jointure des deux façades, comme pour les voyages                              |
 
 Le domaine ne connaît pas la collection : `VisitedPlacesSchema` voit un fichier à
 la fois, donc l'unicité d'un slug **entre** un lieu et un voyage est décidée par
