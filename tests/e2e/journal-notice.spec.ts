@@ -59,14 +59,35 @@ test.describe("a journal with no récit", () => {
   /**
    * **Not an alert**, which the acceptance criterion names explicitly: the role
    * interrupts a screen reader mid-sentence, and this is permanent information about
-   * the state of a journal rather than an urgency. Checked over the whole document,
-   * so a role added to a wrapper later is caught too.
+   * the state of a journal rather than an urgency. No `role="status"` either, for a
+   * different reason — a live region over bytes frozen at build time never announces
+   * anything to anybody.
+   *
+   * **Scoped to the notice, and the first version of this case was not — it asserted
+   * `getByRole("alert")` over the whole document and went red on the framework.**
+   * Next injects its own route announcer into every hydrated page:
+   *
+   *     <div id="__next-route-announcer__" role="alert" aria-live="assertive" …>
+   *
+   * It is client-side, so it is absent from the prerendered HTML and appears only in
+   * a browser — which is exactly why a document-wide assertion looked right and
+   * measured somebody else's chrome. Kept as a note rather than deleted: the next
+   * person to assert "no live region on this page" will meet the same element.
    */
   test("announces itself as complementary and never as an alert", async ({ page }) => {
     await page.goto("/fr");
 
-    await expect(page.getByRole("alert")).toHaveCount(0);
-    await expect(page.locator("[aria-live]")).toHaveCount(0);
+    const banner = page.getByRole("complementary", { name: notice.noticeLabel });
+
+    // The notice's own element carries no role of its own — `complementary` comes
+    // from `<aside>` — and nothing inside it is a live region.
+    await expect(banner).toHaveAttribute("aria-label", notice.noticeLabel);
+    expect(await banner.evaluate((element) => element.getAttribute("role"))).toBeNull();
+    expect(await banner.evaluate((element) => element.getAttribute("aria-live"))).toBeNull();
+    await expect(banner.locator("[role], [aria-live]")).toHaveCount(0);
+
+    // And no element of the page *outside* Next's own announcer is an alert.
+    await expect(page.locator('[role="alert"]:not(#__next-route-announcer__)')).toHaveCount(0);
     await expect(page.getByRole("status")).toHaveCount(0);
   });
 

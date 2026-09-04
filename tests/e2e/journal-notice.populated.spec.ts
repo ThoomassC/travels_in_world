@@ -46,21 +46,36 @@ test.describe("a journal that holds récits", () => {
    * pins the pair over real collections; what this case adds is the rendered proof
    * that the home page carries exactly one of the two, and that it is the right one.
    *
-   * Note the fixture is a *mixed* journal: one of its five trips is untold. So this
-   * also pins that one untold trip is not enough to bring the site-wide notice back
-   * — "Récit à venir" on that trip's own entry (TIW-18) is where that fact belongs.
    */
   test("shows the newest-récit banner and not the journal-state notice", async ({ page }) => {
     await page.goto("/fr");
 
     await expect(page.getByRole("complementary", { name: FRESH_TITLE })).toBeVisible();
     await expect(page.getByText(notice.noticeBody)).toHaveCount(0);
+  });
 
-    // The mixed half of the fixture, so the row above is read for what it is: an
-    // untold trip is present and the notice is still gone.
-    await expect(page.getByText(frMessages.trips.cardStoryToCome, { exact: true })).not.toHaveCount(
-      0
-    );
+  /**
+   * **One untold trip does not bring the site-wide notice back**, and this is where
+   * the fixture's mixed half is observable.
+   *
+   * `/fr/voyages` and not `/fr`, which is a correction worth recording rather than
+   * quietly fixing: the first version of this case asserted "Récit à venir" on the
+   * home page and went red. `LatestTrips` renders `LATEST_TRIP_COUNT = 3` cards
+   * ordered by `startDate`, and the fixture's untold trip (`maroc-2023`) is the
+   * fourth journey — so the home page never shows that mention at all. The full
+   * listing renders every trip, which is the page where "the journal holds an untold
+   * trip *and* holds récits" can be read off the document.
+   *
+   * What it pins: the per-trip mention (TIW-18) is where "this one has no récit yet"
+   * belongs, and the site-wide notice is only ever about "none of them has".
+   */
+  test("keeps the notice away even though one trip is still untold", async ({ page }) => {
+    await page.goto("/fr/voyages");
+
+    await expect(
+      page.getByText(frMessages.trips.cardStoryToCome, { exact: true }).first()
+    ).toBeVisible();
+    await expect(page.getByText(notice.noticeBody)).toHaveCount(0);
   });
 
   /**
