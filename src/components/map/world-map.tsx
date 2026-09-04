@@ -367,17 +367,28 @@ export function WorldMap({
             */
             <li
               /*
-                Namespaced by kind (TIW-36), because the two collections have
-                separate slug namespaces: `content/places.yaml` may legitimately
-                hold a place called « annecy » while a trip is called « annecy »
-                too — `/voyages/annecy` and `#lieu-annecy` are different
-                addresses, and the validator refuses only the case that really is
-                one thing twice (the same *place* slug in both collections).
-                Un-namespaced, that pair would emit a duplicate `id` and React
-                would keep one of the two markers.
+                The React key is namespaced by kind (TIW-36), because the two
+                collections have separate slug namespaces: `content/places.yaml`
+                may hold a place called « annecy » while a trip is called
+                « annecy » too — `/voyages/annecy` and `#lieu-annecy` are
+                different addresses, and the validator only refuses the case that
+                really is one thing twice (the same *place* slug in both
+                collections). Un-namespaced, that pair would collide on one key
+                and React would keep one of the two markers.
+
+                **The `id` is a trip's and only a trip's**, and that is a defect
+                this ticket shipped and the E2E suite caught: giving a place's
+                marker `id="lieu-<slug>"` emitted the id **twice** in the
+                document — once here, once on the entry in the list under the map
+                that this very marker points at — so the fragment was ambiguous
+                and `#lieu-gand` resolved to two elements. A trip's marker needs
+                its id because the trip page links back to `/#voyage-<slug>`;
+                nothing links to a place's marker, so it needs none, and the one
+                `lieu-<slug>` in the document is the destination rather than the
+                departure.
               */
               key={markKey(mark)}
-              id={markKey(mark)}
+              {...(mark.kind === "trip" ? { id: `voyage-${mark.slug}` } : {})}
               className={styles.mark}
               style={markStyle}
             >

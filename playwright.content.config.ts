@@ -58,6 +58,20 @@ const CONTENT_DIR = "tests/fixtures/content/home-map/trips";
 const PUBLIC_DIR = "tests/fixtures/content/home-map/public";
 
 /**
+ * The fixture's visited places (TIW-36) — two of them, dateless, with no page.
+ *
+ * Given explicitly for the same reason `TIW_PUBLIC_DIR` is: npm's `prebuild` hook
+ * runs `validate:content` before every `next build`, and without this variable it
+ * would validate the *repository's* fourteen places while the build read the
+ * fixture's two. The two collections would then disagree about what a run just
+ * checked, which is the one thing a validator must never do.
+ *
+ * Exported to the `start` half as well, like `TIW_CONTENT_DIR`: a `start` that
+ * disagrees with its own build is how a spec goes mysteriously green.
+ */
+const PLACES_FILE = "tests/fixtures/content/home-map/places.yaml";
+
+/**
  * The day this build believes it is — one day after the fixture's newest
  * publication (`islande-2022`, `publishedAt: 2026-01-05`).
  *
@@ -102,8 +116,10 @@ export default defineConfig({
      * mysteriously green.
      */
     command:
-      `TIW_CONTENT_DIR=${CONTENT_DIR} TIW_PUBLIC_DIR=${PUBLIC_DIR} TIW_BUILD_DATE=${BUILD_DATE} npm run build && ` +
-      `TIW_CONTENT_DIR=${CONTENT_DIR} TIW_BUILD_DATE=${BUILD_DATE} npm run start -- --port ${PORT}`,
+      `TIW_CONTENT_DIR=${CONTENT_DIR} TIW_PLACES_FILE=${PLACES_FILE} TIW_PUBLIC_DIR=${PUBLIC_DIR} ` +
+      `TIW_BUILD_DATE=${BUILD_DATE} npm run build && ` +
+      `TIW_CONTENT_DIR=${CONTENT_DIR} TIW_PLACES_FILE=${PLACES_FILE} TIW_BUILD_DATE=${BUILD_DATE} ` +
+      `npm run start -- --port ${PORT}`,
     url: BASE_URL,
     /** Same reason as the other config: attaching to a stranger costs the point. */
     reuseExistingServer: false,

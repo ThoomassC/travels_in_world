@@ -1,0 +1,39 @@
+# Deux lieux visités : des endroits sans date, sans étape et sans récit (TIW-36).
+#
+# Ils sont choisis pour rendre observables les deux seuls états que les cinq
+# voyages ne pouvaient pas rendre :
+#
+#   nara  (JP) — un lieu dans un pays que des voyages **racontés** atteignent
+#                déjà : le Japon reste teinté « récit écrit », et sa fiche de
+#                pays porte à la fois « 2 voyages » et « 1 lieu visité ».
+#   gand  (BE) — un pays qu'**aucun** voyage n'atteint : il n'existe sur cette
+#                page que par ce lieu, il est teinté de l'état distinct, sa
+#                ligne n'est pas un lien (il n'y a aucun voyage où aller), et
+#                sa balise mène à « #lieu-gand » sur la page même.
+#
+# Les deux tombent **strictement à l'intérieur** de l'emprise des cinq balises
+# existantes — Cusco à l'ouest et au sud, Tokyo à l'est, Reykjavik au nord —
+# pour la raison que le README de cette fixture donne à propos de Marrakech : le
+# cadre du planisphère ne bouge pas, et aucun test qui l'affirme n'a à changer
+# pour une raison qui n'est pas la sienne.
+#
+# Ni « nara » ni « gand » n'est un slug de lieu déclaré par un voyage de cette
+# fixture : le validateur et le chargeur refusent le même lieu dans les deux
+# collections.
+#
+# Les coordonnées sont écrites par « npm run geocode:places », jamais à la main.
+
+places:
+  - slug: nara
+    name: Nara
+    countryCode: JP
+    coordinates:
+      lat: 34.68505
+      lon: 135.80486
+
+  - slug: gand
+    name: Gand
+    countryCode: BE
+    coordinates:
+      lat: 51.05
+      lon: 3.71667

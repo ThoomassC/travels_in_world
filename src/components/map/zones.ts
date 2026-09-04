@@ -56,12 +56,24 @@ export const ZONE_RADIUS_PERCENT = 4;
  * own entry in the textual equivalent, with or without JavaScript, which is one
  * behaviour instead of two to keep in step.
  *
- * The accepted limit, written here rather than discovered later: a place whose
- * marker lands inside a *trip's* zone is not offered in that zone's panel, so a
- * pointer may not reach it if a trip marker covers it. It stays in the tab order,
- * and it stays in the list under the map. Unreachable today — the journal holds
- * fourteen places and no trip — and the day it matters the fix is to decide what
- * a place's card looks like, which is a content decision and not a clustering one.
+ * **The accepted limit, and it is not hypothetical.** Two markers that overlap on
+ * screen bury one another for a pointer — measured on this repository's own
+ * content, where Rouen and Gand are 250 km apart, about ten pixels at the frame
+ * the server crops to, so two 44 px targets leave the lower one almost nothing
+ * clickable. For *trips* the panel is what recovers them, which is what TIW-14
+ * bought; a place has no card, so it has no panel, and three other paths answer
+ * for it instead: both markers are in the tab order whatever they overlap, every
+ * place is named in the list under the map with its country, and a zoom genuinely
+ * separates them because `--mark-x`/`--mark-y` are world units and not percentages
+ * of one frame.
+ *
+ * That leaves `target-size` (2.5.8) firing on the drawing, which is the same
+ * measured cost `docs/adr/0003-carte-svg-inerte-et-balises-html.md` already
+ * records for trip markers and which the E2E audit reports **by name**, confined
+ * to the map's own `<figure>`. Giving a place a card — and therefore a panel —
+ * would close the case rather than manage it, and it is the right next step the
+ * day a place is worth a card; it is a decision about what a place *is*, not
+ * about clustering, so it does not belong to this function.
  */
 export type PlacedTripMark = PlacedMark & { readonly mark: TripMark };
 

@@ -174,8 +174,18 @@ describe("a place's marker", () => {
     expect(marker).not.toHaveAttribute("data-zone");
   });
 
-  /** `lieu-<slug>` and `voyage-<slug>`: two namespaces, so a shared slug is safe. */
-  it("keeps its own id namespace, so a place and a trip may share a slug", () => {
+  /**
+   * **A place's marker carries no `id`, and this case is a defect this ticket
+   * shipped.** Given `id="lieu-<slug>"`, the marker emitted the very id the entry
+   * it *points at* already carries — twice in one document, so `#lieu-gand`
+   * resolved to two elements and the fragment was ambiguous. Caught by
+   * `map-equivalent.populated.spec.ts` walking the markers' own hrefs.
+   *
+   * A trip's marker keeps its id, because the trip page links back to
+   * `/#voyage-<slug>`; nothing links to a place's marker, so the one
+   * `lieu-<slug>` in the document is the destination and not the departure.
+   */
+  it("carries no id of its own, so the one it points at is unambiguous", () => {
     const { container } = renderMap({
       marks: [tripMark({ slug: "annecy" })],
       places: [placeMark({ slug: "annecy", point: { x: 200, y: 200 } })],
@@ -183,8 +193,8 @@ describe("a place's marker", () => {
     });
 
     expect(container.querySelector("#voyage-annecy")).not.toBeNull();
-    expect(container.querySelector("#lieu-annecy")).not.toBeNull();
-    expect(container.querySelectorAll("li[id]")).toHaveLength(2);
+    expect(container.querySelectorAll("li[id]")).toHaveLength(1);
+    expect(container.querySelector('a[data-place="annecy"]')).not.toBeNull();
   });
 });
 

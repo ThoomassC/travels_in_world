@@ -105,7 +105,7 @@ test("the fixture really is the build this file assumes", async ({ page }) => {
   await page.goto("/fr");
 
   await expect(page.getByRole("figure")).toHaveAccessibleName(
-    "Carte du monde, recadrée sur les voyages publiés : 5 voyages, 5 pays"
+    "Carte du monde, recadrée sur les balises : 5 voyages, 2 lieux visités, 6 pays"
   );
 });
 

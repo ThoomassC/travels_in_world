@@ -21,7 +21,12 @@ import {
  * Expected table, by French alphabetical order — the order `buildWorldGeometry`
  * collates `visited` in, and the order this list must not re-derive:
  *
- *     Bolivie 1 voyage · Islande 1 voyage · Japon 2 voyages · Pérou 1 voyage
+ *     Belgique 1 lieu visité · Bolivie 1 voyage · Islande 1 voyage ·
+ *     Japon 2 voyages, 1 lieu visité · Maroc 1 voyage · Pérou 1 voyage
+ *
+ * **Two of those rows arrived with TIW-36**, and they are the two states no trip
+ * could produce: Belgium exists on this page only through a dateless *place*, and
+ * Japan holds two written récits *and* a place. See the fixture's `places.yaml`.
  */
 
 /**
@@ -47,10 +52,19 @@ import {
 const EXPECTED = [
   { name: "Bolivie", label: "Bolivie 1 voyage", href: "/fr/voyages/perou-bolivie-2023" },
   { name: "Islande", label: "Islande 1 voyage", href: "/fr/voyages/islande-2022" },
-  { name: "Japon", label: "Japon 2 voyages", href: "/fr/voyages" },
+  { name: "Japon", label: "Japon 2 voyages, 1 lieu visité", href: "/fr/voyages" },
   { name: "Maroc", label: "Maroc 1 voyage récit à venir", href: "/fr/voyages" },
   { name: "Pérou", label: "Pérou 1 voyage", href: "/fr/voyages/perou-bolivie-2023" },
 ] as const;
+
+/**
+ * **Belgium is not in {@link EXPECTED}, and that is the assertion** (TIW-36): its
+ * row is not a link at all. No trip reaches it, so pointing it at the listing
+ * would answer a page that does not mention Belgium to a reader who has just been
+ * told « Belgique, 1 lieu visité ». It is asserted separately, below, as text and
+ * as a country that carries its place's anchor.
+ */
+const PLACE_ONLY_COUNTRY = { name: "Belgique", label: "Belgique 1 lieu visité" } as const;
 
 /** Every row of the equivalent, located by its heading's region. */
 const countryLinks = (page: import("@playwright/test").Page) =>
@@ -70,7 +84,7 @@ test("the fixture really is the five trips this file assumes", async ({ page }) 
   await page.goto("/fr");
 
   await expect(page.getByRole("figure")).toHaveAccessibleName(
-    "Carte du monde, recadrée sur les voyages publiés : 5 voyages, 5 pays"
+    "Carte du monde, recadrée sur les balises : 5 voyages, 2 lieux visités, 6 pays"
   );
 });
 
@@ -381,7 +395,7 @@ test("the caption tells the truth about what the drawing shows", async ({ page }
 
   expect(width).toBeLessThan(960);
   await expect(page.locator("figcaption")).toHaveText(
-    "Carte du monde, recadrée sur les voyages publiés : 5 voyages, 5 pays"
+    "Carte du monde, recadrée sur les balises : 5 voyages, 2 lieux visités, 6 pays"
   );
 });
 
@@ -473,4 +487,83 @@ test("the marker overlap is the only violation, and it never reaches the country
     `Expected exactly the known marker overlap. If target-size no longer fires, delete the allowance in the audit test above and this test with it; if a different rule appears, that one is a regression. Got: ${describeViolations(report)}`
   ).toEqual([KNOWN_MARKER_OVERLAP]);
   expect(await firedOnlyInsideTheMap(page, report.violations[0]?.targets ?? [])).toBe(true);
+});
+
+/**
+ * **The two states TIW-36 added to this page**, and neither is a variation of a
+ * trip: a country that exists only through a dateless place, and a place's own
+ * anchor being the destination its marker on the map points at.
+ */
+test("a country reached only by a visited place is named, counted, and is not a link", async ({
+  page,
+}) => {
+  await page.goto("/fr");
+
+  const region = page.getByRole("region", { name: "Les pays visités" });
+
+  /**
+   * Named and counted in words, because the drawing is `aria-hidden` and its
+   * dashed outline says nothing at all to a screen reader — the same reason
+   * Morocco's row ends in « récit à venir ».
+   */
+  await expect(region.getByText(PLACE_ONLY_COUNTRY.name)).toBeVisible();
+  await expect(region.getByText("1 lieu visité", { exact: true }).first()).toBeVisible();
+
+  /**
+   * And **not a link**: the row's link exists to lead into the trips, and there
+   * are none. Sending it to the listing would answer a page that does not mention
+   * Belgium to a reader who has just been told Belgium holds a place.
+   */
+  await expect(region.getByRole("link", { name: /Belgique/ })).toHaveCount(0);
+});
+
+test("every visited place carries the anchor its own marker points at", async ({ page }) => {
+  await page.goto("/fr");
+
+  /**
+   * The half a status check misses, and the one this repository has paid for
+   * twice: a fragment resolving to nothing is a **200**. It deposits the reader at
+   * the top of the page without a word — `#pays-bo` first, then
+   * `/#voyage-<slug>` before the home page emitted those ids.
+   *
+   * Asserted from the marker outwards rather than from the list: the marker is
+   * what a reader activates, so the question is whether *its* href lands
+   * somewhere, and not whether the list happens to carry some ids.
+   */
+  const markers = page.locator("figure a[data-place]");
+
+  expect(await markers.count()).toBe(2);
+
+  for (const marker of await markers.all()) {
+    const slug = await marker.getAttribute("data-place");
+    const href = await marker.getAttribute("href");
+
+    expect(href).toBe(`#lieu-${slug ?? ""}`);
+    await expect(page.locator(`#lieu-${slug ?? ""}`)).toBeVisible();
+  }
+});
+
+test("a visited place's marker carries no trip interface, so it always navigates", async ({
+  page,
+}) => {
+  await page.goto("/fr");
+
+  /**
+   * `map-viewport.tsx` finds markers through `closest("a[data-trip]")` and opens
+   * the zone's panel instead of navigating. A place carrying that attribute would
+   * have its activation swallowed for a panel with no card to show — so the
+   * absence is asserted on the served document, not only in a unit test, and then
+   * the navigation itself with the script running.
+   */
+  const marker = page.locator('figure a[data-place="gand"]');
+
+  await expect(marker).toHaveCount(1);
+  await expect(marker).not.toHaveAttribute("data-trip", /.*/);
+  await expect(marker).not.toHaveAttribute("data-zone", /.*/);
+
+  await marker.focus();
+  await page.keyboard.press("Enter");
+
+  await expect(page).toHaveURL(/\/fr#lieu-gand$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
