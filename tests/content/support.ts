@@ -19,6 +19,16 @@ export type ContentRoots = {
   readonly contentDir: string;
   readonly publicDir: string;
   readonly repoRoot: string;
+  /**
+   * The visited-places file (TIW-36) — a *file*, not a directory, and beside the
+   * trips directory rather than inside it: the trips root refuses a loose `.yaml`
+   * because a trip is a directory, so a places file dropped in there would be
+   * reported as content nobody reads.
+   *
+   * Named on every root whether the file exists or not: "no such file" is the
+   * ordinary state of a journal and has to be assertable too.
+   */
+  readonly placesFile: string;
 };
 
 /**
@@ -34,6 +44,7 @@ export function fixtureRoots(name: string): ContentRoots {
     contentDir: path.join(caseDir, "trips"),
     publicDir: path.join(caseDir, "public"),
     repoRoot: REPO_ROOT,
+    placesFile: path.join(caseDir, "places.yaml"),
   };
 }
 
@@ -53,7 +64,13 @@ export type TemporaryContent = ContentRoots & {
  */
 export function temporaryContent(
   trips: Readonly<Record<string, string>>,
-  files: readonly string[] = []
+  files: readonly string[] = [],
+  /**
+   * The visited-places file's text, when the case has one. `undefined` writes no
+   * file at all — which is a state worth building, not an omission: it is what
+   * every journal looked like before TIW-36 and it must stay unremarkable.
+   */
+  places?: string
 ): TemporaryContent {
   const root = mkdtempSync(path.join(tmpdir(), "tiw-content-"));
 
@@ -71,11 +88,17 @@ export function temporaryContent(
 
   mkdirSync(path.join(root, "trips"), { recursive: true });
 
+  const placesFile = path.join(root, "places.yaml");
+  if (places !== undefined) {
+    writeFileSync(placesFile, places, "utf8");
+  }
+
   return {
     root,
     contentDir: path.join(root, "trips"),
     publicDir: path.join(root, "public"),
     repoRoot: root,
+    placesFile,
     cleanup: () => rmSync(root, { recursive: true, force: true }),
   };
 }
@@ -132,4 +155,36 @@ export function tripYaml(overrides: Readonly<Record<string, string>> = {}): stri
   return `${Object.values(blocks)
     .filter((block) => block !== "")
     .join("\n")}\n`;
+}
+
+/**
+ * The visited-places file as YAML text (TIW-36), one entry per place.
+ *
+ * Text rather than a serialised object, for the reason `tripYaml` gives: the line
+ * and column a finding points at are part of what this suite asserts, and a
+ * serialiser would decide them.
+ */
+export type PlaceSource = {
+  readonly slug: string;
+  readonly name?: string;
+  readonly countryCode?: string;
+  /** Omitted writes no `coordinates:` block at all — the state `geocode` fixes. */
+  readonly coordinates?: { readonly lat: number; readonly lon: number };
+};
+
+export function placesYaml(places: readonly PlaceSource[]): string {
+  const lines = ["places:"];
+
+  for (const place of places) {
+    lines.push(`  - slug: ${place.slug}`);
+    lines.push(`    name: ${place.name ?? place.slug}`);
+    lines.push(`    countryCode: ${place.countryCode ?? "FR"}`);
+    if (place.coordinates !== undefined) {
+      lines.push("    coordinates:");
+      lines.push(`      lat: ${place.coordinates.lat}`);
+      lines.push(`      lon: ${place.coordinates.lon}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
 }

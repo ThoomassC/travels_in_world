@@ -233,6 +233,191 @@ function unsafeKeyPaths(document: ReturnType<typeof parseDocument>): readonly Fi
   return found;
 }
 
+/**
+ * The states a *single* YAML file can be in once it has been found — the three
+ * that {@link TripFile} and {@link VisitedPlacesFile} share, and nothing else.
+ *
+ * Extracted with TIW-36 because two collections now read the same way and must
+ * therefore report the same way: the choice of the first parser error, the
+ * stripping of its repeated position, the `toJS()` that enforces `yaml`'s alias
+ * budget, and the `ENOENT`-versus-`EACCES` distinction are each a measured
+ * decision, and a second transcription of them is a second chance to lose one.
+ *
+ * What is deliberately **not** here is how a file is *located*: a trip is a
+ * `trip.yaml` inside a directory whose name is the slug, the visited places are
+ * one file with a fixed name. That is the whole difference between the two
+ * readers below, which is exactly why it is the only thing they still each own.
+ */
+type YamlReading =
+  | {
+      readonly state: "parsed";
+      readonly value: unknown;
+      readonly locate: Locate;
+      readonly source: string;
+      readonly unsafeKeys: readonly FieldPath[];
+    }
+  | { readonly state: "unreadable"; readonly reason: string }
+  | { readonly state: "malformed"; readonly problems: readonly YamlProblem[] }
+  /**
+   * `ENOENT`, and **only** `ENOENT`. The two callers read this differently — a
+   * missing `trip.yaml` inside a trip folder is an unfinished trip, a missing
+   * `places.yaml` is a journal with no dateless place, which is the ordinary
+   * state — so the distinction is preserved here and decided there.
+   */
+  | { readonly state: "absent" };
+
+function readYamlFile(absolutePath: string): YamlReading {
+  let source: string;
+  try {
+    source = readFileSync(absolutePath, "utf8");
+  } catch (cause) {
+    // `existsSync` used to guard this and swallowed EACCES, which turned an
+    // unreadable trip into "the file is absent — remove the folder". Following
+    // that advice deletes a real trip.
+    return errorCode(cause) === "ENOENT"
+      ? { state: "absent" }
+      : { state: "unreadable", reason: errorMessage(cause) };
+  }
+
+  const lineCounter = new LineCounter();
+  const document = parseDocument(source, { lineCounter });
+
+  const [first, ...rest] = document.errors;
+  if (first !== undefined) {
+    return {
+      state: "malformed",
+      /**
+       * The first error only. A parser that has lost its footing reports every
+       * line after it: a single tab in the indentation produced ten findings,
+       * nine of them consequences of the first. Same principle as dropping the
+       * out-of-range steps when the trip's own range is inverted — a consequence
+       * carries no information, and the count is kept so nothing is hidden.
+       */
+      problems: [
+        {
+          // The parser's message repeats the position the finding already
+          // prints, and carries a multi-line source excerpt after it.
+          message: (first.message.split("\n")[0] ?? first.message).replace(
+            / at line \d+, column \d+:?$/,
+            ""
+          ),
+          code: first.code,
+          consequences: rest.length,
+          ...(first.linePos === undefined
+            ? {}
+            : { location: { line: first.linePos[0].line, column: first.linePos[0].col } }),
+        },
+      ],
+    };
+  }
+
+  let value: unknown;
+  try {
+    // `toJS()` is typed `any`; this is the assignment that stops it spreading.
+    // It also *resolves* the document, which is where `yaml` enforces its alias
+    // budget — so a file built to expand exponentially throws here rather than
+    // eating the build, and it must come out as a finding, not a stack trace.
+    value = document.toJS();
+  } catch (cause) {
+    return {
+      state: "malformed",
+      problems: [{ message: errorMessage(cause), code: "UNRESOLVABLE", consequences: 0 }],
+    };
+  }
+
+  return {
+    state: "parsed",
+    value,
+    source,
+    locate: locator(document, lineCounter),
+    unsafeKeys: unsafeKeyPaths(document),
+  };
+}
+
+/**
+ * The name of the one file holding the places the journal has been to with no
+ * journey attached (TIW-36).
+ *
+ * A single file rather than a directory per place, for the reason
+ * `docs/lieux-visites.md` gives: its body **is** a trip's `places[]` block, so
+ * promoting a place into a real trip is a move of contiguous lines that rewrites
+ * neither the slug nor the coordinates.
+ */
+export const VISITED_PLACES_FILE_NAME = "places.yaml";
+
+export type VisitedPlacesFile = {
+  /** Absolute path of the file that was read, or was expected. */
+  readonly absolutePath: string;
+} & (
+  | {
+      readonly state: "parsed";
+      readonly value: unknown;
+      readonly locate: Locate;
+      /** The file exactly as it is on disk — see the note on {@link TripFile}. */
+      readonly source: string;
+      readonly unsafeKeys: readonly FieldPath[];
+    }
+  /**
+   * There is no such file, and that is **not** a fault: a journal holding no
+   * dateless place is the ordinary case, and it was the whole state of this
+   * repository before TIW-36. A near-miss on the name is carried anyway, for the
+   * reason a miscased `Trip.yaml` is — "write this file" and "rename the one you
+   * already wrote" are different instructions, and only one of them destroys
+   * work.
+   */
+  | { readonly state: "absent"; readonly similarName?: string }
+  | { readonly state: "unreadable"; readonly reason: string }
+  | { readonly state: "malformed"; readonly problems: readonly YamlProblem[] }
+);
+
+/**
+ * Reads the visited-places file at an absolute path, or says why it could not.
+ *
+ * **The path is given whole rather than composed from a content directory**, and
+ * that is the seam the CLI needs: `--places <fichier>` and `TIW_PLACES_FILE` name
+ * a file, not a folder. It also keeps this collection's root independent of the
+ * trips' one — the trips directory refuses a loose `.yaml` at its own root,
+ * because a trip is a directory, so a places file dropped in there would be
+ * reported as content nobody reads.
+ */
+export function readVisitedPlacesFile(absolutePath: string): VisitedPlacesFile {
+  const wanted = path.basename(absolutePath);
+
+  /**
+   * **The directory is listed before the file is opened**, and the order is the
+   * whole point rather than a style: `readFileSync` goes through the *filesystem*,
+   * which on macOS answers `Places.yaml` to a request for `places.yaml` and on
+   * the case-sensitive filesystem of the CI answers nothing. Reading first and
+   * looking for a near-miss afterwards therefore gives two different verdicts on
+   * two machines for the same tree — measured, on this very test: the case-only
+   * mismatch was read happily on the workstation and would have 404'd online.
+   * Comparing against the names `readdir` really reports is the one reading that
+   * is the same everywhere. Same discipline as `readTripFile`, and the same
+   * lesson `assetFindings` records for photo paths.
+   */
+  let entries: readonly string[];
+  try {
+    entries = readdirSync(path.dirname(absolutePath));
+  } catch (cause) {
+    // The directory is missing or closed. A missing one means no places file,
+    // which is the ordinary state; anything else is a refusal the caller must
+    // hear rather than read as "no places".
+    return errorCode(cause) === "ENOENT"
+      ? { absolutePath, state: "absent" }
+      : { absolutePath, state: "unreadable", reason: errorMessage(cause) };
+  }
+
+  if (!entries.includes(wanted)) {
+    const similarName = entries.find((name) => name.toLowerCase() === wanted.toLowerCase());
+
+    return { absolutePath, state: "absent", ...(similarName === undefined ? {} : { similarName }) };
+  }
+
+  const reading = readYamlFile(absolutePath);
+
+  return { absolutePath, ...reading };
+}
+
 function readTripFile(contentDir: string, directory: string): TripFile {
   const tripDirectory = path.join(contentDir, directory);
   const absolutePath = path.join(tripDirectory, TRIP_FILE_NAME);
@@ -257,76 +442,17 @@ function readTripFile(contentDir: string, directory: string): TripFile {
     return { ...identity, state: "absent", ...(similarName === undefined ? {} : { similarName }) };
   }
 
-  let source: string;
-  try {
-    source = readFileSync(absolutePath, "utf8");
-  } catch (cause) {
-    // `existsSync` used to guard this and swallowed EACCES, which turned an
-    // unreadable trip into "the file is absent — remove the folder". Following
-    // that advice deletes a real trip.
-    return errorCode(cause) === "ENOENT"
-      ? { ...identity, state: "absent" }
-      : { ...identity, state: "unreadable", reason: errorMessage(cause), scope: "file" };
-  }
+  const reading = readYamlFile(absolutePath);
 
-  const lineCounter = new LineCounter();
-  const document = parseDocument(source, { lineCounter });
-
-  if (document.errors.length > 0) {
-    const [first, ...rest] = document.errors;
-    if (first !== undefined) {
-      return {
-        ...identity,
-        state: "malformed",
-        /**
-         * The first error only. A parser that has lost its footing reports every
-         * line after it: a single tab in the indentation produced ten findings,
-         * nine of them consequences of the first. Same principle as dropping the
-         * out-of-range steps when the trip's own range is inverted — a consequence
-         * carries no information, and the count is kept so nothing is hidden.
-         */
-        problems: [
-          {
-            // The parser's message repeats the position the finding already
-            // prints, and carries a multi-line source excerpt after it.
-            message: (first.message.split("\n")[0] ?? first.message).replace(
-              / at line \d+, column \d+:?$/,
-              ""
-            ),
-            code: first.code,
-            consequences: rest.length,
-            ...(first.linePos === undefined
-              ? {}
-              : { location: { line: first.linePos[0].line, column: first.linePos[0].col } }),
-          },
-        ],
-      };
-    }
-  }
-
-  let value: unknown;
-  try {
-    // `toJS()` is typed `any`; this is the assignment that stops it spreading.
-    // It also *resolves* the document, which is where `yaml` enforces its alias
-    // budget — so a file built to expand exponentially throws here rather than
-    // eating the build, and it must come out as a finding, not a stack trace.
-    value = document.toJS();
-  } catch (cause) {
-    return {
-      ...identity,
-      state: "malformed",
-      problems: [{ message: errorMessage(cause), code: "UNRESOLVABLE", consequences: 0 }],
-    };
-  }
-
-  return {
-    ...identity,
-    state: "parsed",
-    value,
-    source,
-    locate: locator(document, lineCounter),
-    unsafeKeys: unsafeKeyPaths(document),
-  };
+  /**
+   * `absent` cannot be reached here — the name was just found in `readdir` — but
+   * the union carries it, and mapping it to the trip's own `absent` is the honest
+   * narrowing: a file that vanished between the two syscalls really is gone.
+   * `scope: "file"` on `unreadable`, because the directory opened a moment ago.
+   */
+  return reading.state === "unreadable"
+    ? { ...identity, state: "unreadable", reason: reading.reason, scope: "file" }
+    : { ...identity, ...reading };
 }
 
 /** Alphabetical, so two runs report the same problems in the same order. */
