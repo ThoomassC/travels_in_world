@@ -1,0 +1,120 @@
+# Les lieux visités : des endroits où le carnet est allé, sans récit pour l'instant.
+#
+# Un lieu visité n'a ni date, ni étape, ni page — et c'est délibéré : une date de
+# voyage est un fait, et aucune n'est inventée ici. La carte les porte, la liste
+# des pays les compte, et rien ne pointe vers une adresse qui n'existe pas.
+#
+# Chaque entrée est **exactement** un élément de « places: » d'un trip.yaml. Le
+# jour où les dates d'un séjour sont connues, on déplace ses lignes dans le
+# voyage qui le raconte, on écrit l'étape, et on retire l'entrée d'ici — le slug
+# et les coordonnées ne changent pas. Tant qu'un lieu est déclaré des deux côtés,
+# « npm run validate:content » refuse : voir docs/lieux-visites.md.
+#
+# Le bloc « coordinates: » est écrit par « npm run geocode:places », jamais à la
+# main : une coordonnée tapée passe la validation et met le point au mauvais
+# endroit sans un mot.
+
+places:
+  - slug: rouen
+    name: Rouen
+    countryCode: FR
+    coordinates:
+      lat: 49.44313
+      lon: 1.09932
+
+  - slug: les-sables-d-olonne
+    name: Les Sables-d'Olonne
+    countryCode: FR
+    coordinates:
+      lat: 46.49687
+      lon: -1.7847
+
+  - slug: la-rochelle
+    name: La Rochelle
+    countryCode: FR
+    coordinates:
+      lat: 46.16308
+      lon: -1.15222
+
+  # La commune s'appelle Noirmoutier-en-l'Île ; le lieu, tel qu'on le nomme.
+  - slug: noirmoutier
+    name: Noirmoutier
+    countryCode: FR
+    coordinates:
+      lat: 47.00461
+      lon: -2.24152
+
+  - slug: annecy
+    name: Annecy
+    countryCode: FR
+    coordinates:
+      lat: 45.90878
+      lon: 6.12565
+
+  - slug: paris
+    name: Paris
+    countryCode: FR
+    coordinates:
+      lat: 48.85341
+      lon: 2.3488
+
+  # En Corse, donc « FR » : le fond de carte n'a qu'une forme à teindre.
+  - slug: porticcio
+    name: Porticcio
+    countryCode: FR
+    coordinates:
+      lat: 41.88682
+      lon: 8.80271
+
+  - slug: barcelone
+    name: Barcelone
+    countryCode: ES
+    coordinates:
+      lat: 41.38879
+      lon: 2.15899
+
+  # Nom officiel catalan ; le client l'avait donnée sous son nom castillan, Rosas.
+  - slug: roses
+    name: Roses
+    countryCode: ES
+    coordinates:
+      lat: 42.26199
+      lon: 3.17689
+
+  # Valence est aussi une ville française. Celle-ci est en Espagne — València —
+  # et c'est le countryCode qui le dit : « npm run geocode:places » compare le
+  # pays renvoyé par le service à celui écrit ici, et n'écrit rien s'ils diffèrent.
+  - slug: valence
+    name: Valence
+    countryCode: ES
+    coordinates:
+      lat: 39.47391
+      lon: -0.37966
+
+  - slug: heraklion
+    name: Héraklion
+    countryCode: GR
+    coordinates:
+      lat: 35.32787
+      lon: 25.14341
+
+  - slug: gand
+    name: Gand
+    countryCode: BE
+    coordinates:
+      lat: 51.05
+      lon: 3.71667
+
+  - slug: bruges
+    name: Bruges
+    countryCode: BE
+    coordinates:
+      lat: 51.20892
+      lon: 3.22424
+
+  - slug: geneve
+    name: Genève
+    countryCode: CH
+    coordinates:
+      lat: 46.20222
+      lon: 6.14569
