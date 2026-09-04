@@ -171,10 +171,36 @@ Deux propriétés de cette règle valent d'être sues :
   — la règle ne retire rien, et elle ne mord que là où il était généreux. Ce n'est
   pas une coïncidence, c'est le critère qui a fait choisir ce jeton.
 
-Les chiffres après implémentation sont dans le rapport du ticket, et le garde qui
-les tient est `tests/e2e/journal-notice.spec.ts`, qui mesure le bas de la figure
-aux deux viewports sur la page servie. Un garde et pas une note : la valeur
-`--space-7` est un nombre mesuré, et un nombre mesuré sans test dérive.
+**Le résultat, remesuré sur le build servi une fois la règle en place** — et il est
+meilleur que « ne repousse pas » :
+
+| viewport   | sans le bandeau | avec   | delta      | hauteur du bandeau |
+| ---------- | --------------- | ------ | ---------- | ------------------ |
+| 1152 × 800 | 715 px          | 699 px | **−16 px** | 28 px              |
+| 1280 × 720 | 696 px          | 669 px | **−27 px** | 28 px              |
+
+Le bandeau ne coûte pas 28 px au premier écran : il **remonte** la carte de 16 et
+27 px, parce que la bande qu'il occupe était plus grande que lui.
+
+Une mesure corrigée en route, gardée ici parce qu'elle est instructive :
+`.body` portait `max-width: 70ch`, copié de `.intro`. À `--text-sm` cela fait
+environ 490 px, donc la phrase passait à **deux** lignes et la bande à **47 px** au
+lieu de 28. Une mesure gagne sa place sur un paragraphe — elle empêche l'œil de
+perdre le début de la ligne suivante — et sur une notice d'une phrase elle
+n'achetait qu'une seconde ligne.
+
+Le garde qui tient tout ça est `tests/e2e/journal-notice.spec.ts`, qui mesure le
+bas de la figure aux deux viewports sur la page servie, **et** refuse un bandeau de
+plus d'une ligne. Un garde et pas une note : `--space-7` est un nombre mesuré, et
+un nombre mesuré sans test dérive.
+
+Et ce que ce doc ne prétend pas mesurer : `npm run test:perf` tourne sur la fixture
+**peuplée**, où le bandeau n'est pas rendu, donc il ne dit rien de lui. Le décalage
+cumulé a été mesuré à part sur le build du carnet vide, aux mêmes conditions
+(Pixel 5, CPU ×4, Slow 4G) : **CLS 0,0000** sur `/fr`, `/fr/voyages` et
+`/fr/a-propos`. Attendu — le bandeau est du HTML serveur sans image et sans script,
+donc rien ne peut arriver après la première peinture pour le déplacer — mais
+attendu n'est pas mesuré.
 
 ## Ce qui est délibérément absent
 
