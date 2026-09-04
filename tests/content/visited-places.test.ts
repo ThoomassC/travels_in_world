@@ -79,8 +79,8 @@ describe("a visited place has no address, and that is structural", () => {
    * enters.
    */
   it("exports no static-params door for places, so no build can produce one", async () => {
-    const module = await import("@/content/loader");
-    const doors = Object.keys(module).sort();
+    const loader = await import("@/content/loader");
+    const doors = Object.keys(loader).sort();
 
     expect(doors).toEqual([
       "findTrip",
