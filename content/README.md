@@ -1,4 +1,4 @@
-# content/ — les voyages, écrits à la main
+# content/ — les voyages et les lieux, écrits à la main
 
 Un voyage = **un dossier**, contenant **un `trip.yaml`**. Pas de base de données : ces
 fichiers sont le contenu du site, versionnés avec le code, lus au build.
@@ -6,6 +6,13 @@ fichiers sont le contenu du site, versionnés avec le code, lus au build.
 `content/trips/` est **vide pour l'instant** : les vrais voyages arrivent avec TIW-24. Le
 dossier existe déjà pour que `npm run validate:content` ait quelque chose à lire, et pour
 que la structure attendue soit écrite noir sur blanc avant le premier voyage.
+
+**Il y a une seconde collection depuis TIW-36, et un seul fichier :
+`content/places.yaml`.** Elle porte les **lieux visités** — des endroits où le carnet est
+allé sans qu'un récit les raconte, donc sans date, sans étape et sans page. C'est ce qui
+peuple la carte avant qu'un seul voyage soit écrit, et c'est l'état du site aujourd'hui :
+quatorze lieux, cinq pays, aucun récit. Voir « Un lieu visité, sans date ni récit »
+plus bas, et `docs/lieux-visites.md` pour la décision.
 
 Tu n'as pas à écrire ce fichier depuis une page blanche : `npm run new-trip <slug>` en pose
 un squelette commenté (voir « Commandes » plus bas), et `npm run geocode <slug>` remplit les
@@ -268,6 +275,80 @@ fiche — mais les autres photos ne s'affichent nulle part tant qu'il n'y a pas 
 ne sont pas refusées : les déclarer d'avance est légitime, et elles apparaîtront le jour où
 tu retires `story: unwritten`.
 
+## Un lieu visité, sans date ni récit
+
+`content/places.yaml`, et rien d'autre : un lieu visité n'a **ni date, ni étape, ni
+récit, ni page**.
+
+```yaml
+places:
+  - slug: rouen
+    name: Rouen # le nom tel qu'il s'affichera
+    countryCode: FR # mêmes règles que dans un voyage : un pays que la carte dessine
+    coordinates: # écrit par « npm run geocode:places », jamais à la main
+      lat: 49.44313
+      lon: 1.09932
+```
+
+**Pourquoi cette collection existe.** Un `Trip` exige `startDate`, `endDate`,
+`publishedAt`, au moins un lieu et au moins une étape. Un lieu dont on sait qu'on y est
+allé mais pas _quand_ ne peut donc pas être un voyage — et une date de voyage est un
+fait : aucune n'est inventée ici. Un 1er janvier de convention s'afficherait comme un
+fait, dans un `<time>` et dans la date d'un `<item>` de flux RSS.
+
+**Chaque entrée est exactement un élément de `places:` d'un `trip.yaml`** — le même
+schéma, pas une copie. C'est ce qui rend la promotion triviale le jour où les dates sont
+connues : on déplace les lignes du lieu dans le voyage qui le raconte, on écrit l'étape,
+et on retire l'entrée d'ici. **Le slug et les coordonnées ne changent pas**, donc rien
+n'est à géocoder une seconde fois et aucun lien partagé ne casse.
+
+**Et tant que le lieu est déclaré des deux côtés, la validation refuse** :
+
+```
+content/places.yaml:19:5 — places[0].slug : le lieu « annecy » est aussi déclaré par le
+voyage « savoie-2019 » : c'est le même lieu dans deux collections
+→ retire-le d'ici si ce voyage le raconte désormais — un lieu visité est ce qui n'a pas
+encore de récit
+```
+
+Le refus vaut aussi quand le voyage est un **brouillon**, parce que c'est là que la
+promotion se fait : une règle qui n'attraperait le doublon qu'après publication serait
+muette exactement pendant le travail qu'elle garde.
+
+Ce que ça change, exactement, face aux deux autres états :
+
+|                                | `draft: true` | `story: unwritten`                          | un lieu visité                                   |
+| ------------------------------ | ------------- | ------------------------------------------- | ------------------------------------------------ |
+| sur la carte                   | absent        | **présent**, pays teinté d'un état distinct | **présent**, balise à ses coordonnées            |
+| dans « Les pays visités »      | absent        | **présent**, avec son nombre de voyages     | **présent**, nommé sous son pays                 |
+| dans les listes de voyages     | absent        | **présent**                                 | **absent** : ce n'est pas un voyage              |
+| sa page                        | 404           | **404 : elle n'est pas construite**         | **il n'y en a aucune, et aucune ne peut l'être** |
+| liens vers elle                | aucun         | aucun                                       | aucun — la balise mène à `#lieu-<slug>`          |
+| dans le sitemap et le flux RSS | absent        | absent                                      | absent                                           |
+| badge « nouveau récit »        | jamais        | jamais                                      | jamais : il n'y a pas de récit                   |
+| dates                          | les siennes   | les siennes                                 | **aucune, et le schéma en refuse une**           |
+
+Quatre choses à savoir :
+
+- **Aucune page ne peut exister**, et ce n'est pas un filtre : `src/content/loader.ts`
+  n'a aucune porte capable de rendre une adresse pour un lieu. Il n'y a donc aucun chemin
+  de code — pas même une route ajoutée l'an prochain — qui puisse construire un lien vers
+  une page de lieu.
+- **La balise reste un vrai lien**, et elle mène à l'entrée du lieu dans la liste sous la
+  carte, sur la page même (`#lieu-<slug>`). Un `<a>` sans `href` n'a pas de rôle de lien
+  et serait inatteignable au clavier.
+- **La validation est entière**, comme pour un voyage : un code pays que la carte ne
+  dessine pas est refusé ici aussi, avec la même phrase, et (0, 0) reste la signature
+  d'un géocodage raté.
+- **Un fichier absent n'est pas une faute.** Un carnet sans lieu sans date est un carnet
+  ordinaire — c'est l'état d'avant TIW-36, et celui d'après la dernière promotion.
+  `places: []` est valide pour la même raison.
+
+Un dernier point, parce qu'il surprend : un slug de lieu **peut** être identique au slug
+d'un _voyage_. `/voyages/annecy` et `#lieu-annecy` sont deux adresses différentes, et un
+récit intitulé « annecy » à côté d'un arrêt sans date à Annecy est un énoncé cohérent.
+Seul le même _lieu_ dans les deux collections est refusé.
+
 ## Les règles que la validation fait respecter
 
 Elles ne sont pas décoratives : chacune correspond à une page cassée, ou cassée en silence.
@@ -383,10 +464,16 @@ là, la validation ne pouvait pas encore les voir.
 ```bash
 npm run new-trip japon-2024        # crée le dossier et un trip.yaml commenté, sans coordonnées
 npm run geocode japon-2024         # résout les coordonnées des villes et les écrit dans le fichier
+npm run geocode:places             # idem, pour content/places.yaml — les lieux sans récit
 npm run index-photos japon-2024    # mesure les photos, écrit leurs dimensions et leurs vignettes
-npm run validate:content           # valide content/trips/ ; rapporte tout, sort en 1 s'il reste un problème
+npm run validate:content           # valide content/trips/ ET content/places.yaml ; sort en 1 s'il reste un problème
 npm run validate:content -- --help
 ```
+
+`npm run geocode:places` **ne prend aucun argument** : il n'y a qu'un fichier de lieux,
+là où `npm run geocode` exige le slug du voyage à traiter. Tout le reste est le même
+code — les quatre refus ci-dessous valent mot pour mot pour les deux commandes — et
+`--pick`, l'entrée standard et le prompt sont partagés.
 
 `npm run validate:content` tourne aussi automatiquement avant `npm run test` (script
 `pretest`) : un contenu fautif ne peut pas traverser la suite sans se faire voir. `geocode`,
@@ -571,5 +658,7 @@ npm run validate:content -- tests/fixtures/content/valid-trip/trips \
   --public tests/fixtures/content/valid-trip/public
 ```
 
-En variables d'environnement : `TIW_CONTENT_DIR` et `TIW_PUBLIC_DIR`. Un argument explicite
-l'emporte sur l'environnement.
+En variables d'environnement : `TIW_CONTENT_DIR`, `TIW_PUBLIC_DIR` et `TIW_PLACES_FILE`.
+Un argument explicite l'emporte sur l'environnement. `TIW_PLACES_FILE` désigne un
+**fichier** et non un dossier, et il vit à côté de `content/trips/` et jamais dedans : ce
+dossier refuse un `.yaml` isolé à sa racine, puisqu'un voyage est un dossier.

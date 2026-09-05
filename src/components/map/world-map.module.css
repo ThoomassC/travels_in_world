@@ -394,6 +394,36 @@
     inset 0 0 0 3px var(--accent);
 }
 
+/**
+ * **A visited place's dot** — TIW-36: somewhere the journal has been with no
+ * journey written for it, so with no date and no page.
+ *
+ * A **smaller, ringed** dot, which makes the three states differ by *shape* and
+ * not by hue: a trip is a filled disc, an untold trip is a hollow disc of the
+ * same size, and a visited place is a smaller disc. The size is the channel that
+ * survives a reader who cannot separate the colours, and the marker's accessible
+ * name says it in words as well — a distinction carried only by a drawing does
+ * not exist for the readers who cannot see it.
+ *
+ * The `<a>` around it keeps its 44 px, untouched: only the drawn dot shrinks, so
+ * the target this rule affects is exactly none. That is the whole reason the
+ * markers are HTML laid over the SVG rather than shapes inside it (`marks.ts`).
+ *
+ * `--accent-quiet-border` and not `--accent`: measured on the same surfaces as
+ * the pills of `visited-countries.module.css`, a place's dot has to read as
+ * quieter than a récit without becoming a boundary nobody can find — and the ring
+ * of `--text-on-accent` inherited from `.dot` is what delimits it against
+ * whichever tint it lands on, exactly as for the other two states.
+ */
+.link[data-kind="place"] .dot {
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 2px var(--text-on-accent),
+    inset 0 0 0 2px var(--accent);
+}
+
 /* =============================================================================
    The newest récit's halo — TIW-19.
 

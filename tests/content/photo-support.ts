@@ -31,6 +31,8 @@ export type PhotoWorkspace = {
   readonly contentDir: string;
   readonly publicDir: string;
   readonly repoRoot: string;
+  /** No such file in a photo workspace, and that is the point: it must validate. */
+  readonly placesFile: string;
   readonly slug: string;
   /** The trip file's absolute path, for an mtime or a permission change. */
   readonly tripFile: string;
@@ -85,6 +87,7 @@ export async function photoWorkspace(options: WorkspaceOptions): Promise<PhotoWo
     contentDir,
     publicDir,
     repoRoot: root,
+    placesFile: path.join(root, "places.yaml"),
     slug,
     tripFile,
     read: () => readFileSync(tripFile, "utf8"),

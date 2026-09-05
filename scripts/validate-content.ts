@@ -28,11 +28,20 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "..");
 const DEFAULT_CONTENT_DIR = path.join(REPO_ROOT, "content", "trips");
 const DEFAULT_PUBLIC_DIR = path.join(REPO_ROOT, "public");
 
+/**
+ * The visited-places file (TIW-36) — beside `content/trips`, never inside it: the
+ * trips directory refuses a loose `.yaml` at its own root, because a trip is a
+ * directory.
+ */
+const DEFAULT_PLACES_FILE = path.join(REPO_ROOT, "content", "places.yaml");
+
 const USAGE = `Usage : npm run validate:content -- [dossier] [options]
 
 Valide chaque voyage de content/trips/ : structure du fichier, cohérence de
-l'itinéraire, présence des photos sur le disque. Rapporte tous les problèmes,
-fichier par fichier, et sort en 1 s'il en reste un.
+l'itinéraire, présence des photos sur le disque. Valide aussi content/places.yaml,
+les lieux visités sans date ni récit, et refuse qu'un lieu soit déclaré à la fois
+là et dans un voyage. Rapporte tous les problèmes, fichier par fichier, et sort
+en 1 s'il en reste un.
 
 Arguments
   [dossier]             Dossier des voyages, un sous-dossier par voyage.
@@ -42,11 +51,14 @@ Options
   --content <dossier>   Le même dossier, sous forme d'option.
   --public <dossier>    Racine à laquelle les chemins de photos (« /photos/... »)
                         se résolvent. Par défaut : public
+  --places <fichier>    Fichier des lieux visités — des lieux sans date, sans
+                        étape et sans récit. Par défaut : content/places.yaml
   -h, --help            Affiche cette aide.
 
 Variables d'environnement
   TIW_CONTENT_DIR       Dossier des voyages, si aucun argument ne le donne.
   TIW_PUBLIC_DIR        Racine des photos, si --public ne la donne pas.
+  TIW_PLACES_FILE       Fichier des lieux visités, si --places ne le donne pas.
                         Un argument explicite l'emporte sur l'environnement.
 
 Exemple
@@ -70,6 +82,7 @@ function main(argv: readonly string[]): number {
     valued: [
       { name: "--content", expects: "un dossier" },
       { name: "--public", expects: "un dossier" },
+      { name: "--places", expects: "un fichier" },
     ],
   });
 
@@ -120,6 +133,9 @@ function main(argv: readonly string[]): number {
       optionValue(parsed, "--public") ?? fromEnvironment("TIW_PUBLIC_DIR") ?? DEFAULT_PUBLIC_DIR
     ),
     repoRoot: REPO_ROOT,
+    placesFile: path.resolve(
+      optionValue(parsed, "--places") ?? fromEnvironment("TIW_PLACES_FILE") ?? DEFAULT_PLACES_FILE
+    ),
   });
 
   const failed = validation.findings.length > 0;

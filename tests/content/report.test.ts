@@ -41,6 +41,7 @@ const failing: ContentValidation = {
   validCount: 1,
   failedCount: 2,
   structuralCount: 0,
+  placeCount: 0,
   findings: FINDINGS,
 };
 
@@ -48,6 +49,7 @@ const passing: ContentValidation = {
   contentDir: "content/trips",
   tripCount: 2,
   validCount: 2,
+  placeCount: 0,
   failedCount: 0,
   structuralCount: 0,
   findings: [],

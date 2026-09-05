@@ -15,6 +15,32 @@ Soit **5 voyages, 5 pays** et, par ordre alphabétique français : Bolivie 1,
 Islande 1, Japon 2, Maroc 1, Pérou 1. Le compte par pays est précisément ce que
 la carte ne portait dans aucun canal, donc c'est la table que la suite vérifie.
 
+## Deux lieux visités, depuis TIW-36
+
+`places.yaml`, à côté de `trips/`, porte **deux lieux visités** : des endroits où
+le carnet est allé sans qu'un récit les raconte, donc sans date, sans étape et
+sans page. Ils rendent observables les deux seuls états que cinq voyages ne
+peuvent pas produire :
+
+| Lieu   | Pays | Ce qu'il rend observable                                                |
+| ------ | ---- | ----------------------------------------------------------------------- |
+| `nara` | JP   | un lieu dans un pays que des voyages **racontés** atteignent déjà       |
+| `gand` | BE   | un pays qui n'existe sur la page **que** par un lieu, sans aucun voyage |
+
+Donc **5 voyages, 2 lieux visités et 6 pays**, et par ordre alphabétique
+français : Belgique 1 lieu visité, Bolivie 1 voyage, Islande 1 voyage, Japon
+2 voyages + 1 lieu visité, Maroc 1 voyage, Pérou 1 voyage. La ligne de la
+Belgique **n'est pas un lien** : aucun voyage n'y mène, et l'envoyer vers la
+liste répondrait une page qui ne mentionne pas la Belgique.
+
+Les deux tombent, comme Marrakech, **strictement à l'intérieur** de l'emprise des
+cinq balises existantes, pour la même raison : le cadre du planisphère ne bouge
+pas et aucun test qui l'affirme n'a à changer pour une raison qui n'est pas la
+sienne.
+
+Ni `nara` ni `gand` n'est un slug de lieu déclaré par un voyage de cette fixture
+— le validateur et le chargeur refusent le même lieu dans les deux collections.
+
 **Le cinquième est arrivé avec TIW-18**, et il porte `story: unwritten`. C'est le
 seul état que les quatre autres ne pouvaient pas rendre observable : le Maroc est
 teinté d'un état distinct parce qu'aucun voyage raconté ne l'atteint, sa balise

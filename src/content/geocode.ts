@@ -1,7 +1,14 @@
 import { CoordinatesSchema, CountryCodeSchema } from "@/domain/geo";
 import type { Coordinates } from "@/domain/geo";
 import { isInsideDirectory, temporaryFileGlob, writeAtomically } from "./atomic-write";
-import { displayPath, readTripCollection, stringAt, valueAt } from "./collection";
+import path from "node:path";
+import {
+  displayPath,
+  readTripCollection,
+  readVisitedPlacesFile,
+  stringAt,
+  valueAt,
+} from "./collection";
 import type { TripFile } from "./collection";
 import type { GeocodingCandidate, GeocodingClient, SearchFailure } from "./geocoding";
 import { formatCoordinate, writeCoordinates } from "./yaml-edit";
@@ -183,13 +190,62 @@ export type GeocodeOutcome =
       readonly resolved: number;
     };
 
-export type GeocodeRequest = {
-  readonly contentDir: string;
+/**
+ * What resolving one document needs, whichever document it is.
+ *
+ * Split out of {@link GeocodeRequest} by TIW-36, when a second file gained a
+ * `places[]` block: `content/places.yaml` holds places the journal has been to
+ * with no journey attached, and every judgement below applies to it word for word
+ * — the never-`results[0]` rule, the country cross-check, the (0, 0) refusal, the
+ * all-or-nothing write. What differs between the two callers is *how the file is
+ * found*, and that is the only thing they still each own.
+ */
+export type ResolveRequest = {
   readonly repoRoot: string;
-  readonly slug: string;
   readonly search: GeocodingClient;
   readonly choose: Chooser;
   readonly onEvent?: (event: GeocodeEvent) => void;
+};
+
+/**
+ * How `npm run geocode:places` can end (TIW-36).
+ *
+ * The four shared states are *reused* rather than restated — a partial write, a
+ * failed write, a save that landed under the prompt, a file that is not UTF-8 all
+ * mean exactly what they mean for a trip, and the wording that says "your bytes
+ * are intact" must not exist twice. The three that are its own are the three ways
+ * *this* file can fail to be found, which a trip answers differently because a
+ * trip is looked up by slug in a directory.
+ */
+export type PlacesGeocodeOutcome =
+  | {
+      readonly state: "places-file-absent";
+      readonly file: string;
+      /** A file whose name differs only by case — "rename" and not "write". */
+      readonly similarName?: string;
+    }
+  | { readonly state: "places-file-unreadable"; readonly file: string; readonly reason: string }
+  | { readonly state: "places-file-malformed"; readonly file: string; readonly reason: string }
+  | Extract<
+      GeocodeOutcome,
+      { state: "no-places" | "done" | "write-failed" | "file-changed" | "file-not-utf8" }
+    >;
+
+export type GeocodeRequest = ResolveRequest & {
+  readonly contentDir: string;
+  readonly slug: string;
+};
+
+/**
+ * Where the visited-places file is, and where a write is allowed to land.
+ *
+ * `boundary` exists for the symlink case only: a `places.yaml` that resolves
+ * outside its own directory is a legitimate setup, and the run says where the
+ * bytes really went rather than refusing. Same arrangement as `contentDir` for a
+ * trip.
+ */
+export type PlacesGeocodeRequest = ResolveRequest & {
+  readonly placesFile: string;
 };
 
 /**
@@ -246,8 +302,6 @@ function placeRef(document: unknown, index: number): PlaceRef {
 
 /* ------------------------------------------------------------ finding the trip -- */
 
-type ParsedTrip = Extract<TripFile, { state: "parsed" }>;
-
 type Selection =
   | { readonly state: "found"; readonly trip: TripFile }
   | { readonly state: "not-found"; readonly available: readonly string[] };
@@ -288,7 +342,7 @@ type Resolution =
 
 async function resolvePlace(
   place: PlaceRef,
-  request: GeocodeRequest,
+  request: ResolveRequest,
   emit: (event: GeocodeEvent) => void
 ): Promise<Resolution> {
   if (place.name === "") {
@@ -495,6 +549,25 @@ function writableSubset(source: string, edits: readonly CoordinateEdit[]): Subse
 
 /* -------------------------------------------------------------------- the run -- */
 
+/**
+ * A `places[]`-bearing document, reduced to what the resolution engine reads of
+ * one: its parsed value, its exact bytes, where it is, and how to name it.
+ *
+ * `source` and not a second read of the disk, for {@link TripFile}'s reason: the
+ * splices are byte offsets into *this* text, so re-reading the file would open a
+ * window in which the author's save lands between the read that produced the
+ * offsets and the read that produced the text.
+ */
+type ResolvableDocument = {
+  readonly value: unknown;
+  readonly source: string;
+  readonly absolutePath: string;
+  /** Repository-relative, as every message prints it. */
+  readonly file: string;
+  /** The directory a write may land in without the run saying where it went. */
+  readonly boundary: string;
+};
+
 export async function geocodeTrip(request: GeocodeRequest): Promise<GeocodeOutcome> {
   const emit = request.onEvent ?? (() => undefined);
   const collection = readTripCollection(request.contentDir);
@@ -541,15 +614,86 @@ export async function geocodeTrip(request: GeocodeRequest): Promise<GeocodeOutco
     };
   }
 
-  return resolveParsedTrip(trip, file, request, emit);
+  return resolveDocument(
+    {
+      value: trip.value,
+      source: trip.source,
+      absolutePath: trip.absolutePath,
+      file,
+      boundary: request.contentDir,
+    },
+    request,
+    emit
+  );
 }
 
-async function resolveParsedTrip(
-  trip: ParsedTrip,
-  file: string,
-  request: GeocodeRequest,
+/**
+ * Reads the visited-places file and resolves every place in it that has no
+ * coordinates (TIW-36).
+ *
+ * The same four refusals as {@link geocodeTrip}, because it is the same engine:
+ * never `results[0]`, the country cross-check against what the file declares,
+ * the domain's last word on a coordinate, and nothing written unless something
+ * was resolved.
+ *
+ * **A missing file is a refusal here**, unlike in the loading façade where it is
+ * an empty collection. The two questions differ: a journal with no dateless place
+ * is an ordinary journal, but somebody who has just typed
+ * `npm run geocode:places` is asking about a file, and answering "nothing to do"
+ * for a file that is not there is how a typo in `--places` looks like success.
+ */
+export async function geocodePlaces(request: PlacesGeocodeRequest): Promise<PlacesGeocodeOutcome> {
+  const emit = request.onEvent ?? (() => undefined);
+  const read = readVisitedPlacesFile(request.placesFile);
+  const file = displayPath(request.repoRoot, read.absolutePath);
+
+  if (read.state === "absent") {
+    return {
+      state: "places-file-absent",
+      file,
+      ...(read.similarName === undefined ? {} : { similarName: read.similarName }),
+    };
+  }
+  if (read.state === "unreadable") {
+    return { state: "places-file-unreadable", file, reason: read.reason };
+  }
+  if (read.state === "malformed") {
+    return {
+      state: "places-file-malformed",
+      file,
+      reason: read.problems[0]?.message ?? "le fichier YAML ne se relit pas",
+    };
+  }
+
+  return resolveDocument(
+    {
+      value: read.value,
+      source: read.source,
+      absolutePath: read.absolutePath,
+      file,
+      boundary: path.dirname(request.placesFile),
+    },
+    request,
+    emit
+  );
+}
+
+/**
+ * The states the engine itself can produce — everything but the ways a *file* can
+ * fail to be found, which is the caller's business. Narrowed rather than left as
+ * the whole union, so `geocodePlaces` can return its own union without a cast.
+ */
+type ResolvedOutcome = Extract<
+  GeocodeOutcome,
+  { state: "no-places" | "done" | "write-failed" | "file-changed" | "file-not-utf8" }
+>;
+
+async function resolveDocument(
+  trip: ResolvableDocument,
+  request: ResolveRequest,
   emit: (event: GeocodeEvent) => void
-): Promise<GeocodeOutcome> {
+): Promise<ResolvedOutcome> {
+  const file = trip.file;
   const places = valueAt(trip.value, ["places"]);
   if (!Array.isArray(places) || places.length === 0) {
     return { state: "no-places", file };
@@ -676,7 +820,7 @@ async function resolveParsedTrip(
     return { state: "write-failed", file, reason: written.reason, resolved };
   }
 
-  const outside = !isInsideDirectory(request.contentDir, written.target);
+  const outside = !isInsideDirectory(trip.boundary, written.target);
 
   return {
     state: "done",

@@ -58,6 +58,29 @@ export type CountingTrip = {
   readonly story: StoryState;
 };
 
+/**
+ * **A place the journal has been to with no journey attached** (TIW-36), reduced
+ * to what the tally reads of one.
+ *
+ * Structurally a subset of the content façade's `Place`, so the parsed value is
+ * assignable without a line of adaptation — and narrower than it, so
+ * `src/app/[locale]/page.tsx`, the one file holding both, is where a rename
+ * upstream fails `npm run typecheck`.
+ *
+ * No `story` field, and that is not an omission to fill in later: a place has no
+ * récit to be in one state or another about. It is *always* something the reader
+ * cannot yet read, which is why {@link untoldOnlyCountryCodes} needs no predicate
+ * for it.
+ */
+export type CountingPlace = {
+  /** The tail of the `#lieu-<slug>` fragment the map's marker points at. */
+  readonly slug: string;
+  /** « Rouen », as it is displayed. */
+  readonly name: string;
+  /** ISO 3166-1 alpha-2, uppercase by schema. */
+  readonly countryCode: string;
+};
+
 export type VisitedCountryTally = {
   /** ISO 3166-1 alpha-2, uppercase by schema. */
   readonly code: string;
@@ -86,6 +109,20 @@ export type VisitedCountryTally = {
    * numbers — and because the row needs the slug itself to build the href.
    */
   readonly toldTripSlugs: readonly string[];
+  /**
+   * The dateless visited places this country holds (TIW-36), in the order they
+   * arrived — which the content façade has already made alphabetical by name.
+   *
+   * **Whole places and not a count**, for the reason `tripSlugs` gives about two
+   * numbers, plus one that is its own: the row *renders* them. Each place is the
+   * anchor `#lieu-<slug>` that its own marker on the map points at, so this list
+   * is what turns « no link to a page that does not exist » into a destination
+   * that certainly exists rather than a promise.
+   *
+   * Empty for a country reached only by trips, which is the ordinary case of a
+   * journal whose récits are written.
+   */
+  readonly places: readonly CountingPlace[];
 };
 
 /**
@@ -124,9 +161,11 @@ export type CountryLabels = {
  */
 export function tallyVisitedCountries(
   trips: readonly CountingTrip[],
+  places: readonly CountingPlace[],
   labels: CountryLabels
 ): readonly VisitedCountryTally[] {
   const slugsByCode = new Map<string, string[]>();
+  const placesByCode = new Map<string, CountingPlace[]>();
 
   for (const trip of trips) {
     // Per *trip* de-duplication, not global: the unit being counted is the trip,
@@ -142,15 +181,39 @@ export function tallyVisitedCountries(
     }
   }
 
-  const told = new Set(trips.filter(hasStory).map((trip) => trip.slug));
+  /**
+   * **The visited places are folded in here, and that is not optional** (TIW-36).
+   * The drawing tints a country as soon as *anything* reaches it, places
+   * included; a tally built from the trips alone would render « Aucun pays sur la
+   * carte pour l'instant » under a map showing five tinted countries and fourteen
+   * markers. That is the same single-channel defect the audit of TIW-20 found on
+   * the first tint, and it is why this argument is required rather than
+   * defaulted.
+   */
+  for (const place of places) {
+    const known = placesByCode.get(place.countryCode);
+    if (known === undefined) {
+      placesByCode.set(place.countryCode, [place]);
+    } else {
+      known.push(place);
+    }
+  }
 
-  return [...slugsByCode]
-    .map(([code, tripSlugs]) => ({
-      code,
-      name: labels.countryName(code),
-      tripSlugs: [...tripSlugs],
-      toldTripSlugs: tripSlugs.filter((slug) => told.has(slug)),
-    }))
+  const told = new Set(trips.filter(hasStory).map((trip) => trip.slug));
+  const codes = new Set([...slugsByCode.keys(), ...placesByCode.keys()]);
+
+  return [...codes]
+    .map((code) => {
+      const tripSlugs = slugsByCode.get(code) ?? [];
+
+      return {
+        code,
+        name: labels.countryName(code),
+        tripSlugs: [...tripSlugs],
+        toldTripSlugs: tripSlugs.filter((slug) => told.has(slug)),
+        places: [...(placesByCode.get(code) ?? [])],
+      };
+    })
     .sort((left, right) => labels.compare(left.name, right.name));
 }
 
@@ -175,9 +238,23 @@ export function tallyVisitedCountries(
  * `tallyVisitedCountries` takes of a multi-country trip: a journey through
  * Morocco and Mauritania is unwritten in both.
  */
-export function untoldOnlyCountryCodes(trips: readonly CountingTrip[]): ReadonlySet<string> {
+export function untoldOnlyCountryCodes(
+  trips: readonly CountingTrip[],
+  places: readonly CountingPlace[]
+): ReadonlySet<string> {
   const untold = new Set<string>();
   const told = new Set<string>();
+
+  /**
+   * **A visited place is untold by definition** (TIW-36) — there is no récit to
+   * read and no page to read it on — so its country joins the set unconditionally
+   * and needs no predicate. The subtraction below still applies: a country
+   * holding one written récit *and* a dateless place has something to read, and
+   * the distinct tint would tell the reader it has not.
+   */
+  for (const place of places) {
+    untold.add(place.countryCode);
+  }
 
   for (const trip of trips) {
     // The target set is chosen once per trip rather than per code, so a trip

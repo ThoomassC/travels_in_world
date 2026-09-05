@@ -55,5 +55,22 @@ import "server-only";
  * (`tests/lint/content-facade.test.ts`, `tests/content/trips.test.ts`).
  */
 
-export { findTrip, listTripSummaries, loadTrips, tripStaticParams } from "./loader";
+/**
+ * **The name says "trips" and one of the five doors returns places** (TIW-36),
+ * and that is deliberate rather than a rename nobody got round to. The rule this
+ * module implements is *one* guarded door for the whole of `src/**` — the ESLint
+ * block above allows exactly this specifier and nothing else under `@/content/` —
+ * so a second façade would be a second door, which is the one thing the guard
+ * exists to prevent. The module's subject is the content, and its filename is the
+ * address `src/**` has always used; changing it would move a boundary that three
+ * tests and one lint rule are written against, to say something a comment says
+ * better.
+ */
+export {
+  findTrip,
+  listTripSummaries,
+  listVisitedPlaces,
+  loadTrips,
+  tripStaticParams,
+} from "./loader";
 export type { TripDetail, TripSummary } from "./loader";

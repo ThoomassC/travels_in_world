@@ -1,18 +1,31 @@
 import path from "node:path";
-import { TripSchema } from "@/domain/schema";
-import type { Trip } from "@/domain/schema";
+import { TripSchema, VisitedPlacesSchema } from "@/domain/schema";
+import type { Place, Trip } from "@/domain/schema";
 import { detailOf, hasStory, summaryOf } from "@/domain/trip";
 import type { TripDetail, TripSummary } from "@/domain/trip";
-import { displayPath, readTripCollection } from "./collection";
-import type { TripFile } from "./collection";
+import {
+  displayPath,
+  readTripCollection,
+  readVisitedPlacesFile,
+  VISITED_PLACES_FILE_NAME,
+} from "./collection";
+import type { TripFile, VisitedPlacesFile } from "./collection";
 import { describeField } from "./finding";
 import type { FieldPath } from "./finding";
 
 /**
  * The loading façade: the one seam that makes "content in files" a reversible
- * decision. Four functions, and nothing else in the application knows where a
- * trip comes from — the day the content moves to PostgreSQL, only these four
+ * decision. Five functions, and nothing else in the application knows where the
+ * content comes from — the day it moves to PostgreSQL, only these five
  * implementations change and no caller is touched.
+ *
+ * **Five since TIW-36, and the fifth one is not a fourth of the same kind.** The
+ * four original doors split in two pairs (TIW-18): two of them *render*, two of
+ * them *refuse an address*. `listVisitedPlaces` is a rendering door with **no
+ * refusing counterpart at all**, and that asymmetry is the guarantee rather than
+ * an omission — see the note on the function itself. It also reads a second
+ * collection, `content/places.yaml`, whose relation to the first is a refusal:
+ * `assertDisjointFromVisitedPlaces`.
  *
  * **Why they are `async` when the read is synchronous.** That reversibility is
  * the whole reason. `readTripCollection` is `fs`-synchronous today, so nothing
@@ -102,6 +115,29 @@ function contentError(where: string, problem: string): Error {
  */
 function repositoryRoot(): string {
   return process.cwd();
+}
+
+/**
+ * The visited-places file: `TIW_PLACES_FILE` when set and not blank,
+ * `content/places.yaml` otherwise (TIW-36).
+ *
+ * **A file and not a directory**, and deliberately *beside* `content/trips`
+ * rather than inside it: the trips root refuses a loose `.yaml` at its own level
+ * — a trip is a directory — so a places file dropped in there would be reported
+ * as content nobody reads.
+ *
+ * The blank-string trap and the `.trim()` are {@link contentRoot}'s, for its
+ * reasons, and they are repeated here rather than shared because the fallback
+ * differs and a helper taking both would read worse than two eight-line
+ * functions. What must not differ is the *treatment* of a blank value, so the
+ * suite asserts it on both names.
+ */
+function placesFile(): string {
+  const configured = process.env.TIW_PLACES_FILE;
+
+  return configured === undefined || configured.trim() === ""
+    ? path.join(process.cwd(), "content", VISITED_PLACES_FILE_NAME)
+    : path.resolve(configured);
 }
 
 /**
@@ -657,7 +693,202 @@ function readAndAnnounce(contentDir: string): readonly Trip[] {
 function publishedTrips(): readonly Trip[] {
   const all = memoisedTrips(contentRoot());
 
+  /**
+   * The disjunction is checked from **this** side too, and not only from
+   * `listVisitedPlaces`. A collection whose two halves contradict each other must
+   * not be half-servable: a build that rendered the trip listing and failed only
+   * on the map would ship a page saying a city was never visited while another
+   * page said it was.
+   */
+  assertDisjointFromVisitedPlaces(all);
+
   return showsDrafts() ? all : all.filter((trip) => !trip.draft);
+}
+
+/* ------------------------------------------------------- the visited places -- */
+
+/**
+ * The places the journal has been to with no journey attached (TIW-36) — the
+ * whole of `content/places.yaml`, parsed.
+ *
+ * Memoised on the same terms as the trips and keyed by the resolved *file*: a
+ * build reads it once per worker, `next dev` reads it every time so an edit
+ * shows up. `readVisitedPlaces` throws before the insertion, so a refused file
+ * leaves no trace and correcting it needs no restart — the same ordering, for the
+ * same reason, as {@link memoisedTrips}.
+ */
+const placeCollections = new Map<string, readonly Place[]>();
+
+function memoisedVisitedPlaces(file: string): readonly Place[] {
+  if (!isProductionBuild()) {
+    return readVisitedPlaces(file);
+  }
+
+  const cached = placeCollections.get(file);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const places = readVisitedPlaces(file);
+  placeCollections.set(file, places);
+
+  return places;
+}
+
+/**
+ * Why a places file could not be read, in the words the message will use.
+ *
+ * A `switch` with a `never` default, for the reason {@link unreadableFileProblem}
+ * gives: the `default` is what turns a new state of `VisitedPlacesFile` into a
+ * **compile** error rather than into a wrong sentence.
+ */
+function unreadablePlacesProblem(file: Exclude<VisitedPlacesFile, { state: "parsed" }>): string {
+  switch (file.state) {
+    case "absent":
+      // Reached only for a near-miss on the name: a genuinely absent file is an
+      // empty collection and never an error — see `readVisitedPlaces`.
+      return `le fichier s'appelle « ${file.similarName ?? ""} », pas « ${VISITED_PLACES_FILE_NAME} »`;
+
+    case "unreadable":
+      return `le fichier n'est pas lisible : ${file.reason}`;
+
+    case "malformed": {
+      // The first YAML problem only; the parser reports every line after the one
+      // it lost its footing on, and a consequence carries no information.
+      const [first] = file.problems;
+
+      return `YAML invalide${first === undefined ? "" : ` : ${first.message}`}`;
+    }
+
+    default: {
+      const unexpected: never = file;
+
+      throw new Error(`état de fichier non traité : ${JSON.stringify(unexpected)}`);
+    }
+  }
+}
+
+/**
+ * Reads and parses the visited places, or throws naming the file and the command.
+ *
+ * **No file at all is an empty list, and it is the one lenient answer in this
+ * module.** Everywhere else an absence is loud, because a trip vanishing in
+ * silence is the defect this pipeline exists to prevent. But a journal holding no
+ * dateless place is not a broken journal: it is what this repository was before
+ * TIW-36, and what it becomes again once every place has been promoted into a
+ * trip. Making that an error would turn the ordinary end state into a build
+ * failure. The distinction is only safe because `readYamlFile` reserves `absent`
+ * for `ENOENT` alone — an `EACCES` comes back as `unreadable` and throws, so
+ * "no places" is never the answer to a file that is there.
+ */
+function readVisitedPlaces(file: string): readonly Place[] {
+  const repoRoot = repositoryRoot();
+  const read = readVisitedPlacesFile(file);
+  const where = displayPath(repoRoot, read.absolutePath);
+
+  if (read.state === "absent" && read.similarName === undefined) {
+    return [];
+  }
+
+  if (read.state !== "parsed") {
+    throw contentError(where, unreadablePlacesProblem(read));
+  }
+
+  /**
+   * The same two `__proto__` checks the trips get, in the same order and for the
+   * same measured reasons: the document walk names the key as it was written, and
+   * the walk over the materialised value is the only one an alias cannot slip
+   * past. Closing the hole in one collection and not the other would be worse
+   * than closing it in neither — a reader would reasonably believe it closed
+   * everywhere.
+   */
+  const [declaredUnsafeKey] = read.unsafeKeys;
+  if (declaredUnsafeKey !== undefined) {
+    throw contentError(where, unsafeKeyProblem(declaredUnsafeKey));
+  }
+
+  const [materialisedUnsafeKey] = unsafeKeysIn(read.value);
+  if (materialisedUnsafeKey !== undefined) {
+    throw contentError(where, unsafeKeyProblem(materialisedUnsafeKey));
+  }
+
+  const parsed = VisitedPlacesSchema.safeParse(read.value);
+  if (!parsed.success) {
+    throw contentError(where, "le fichier des lieux visités est refusé par le schéma");
+  }
+
+  /**
+   * **Sorted by name here, once**, exactly as the trips are sorted once by
+   * `byMostRecentThenSlug`: three consumers read this list — the map's markers,
+   * the map's textual equivalent and the anchors they point at — and an order
+   * stated in three places is an order two of them eventually get wrong.
+   *
+   * By name and not by file order, because a visited place carries no date and
+   * therefore has no chronology to take; by name and not by localised collation,
+   * because that belongs to the presentation layer and `localeCompare`'s answer
+   * depends on the runtime's locale data — the same reasoning as
+   * `visitedCountryCodes`. A prerendered page has to be byte-identical between
+   * two builds of the same content.
+   */
+  return [...parsed.data.places].sort(byName);
+}
+
+/** Ascending by name, then by slug for a tie — see {@link readVisitedPlaces}. */
+function byName(left: Place, right: Place): number {
+  if (left.name !== right.name) {
+    return left.name < right.name ? -1 : 1;
+  }
+
+  return left.slug < right.slug ? -1 : left.slug > right.slug ? 1 : 0;
+}
+
+/**
+ * **The two collections hold disjoint place slugs, and the refusal is what makes
+ * them one source of truth.**
+ *
+ * This is the whole answer to the one real objection against a separate
+ * collection (`docs/lieux-visites.md`): two files holding places is two places
+ * for the same city to live, free to diverge in silence. It is not free here — a
+ * slug declared on both sides is refused, naming both files, so promoting a place
+ * into a trip cannot half-happen. Until the four lines are removed from
+ * `places.yaml`, nothing builds.
+ *
+ * **Drafts are included on purpose.** A draft's places are not published, so no
+ * reader could see the duplicate — but the promotion this rule exists to make
+ * loud happens *inside* a draft, which `content/README.md` calls the ordinary
+ * shape of a return from a journey. A rule that only bit once the trip was
+ * published would be silent exactly while the author is doing the work it guards.
+ *
+ * **A place slug matching a *trip* slug is not this fault** and is not refused:
+ * `/voyages/<slug>` and `#lieu-<slug>` are different namespaces, and a récit
+ * named « annecy » beside a dateless stop in Annecy is a coherent statement.
+ *
+ * **Not memoised, deliberately.** It is a set build over a few dozen strings on a
+ * list that is already in memory, so there is nothing to buy — and ADR 0015
+ * records what a memoised guard costs when it remembers its *execution* instead
+ * of its verdict: the first page of a build fails and every later one passes.
+ * Having no memo is the cheapest way to be sure this one cannot.
+ */
+function assertDisjointFromVisitedPlaces(trips: readonly Trip[]): void {
+  const file = placesFile();
+  const places = memoisedVisitedPlaces(file);
+  if (places.length === 0) {
+    return;
+  }
+
+  const declared = new Set(places.map((place) => place.slug));
+  const repoRoot = repositoryRoot();
+
+  for (const trip of trips) {
+    for (const place of trip.places) {
+      if (declared.has(place.slug)) {
+        throw contentError(
+          displayPath(repoRoot, file),
+          `le lieu « ${place.slug} » est aussi déclaré par le voyage « ${trip.slug} » : c'est le même lieu dans deux collections — retire-le d'ici si le voyage le raconte désormais`
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -687,7 +918,57 @@ function tripsWithAStory(): readonly Trip[] {
   return publishedTrips().filter(hasStory);
 }
 
-/* ------------------------------------------------------------- the four doors -- */
+/* ------------------------------------------------------------- the five doors -- */
+
+/**
+ * **Every visited place, ordered by name** — a place the journal has been to with
+ * no journey attached, and therefore with no date, no step, no récit and no page
+ * (TIW-36).
+ *
+ * **The fifth door, and it joins the *rendering* pair on purpose.** TIW-18 split
+ * the four others in two: `listTripSummaries` and `loadTrips` answer "what does
+ * the journal hold", `tripStaticParams` and `findTrip` answer "what has an
+ * address". This one is in the first pair and has **no counterpart in the
+ * second** — no `findVisitedPlace`, no `visitedPlaceStaticParams`, not now and
+ * not as a gap to fill later. That absence *is* the guarantee: there is no
+ * function in this codebase capable of producing an address for a place, so no
+ * code path — not a route added next year, not a script — can link to one. It is
+ * the same property the second pair buys for an untold trip, obtained by not
+ * having the doors rather than by filtering them.
+ *
+ * Consequence on the marker, worth stating because it is where the guarantee is
+ * cashed in: a place's marker is still a real `<a href>` — an `<a>` with no href
+ * has no link role and its panel would be unreachable by keyboard — and it points
+ * at the place's own entry in the map's textual equivalent, `#lieu-<slug>`, which
+ * is on the very page the marker is drawn on. The same move
+ * `visited-countries.tsx` recorded making after measuring that its `#pays-xx`
+ * fragment dangled.
+ *
+ * `Place` and not a projection of its own: a visited place has exactly the four
+ * fields `PlaceSchema` holds, and a `VisitedPlaceSummary` narrowing them to
+ * themselves would be a second declaration of the shape this whole design rests
+ * on being single. Copied, like every array the projections return, because the
+ * parse is memoised for the life of a build and `readonly` is compile-time only.
+ *
+ * **No publication filter, and nothing for `TIW_DRAFTS` to say.** A place is not
+ * a staging state: it is published, deliberately, without a récit. There is no
+ * `draft` field on it, so there is no environment-dependent answer to give — the
+ * same reasoning `tripsWithAStory` records for the untold state, one collection
+ * over.
+ */
+export async function listVisitedPlaces(): Promise<readonly Place[]> {
+  const places = memoisedVisitedPlaces(placesFile());
+
+  /**
+   * The disjunction, from this side. `assertDisjointFromVisitedPlaces` needs the
+   * trips, so reading them here is not a detour: the two collections are one
+   * source of truth or they are two that disagree, and this door must not be the
+   * one that serves the disagreement.
+   */
+  assertDisjointFromVisitedPlaces(memoisedTrips(contentRoot()));
+
+  return places.map((place) => ({ ...place, coordinates: { ...place.coordinates } }));
+}
 
 /**
  * Every published trip, in full, in publication order — **an untold trip

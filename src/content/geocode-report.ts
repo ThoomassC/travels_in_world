@@ -1,5 +1,11 @@
 import { bounded, escapeControls, quoted, runCommand } from "./finding";
-import type { GeocodeEvent, GeocodeOutcome, PlaceRef, UnresolvedReason } from "./geocode";
+import type {
+  GeocodeEvent,
+  GeocodeOutcome,
+  PlaceRef,
+  PlacesGeocodeOutcome,
+  UnresolvedReason,
+} from "./geocode";
 import type { GeocodingCandidate } from "./geocoding";
 import { formatCoordinate } from "./yaml-edit";
 
@@ -349,7 +355,7 @@ export function formatOutcome(outcome: GeocodeOutcome, slug: string): readonly s
         `${plural(outcome.resolved, "ville avait été géocodée", "villes avaient été géocodées")}, mais l'écriture aurait détruit les caractères accentués du fichier → enregistre-le en UTF-8, puis ${runCommand(`npm run geocode ${slug}`, "relance")}`,
       ];
     case "done":
-      return formatDone(outcome, slug);
+      return formatDone(outcome, `npm run geocode ${slug}`);
   }
 }
 
@@ -362,17 +368,31 @@ export function formatOutcome(outcome: GeocodeOutcome, slug: string): readonly s
  * how a summary becomes a lie the author has no way to catch. So the line above
  * keeps naming the file he asked for, and this one says where his bytes are.
  */
-function describeTarget(outcome: Extract<GeocodeOutcome, { state: "done" }>): readonly string[] {
+function describeTarget(
+  outcome: Extract<GeocodeOutcome, { state: "done" }>,
+  fileLabel: string
+): readonly string[] {
   return outcome.writtenTo === undefined
     ? []
     : [
-        `trip.yaml est un lien symbolique : les octets sont allés dans ${displayed(outcome.writtenTo)}, hors du dossier de contenu.`,
+        `${fileLabel} est un lien symbolique : les octets sont allés dans ${displayed(outcome.writtenTo)}, hors du dossier de contenu.`,
       ];
 }
 
+/**
+ * The closing lines of a finished run, for **either** file (TIW-36).
+ *
+ * `relaunch` and `fileLabel` are parameters rather than derived from a slug,
+ * because `npm run geocode:places` takes no argument and its file is not called
+ * `trip.yaml`. Everything else is shared word for word, and deliberately: "ce qui
+ * a été trouvé est enregistré, rien n'a été perdu" is the sentence that answers
+ * the fear a partial rewrite creates, and it must not exist in two versions that
+ * can drift apart.
+ */
 function formatDone(
   outcome: Extract<GeocodeOutcome, { state: "done" }>,
-  slug: string
+  relaunch: string,
+  fileLabel = "trip.yaml"
 ): readonly string[] {
   if (outcome.pending === 0) {
     return [
@@ -388,7 +408,7 @@ function formatDone(
   if (outcome.failed === 0) {
     return [
       `${displayed(outcome.file)} — ${counted}, fichier réécrit.`,
-      ...describeTarget(outcome),
+      ...describeTarget(outcome, fileLabel),
       `→ ${runCommand("npm run validate:content", "vérifie avec")}`,
     ];
   }
@@ -396,7 +416,7 @@ function formatDone(
   if (!outcome.written) {
     return [
       `${displayed(outcome.file)} — aucune ville géocodée, ${plural(outcome.failed, "échec", "échecs")} ; le fichier est inchangé.`,
-      `Les lignes ci-dessus disent quoi corriger, puis ${runCommand(`npm run geocode ${slug}`, "relance")}`,
+      `Les lignes ci-dessus disent quoi corriger, puis ${runCommand(relaunch, "relance")}`,
     ];
   }
 
@@ -409,7 +429,75 @@ function formatDone(
    */
   return [
     `${displayed(outcome.file)} — ${counted}, fichier réécrit ; ${plural(outcome.failed, "ville reste sans coordonnées", "villes restent sans coordonnées")}.`,
-    ...describeTarget(outcome),
-    `Ce qui a été trouvé est enregistré, rien n'a été perdu → ${runCommand(`npm run geocode ${slug}`, "relance")}`,
+    ...describeTarget(outcome, fileLabel),
+    `Ce qui a été trouvé est enregistré, rien n'a été perdu → ${runCommand(relaunch, "relance")}`,
   ];
+}
+
+/* ------------------------------------------------------- the visited places -- */
+
+/** The command that relaunches a places run — no slug, one file. */
+const GEOCODE_PLACES = "npm run geocode:places";
+
+/**
+ * The closing lines of `npm run geocode:places` (TIW-36).
+ *
+ * A second formatter and not a branch inside {@link formatOutcome}, because the
+ * two commands fail to *find their file* in genuinely different ways — a trip is
+ * looked up by slug inside a directory, this is one named file — and pretending
+ * otherwise would mean printing a list of trips to somebody who typed no slug.
+ * Everything past that point is `formatDone`, shared to the word.
+ *
+ * The two rules hold here as they do there, and the suite asserts them on every
+ * branch: a summary that names the file says whether that file was touched, and
+ * the **last** line is the thing to do — an imperative, with no full stop.
+ */
+export function formatPlacesOutcome(outcome: PlacesGeocodeOutcome): readonly string[] {
+  switch (outcome.state) {
+    /**
+     * A file that is not there, and the wording refuses to call it "nothing to
+     * do". The loading façade answers an empty collection for the same absence —
+     * a journal with no dateless place is an ordinary journal — but somebody who
+     * has just typed this command is asking about a file, and "rien à faire" for
+     * a mistyped `--places` is a typo that looks like success.
+     */
+    case "places-file-absent":
+      return outcome.similarName === undefined
+        ? [
+            `${displayed(outcome.file)} — ce fichier n'existe pas, rien n'a été touché.`,
+            `Écris-y les lieux visités (content/README.md en donne la structure), ou indique le bon fichier avec ${quoted("--places <fichier>")}`,
+          ]
+        : [
+            `${displayed(outcome.file)} — ce fichier n'existe pas, mais ${quoted(outcome.similarName)} est là : seule la casse diffère.`,
+            `Renomme-le en ${quoted("places.yaml")} plutôt que d'en écrire un second → rien n'a été touché`,
+          ];
+    case "places-file-unreadable":
+      return [`${displayed(outcome.file)} — ${bounded(outcome.reason)} → rien n'a été touché`];
+    case "places-file-malformed":
+      return [
+        `${displayed(outcome.file)} — YAML invalide : ${bounded(outcome.reason)}`,
+        `Le géocodage ne réécrit pas un fichier qu'il ne sait pas relire → ${runCommand("npm run validate:content")} pour la ligne fautive`,
+      ];
+    case "no-places":
+      return [
+        `${displayed(outcome.file)} — ce fichier ne déclare aucun lieu, rien n'a été écrit → ajoute une entrée sous ${quoted("places:")} (content/README.md)`,
+      ];
+    case "write-failed":
+      return [
+        `${displayed(outcome.file)} — ${plural(outcome.resolved, "ville résolue", "villes résolues")}, mais le fichier n'a pas pu être écrit : ${bounded(outcome.reason)}`,
+        "Le fichier d'origine est intact → vérifie les droits, puis relance",
+      ];
+    case "file-changed":
+      return [
+        `${displayed(outcome.file)} — le fichier a changé sur le disque pendant le géocodage : rien n'a été écrit, ta version est intacte.`,
+        `${plural(outcome.resolved, "ville avait été géocodée", "villes avaient été géocodées")} sur l'ancienne version du fichier → ${runCommand(GEOCODE_PLACES, "relance")}`,
+      ];
+    case "file-not-utf8":
+      return [
+        `${displayed(outcome.file)} — ce fichier n'est pas encodé en UTF-8 : rien n'a été écrit, ton texte est intact.`,
+        `${plural(outcome.resolved, "ville avait été géocodée", "villes avaient été géocodées")}, mais l'écriture aurait détruit les caractères accentués du fichier → enregistre-le en UTF-8, puis ${runCommand(GEOCODE_PLACES, "relance")}`,
+      ];
+    case "done":
+      return formatDone(outcome, GEOCODE_PLACES, "places.yaml");
+  }
 }

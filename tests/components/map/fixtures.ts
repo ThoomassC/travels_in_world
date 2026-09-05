@@ -181,6 +181,9 @@ export const EUROPE_EXTENT: Extent = { minX: 420, maxX: 520, minY: 90, maxY: 160
  */
 export function tripMark(overrides: Partial<TripMark> = {}): TripMark {
   return {
+    // Required on `TripMark` since TIW-36, when the map gained a second kind of
+    // marker: a visited place, which has no date, no title and no page.
+    kind: "trip",
     slug: "japon-2024",
     title: "Japon, printemps 2024",
     startDate: "2024-04-12",

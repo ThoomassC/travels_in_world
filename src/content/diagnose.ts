@@ -51,6 +51,23 @@ export type DiagnosisContext = {
   readonly document: unknown;
   /** The trip slug the repair commands take as their argument. */
   readonly tripSlug: string;
+  /**
+   * The command that resolves a missing coordinate **for this document**
+   * (TIW-36).
+   *
+   * `npm run geocode <slug>` for a `trip.yaml`, `npm run geocode:places` for
+   * `content/places.yaml`. The two files share the `places[]` field shape, so
+   * they share every sentence in this catalogue — which is the point, one rule
+   * having one wording — and the command is the one thing that genuinely differs
+   * between them.
+   *
+   * **Required and not defaulted**, deliberately. Derived from `tripSlug` when
+   * absent, it would answer `npm run geocode places` for the places file: a
+   * command naming a trip that does not exist, printed at the end of a line whose
+   * whole job is to be the thing that ends the problem. The compiler asking each
+   * of the two callers is cheaper than that.
+   */
+  readonly geocodeCommand: string;
 };
 
 /** Rules whose findings are consequences of another, more precise one. */
@@ -223,7 +240,7 @@ function diagnoseCoordinates(
   field: FieldPath
 ): Diagnosis | undefined {
   const index = indexAt(field, 1);
-  const geocode = `npm run geocode ${context.tripSlug}`;
+  const geocode = context.geocodeCommand;
 
   if (shape === "places[].coordinates") {
     if (issue.code === "custom") {

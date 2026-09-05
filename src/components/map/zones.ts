@@ -1,5 +1,5 @@
 import type { Frame, Point } from "./frame";
-import type { PlacedMark } from "./marks";
+import type { PlacedMark, TripMark } from "./marks";
 
 /**
  * Which markers a reader would take for one place, and what the trip panel
@@ -45,6 +45,50 @@ import type { PlacedMark } from "./marks";
  */
 export const ZONE_RADIUS_PERCENT = 4;
 
+/**
+ * A placed marker that is known to name a **trip**.
+ *
+ * `zonesOf` is typed on this and not on the wider `PlacedMark` (TIW-36), because
+ * a zone exists for one purpose: to offer, under a single activation, the several
+ * trips a reader's finger covers — and what it offers them *with* is a stack of
+ * `TripCard`s. A visited place has no card, no date to order a panel by and no
+ * page to lead to, so it is not zoned at all: its marker always navigates to its
+ * own entry in the textual equivalent, with or without JavaScript, which is one
+ * behaviour instead of two to keep in step.
+ *
+ * **The accepted limit, and it is not hypothetical.** Two markers that overlap on
+ * screen bury one another for a pointer — measured on this repository's own
+ * content, where Rouen and Gand are 250 km apart, about ten pixels at the frame
+ * the server crops to, so two 44 px targets leave the lower one almost nothing
+ * clickable. For *trips* the panel is what recovers them, which is what TIW-14
+ * bought; a place has no card, so it has no panel, and three other paths answer
+ * for it instead: both markers are in the tab order whatever they overlap, every
+ * place is named in the list under the map with its country, and a zoom genuinely
+ * separates them because `--mark-x`/`--mark-y` are world units and not percentages
+ * of one frame.
+ *
+ * That leaves `target-size` (2.5.8) firing on the drawing, which is the same
+ * measured cost `docs/adr/0003-carte-svg-inerte-et-balises-html.md` already
+ * records for trip markers and which the E2E audit reports **by name**, confined
+ * to the map's own `<figure>`. Giving a place a card — and therefore a panel —
+ * would close the case rather than manage it, and it is the right next step the
+ * day a place is worth a card; it is a decision about what a place *is*, not
+ * about clustering, so it does not belong to this function.
+ */
+export type PlacedTripMark = PlacedMark & { readonly mark: TripMark };
+
+/**
+ * The placed markers that name a trip — the only kind {@link zonesOf} can take.
+ *
+ * Here rather than at the one call site, because it is this module's own rule
+ * about what a zone may hold, and because it is the narrowing every caller needs
+ * to satisfy the signature above. A type predicate and not a cast: the property
+ * really is checked, and a cast would be a claim nobody can verify.
+ */
+export function tripEntriesOf(placed: readonly PlacedMark[]): readonly PlacedTripMark[] {
+  return placed.filter((entry): entry is PlacedTripMark => entry.mark.kind === "trip");
+}
+
 /** The markers a reader would take for one place, in the order the panel lists them. */
 export type MapZone = {
   /**
@@ -54,7 +98,7 @@ export type MapZone = {
    */
   readonly id: string;
   /** Date descending, then slug ascending. Never empty. */
-  readonly marks: readonly PlacedMark[];
+  readonly marks: readonly PlacedTripMark[];
 };
 
 /** Two decimals, like the percentages this inverts. */
@@ -108,7 +152,7 @@ export function worldPointOf(placed: PlacedMark, frame: Frame): Point {
  * first marker arrived, the members are sorted by date then slug rather than left
  * in input order, and the id is derived from that sort.
  */
-export function zonesOf(placed: readonly PlacedMark[], frame: Frame): readonly MapZone[] {
+export function zonesOf(placed: readonly PlacedTripMark[], frame: Frame): readonly MapZone[] {
   if (placed.length === 0) {
     return [];
   }
@@ -151,10 +195,12 @@ export function zonesOf(placed: readonly PlacedMark[], frame: Frame): readonly M
    * representative is its first marker and the grouping below comes out in input
    * order.
    */
-  const rank = new Map<PlacedMark, number>(placed.map((entry, index) => [entry, index]));
-  const representative = new Map<PlacedMark, PlacedMark>(placed.map((entry) => [entry, entry]));
+  const rank = new Map<PlacedTripMark, number>(placed.map((entry, index) => [entry, index]));
+  const representative = new Map<PlacedTripMark, PlacedTripMark>(
+    placed.map((entry) => [entry, entry])
+  );
 
-  const rootOf = (entry: PlacedMark): PlacedMark => {
+  const rootOf = (entry: PlacedTripMark): PlacedTripMark => {
     let current = entry;
     for (;;) {
       const next = representative.get(current);
@@ -181,7 +227,7 @@ export function zonesOf(placed: readonly PlacedMark[], frame: Frame): readonly M
     }
   });
 
-  const groups = new Map<PlacedMark, PlacedMark[]>();
+  const groups = new Map<PlacedTripMark, PlacedTripMark[]>();
   for (const entry of placed) {
     const root = rootOf(entry);
     const group = groups.get(root);

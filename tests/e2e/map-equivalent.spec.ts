@@ -3,9 +3,21 @@ import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
 import { auditPage, describeViolations } from "./support/axe";
 
 /**
- * The map's accessible equivalent, on the content the repository really ships:
- * `content/trips` is empty, so this file asserts the **fallback** half of TIW-15
- * — the state a reader gets today, and the state the drawing degrades to.
+ * The map's accessible equivalent, on the content the repository really ships.
+ *
+ * **What that content is changed with TIW-36, and this header said the opposite
+ * for two tickets.** `content/trips` is still empty — no récit is written — but
+ * `content/places.yaml` now holds fourteen *visited places*: somewhere the journal
+ * has been, with no date, no step and no page. So the state this file asserts is
+ * no longer "nothing at all": it is a drawing cropped on fourteen markers, five
+ * tinted countries, and not one trip. That is production, and it is the state the
+ * journal will stay in until the first récit is written.
+ *
+ * The fallback half — the genuinely empty journal — is not reachable from the
+ * repository's own content any more. It is covered where it can be: by the
+ * component suite, which renders `VisitedCountries` with neither trip nor place,
+ * and by `tests/content/validate-places.test.ts`, which builds a journal with no
+ * places file at all.
  *
  * The populated half lives in `map-equivalent.populated.spec.ts`, against a
  * second build; see the note in `playwright.config.ts` for why there are two.
@@ -31,7 +43,13 @@ test("the map container carries a role and an accessible name", async ({ page })
    * country names in a label. `VisitedCountries` carries them now.
    */
   const figure = page.getByRole("figure", {
-    name: "Carte du monde : aucun voyage publié, aucun pays",
+    /**
+     * The fourteen places and the five countries they reach, and **no mention of
+     * a voyage at all** — there is none, and « 14 voyages » is exactly the
+     * invented fact `docs/lieux-visites.md` refuses. Cropped, because a journal
+     * whose markers are all in western Europe and Crete is not showing the world.
+     */
+    name: "Carte du monde, recadrée sur les balises : 14 lieux visités, 5 pays",
   });
 
   await expect(figure).toBeVisible();
@@ -83,39 +101,60 @@ test("no country of the drawing is a tab stop, and the map traps no focus", asyn
   }
 
   // Not a trap: the focus really moved through distinct elements rather than
-  // cycling inside one region. With an empty journal the page offers the skip
-  // link, two navigation links and the way out of the fallback block.
+  // cycling inside one region. Since TIW-36 the page also offers fourteen place
+  // markers, so thirty presses walk well past the skip link and the navigation.
   expect(new Set(visited).size).toBeGreaterThan(2);
 });
 
-test("the fallback block stands in for the drawing rather than leaving an empty frame", async ({
+test("the equivalent names the five countries and the fourteen places, and links to no page", async ({
   page,
 }) => {
   await page.goto("/fr");
 
-  /**
-   * The acceptance criterion, on the state that reaches it today: no visited
-   * country, so the equivalent says so in words and offers the complete listing.
-   * "Never an empty frame" means never a bordered rectangle with a heading over
-   * nothing — so the heading, the sentence and the way out are all asserted.
-   */
+  const region = page.getByRole("region", { name: frMessages.map.countriesHeading });
+
   await expect(
     page.getByRole("heading", { level: 2, name: frMessages.map.countriesHeading })
   ).toBeVisible();
-  await expect(page.getByText(frMessages.map.countriesEmpty)).toBeVisible();
 
-  const out = page.getByRole("link", { name: frMessages.map.allTrips });
-  await expect(out).toBeVisible();
+  /**
+   * The five countries the client's fourteen places reach, in French alphabetical
+   * order — the order `tallyVisitedCountries` collates, and the order this list
+   * must not re-derive. Every one of them holds only places, so every row says
+   * « récit à venir » and **none of them is a link**: the row's link exists to
+   * lead into the trips, and there are none.
+   */
+  for (const country of ["Belgique", "Espagne", "France", "Grèce", "Suisse"]) {
+    await expect(region.getByText(country, { exact: true })).toBeVisible();
+  }
+  expect(await region.getByRole("link").count()).toBe(0);
+  expect(await region.getByText(frMessages.map.countryStoryToCome).count()).toBe(5);
 
-  // An empty list is not announced at all — "liste, 0 élément" over a map that is
-  // simply not populated yet is worse than no list. Asserted inside the block's
-  // own landmark, so the page's other lists (the navigation) do not mask it.
-  await expect(
-    page.getByRole("region", { name: frMessages.map.countriesHeading }).getByRole("list")
-  ).toHaveCount(0);
+  /**
+   * And the fourteen anchors the markers point at, all present. The half a status
+   * check misses: a fragment matching no id is a 200 that deposits the reader at
+   * the top of the page without a word.
+   */
+  const markers = page.locator("figure a[data-place]");
+  expect(await markers.count()).toBe(14);
 
-  await out.click();
-  await expect(page).toHaveURL(/\/fr\/voyages$/);
+  for (const marker of await markers.all()) {
+    const slug = await marker.getAttribute("data-place");
+
+    await expect(marker).toHaveAttribute("href", `#lieu-${slug ?? ""}`);
+    await expect(page.locator(`#lieu-${slug ?? ""}`)).toBeVisible();
+  }
+
+  /**
+   * **No link anywhere on this page leads to a trip page**, which is the whole
+   * guarantee of the design: `src/content/loader.ts` has no door that could
+   * produce an address for a visited place, so no code path can build one. Stated
+   * from the served document, because that is where a reader would find it.
+   */
+  const hrefs = await page.$$eval("a[href]", (anchors) =>
+    anchors.map((anchor) => anchor.getAttribute("href") ?? "")
+  );
+  expect(hrefs.filter((href) => href.includes("/voyages/"))).toEqual([]);
 });
 
 test("the fallback block is readable with JavaScript disabled", async ({ browser, baseURL }) => {
@@ -136,7 +175,15 @@ test("the fallback block is readable with JavaScript disabled", async ({ browser
     await expect(
       page.getByRole("heading", { level: 2, name: frMessages.map.countriesHeading })
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: frMessages.map.allTrips })).toBeVisible();
+    /**
+     * The fourteen markers and their fourteen anchors, with no script at all —
+     * which is what « la carte reste affichée dans une version figée » means for a
+     * journal made of places. The markers are real `<a href>` in the served HTML,
+     * and their destinations are ids in the same document, so nothing here needs
+     * JavaScript to work and nothing here can 404.
+     */
+    expect(await page.locator("figure a[data-place]").count()).toBe(14);
+    await expect(page.locator("#lieu-rouen")).toBeVisible();
   } finally {
     await context.close();
   }
@@ -150,6 +197,23 @@ test("the fallback block is readable with JavaScript disabled", async ({ browser
  * that is redeclared under `prefers-color-scheme: dark`, so a contrast failure can
  * exist in one theme and not the other. `emulateMedia` is what makes the second
  * half of the palette testable at all.
+ *
+ * **It still expects ZERO violations, with fourteen overlapping markers on the
+ * page — and that is a measurement rather than an assumption** (TIW-36). The
+ * question this ticket had to answer is whether the narrow `target-size`
+ * allowance the *populated* spec carries had to be widened to this one. Measured
+ * on this very build, in both themes:
+ *
+ *     violations = []
+ *     incomplete = ["color-contrast", "target-size"]
+ *     passes     = 24
+ *
+ * axe answers `target-size` as **incomplete** here and not as a violation: it can
+ * see that markers overlap and declines to decide. So nothing had to be tolerated
+ * on this route, and the allowance stays exactly where it was — one rule, and only
+ * while every element it fired on is inside the map's own `<figure>`. The day axe
+ * promotes that incomplete to a violation this test goes red, which is the right
+ * direction: it is a decision to take, not one to have already been made.
  */
 for (const route of ["/fr", "/fr/voyages"] as const) {
   for (const colorScheme of ["light", "dark"] as const) {

@@ -60,7 +60,7 @@ const readable = (tally: readonly VisitedCountryTally[]): readonly string[] =>
 
 describe("tallyVisitedCountries", () => {
   it("counts the trips that reach each country", () => {
-    expect(readable(tallyVisitedCountries(TRIPS, CODE_LABELS))).toEqual([
+    expect(readable(tallyVisitedCountries(TRIPS, [], CODE_LABELS))).toEqual([
       "BO 1",
       "IS 1",
       "JP 2",
@@ -72,7 +72,7 @@ describe("tallyVisitedCountries", () => {
     // The count alone would leave a country holding one trip pointing at a
     // listing the reader then has to search. The slugs make the link precise.
     const byCode = new Map(
-      tallyVisitedCountries(TRIPS, CODE_LABELS).map((entry) => [entry.code, entry.tripSlugs])
+      tallyVisitedCountries(TRIPS, [], CODE_LABELS).map((entry) => [entry.code, entry.tripSlugs])
     );
 
     expect(byCode.get("JP")).toEqual(["japon-2025", "japon-2024"]);
@@ -87,7 +87,7 @@ describe("tallyVisitedCountries", () => {
      * beside this list collates the same countries by name, and a reader
      * scanning for one country needs the alphabet they are scanning with.
      */
-    const tally = tallyVisitedCountries(TRIPS, {
+    const tally = tallyVisitedCountries(TRIPS, [], {
       countryName: (code) =>
         ({ BO: "Bolivie", IS: "Islande", JP: "Japon", PE: "Pérou" })[code] ?? code,
       compare: new Intl.Collator("fr").compare,
@@ -99,7 +99,7 @@ describe("tallyVisitedCountries", () => {
   it("collates rather than comparing code units", () => {
     // `"Éthiopie" < "Zambie"` is false in code-unit order — every accented
     // letter sorts after `Z`. The same trap `buildWorldGeometry` records.
-    const tally = tallyVisitedCountries([trip("a", "ZM"), trip("b", "ET")], {
+    const tally = tallyVisitedCountries([trip("a", "ZM"), trip("b", "ET")], [], {
       countryName: (code) => (code === "ET" ? "Éthiopie" : "Zambie"),
       compare: new Intl.Collator("fr").compare,
     });
@@ -110,7 +110,7 @@ describe("tallyVisitedCountries", () => {
   it("counts a country once for a trip that names it twice", () => {
     // `visitedCountryCodes` de-duplicates upstream today, so this is the tally
     // refusing to *depend* on that.
-    const tally = tallyVisitedCountries([trip("japon-2024", "JP", "JP", "JP")], CODE_LABELS);
+    const tally = tallyVisitedCountries([trip("japon-2024", "JP", "JP", "JP")], [], CODE_LABELS);
 
     expect(tally[0]?.tripSlugs).toEqual(["japon-2024"]);
   });
@@ -118,17 +118,15 @@ describe("tallyVisitedCountries", () => {
   it("counts one trip for every country it crosses", () => {
     // The audit's gap, stated as arithmetic: a trip crossing three countries
     // tints three and its marker names one.
-    expect(readable(tallyVisitedCountries([trip("tour", "PE", "BO", "CL")], CODE_LABELS))).toEqual([
-      "BO 1",
-      "CL 1",
-      "PE 1",
-    ]);
+    expect(
+      readable(tallyVisitedCountries([trip("tour", "PE", "BO", "CL")], [], CODE_LABELS))
+    ).toEqual(["BO 1", "CL 1", "PE 1"]);
   });
 
   it("answers nothing at all when no trip is published", () => {
     // Today's production state — `content/trips` is empty. The component turns
     // this into a fallback block with a way out, never an empty list.
-    expect(tallyVisitedCountries([], CODE_LABELS)).toEqual([]);
+    expect(tallyVisitedCountries([], [], CODE_LABELS)).toEqual([]);
   });
 
   it("never invents a row: every country comes from a trip", () => {
@@ -139,7 +137,7 @@ describe("tallyVisitedCountries", () => {
      * a row could name a country whose trips lived under another country's
      * heading. Derived from the trips, a row without a trip is unrepresentable.
      */
-    const tally = tallyVisitedCountries(TRIPS, CODE_LABELS);
+    const tally = tallyVisitedCountries(TRIPS, [], CODE_LABELS);
 
     expect(tally.every((entry) => entry.tripSlugs.length > 0)).toBe(true);
   });
@@ -150,7 +148,7 @@ describe("tallyVisitedCountries", () => {
     // rather than quietly dropping one. So the two counts are the same count.
     const distinct = new Set(TRIPS.flatMap((entry) => entry.countryCodes));
 
-    expect(tallyVisitedCountries(TRIPS, CODE_LABELS)).toHaveLength(distinct.size);
+    expect(tallyVisitedCountries(TRIPS, [], CODE_LABELS)).toHaveLength(distinct.size);
   });
 
   it("compares codes exactly, both sides being uppercase by schema", () => {
@@ -162,7 +160,9 @@ describe("tallyVisitedCountries", () => {
      * guarded nothing. This pins the *absence*: a lowercase code shows up as a
      * second row here rather than silently splitting a count in production.
      */
-    expect(tallyVisitedCountries([trip("a", "JP"), trip("b", "jp")], CODE_LABELS)).toHaveLength(2);
+    expect(tallyVisitedCountries([trip("a", "JP"), trip("b", "jp")], [], CODE_LABELS)).toHaveLength(
+      2
+    );
   });
 
   it("scales to sixty trips over twenty-three countries", () => {
@@ -172,7 +172,7 @@ describe("tallyVisitedCountries", () => {
       trip(`voyage-${index}`, codes[index % 23] ?? "ZZ")
     );
 
-    const tally = tallyVisitedCountries(trips, CODE_LABELS);
+    const tally = tallyVisitedCountries(trips, [], CODE_LABELS);
 
     expect(tally).toHaveLength(23);
     expect(tally.reduce((total, entry) => total + entry.tripSlugs.length, 0)).toBe(60);
@@ -186,10 +186,10 @@ describe("tallyVisitedCountries", () => {
      * the same objects to every page — the reason `summaryOf` copies every array
      * in `src/domain/trip.ts`. `readonly` is compile-time only.
      */
-    const tally = tallyVisitedCountries(TRIPS, CODE_LABELS);
+    const tally = tallyVisitedCountries(TRIPS, [], CODE_LABELS);
     (tally[2]?.tripSlugs as string[]).reverse();
 
-    expect(tallyVisitedCountries(TRIPS, CODE_LABELS)[2]?.tripSlugs).toEqual([
+    expect(tallyVisitedCountries(TRIPS, [], CODE_LABELS)[2]?.tripSlugs).toEqual([
       "japon-2025",
       "japon-2024",
     ]);
@@ -213,18 +213,18 @@ describe("tallyVisitedCountries", () => {
  */
 describe("untoldOnlyCountryCodes", () => {
   it("answers nothing at all for a journal whose every récit is written", () => {
-    expect(untoldOnlyCountryCodes(TRIPS)).toEqual(new Set());
+    expect(untoldOnlyCountryCodes(TRIPS, [])).toEqual(new Set());
   });
 
   it("answers nothing for an empty journal, rather than throwing", () => {
     // Today's production state: `content/trips` is empty until TIW-24.
-    expect(untoldOnlyCountryCodes([])).toEqual(new Set());
+    expect(untoldOnlyCountryCodes([], [])).toEqual(new Set());
   });
 
   it("names a country whose only trip is untold", () => {
     const trips = [...TRIPS, untoldTrip("maroc-2026", "MA")];
 
-    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set(["MA"]));
+    expect(untoldOnlyCountryCodes(trips, [])).toEqual(new Set(["MA"]));
   });
 
   /**
@@ -235,7 +235,7 @@ describe("untoldOnlyCountryCodes", () => {
   it("leaves a country alone when one of its trips is written", () => {
     const trips = [...TRIPS, untoldTrip("japon-2026", "JP")];
 
-    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set());
+    expect(untoldOnlyCountryCodes(trips, [])).toEqual(new Set());
   });
 
   /**
@@ -246,7 +246,7 @@ describe("untoldOnlyCountryCodes", () => {
   it("carries an untold trip's state into every country it crosses", () => {
     const trips = [untoldTrip("sahara-2026", "MA", "MR", "DZ")];
 
-    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set(["MA", "MR", "DZ"]));
+    expect(untoldOnlyCountryCodes(trips, [])).toEqual(new Set(["MA", "MR", "DZ"]));
   });
 
   /**
@@ -263,7 +263,7 @@ describe("untoldOnlyCountryCodes", () => {
       trip("bolivie-2024", "BO"), // …except BO, which is told
     ];
 
-    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set(["MA", "PE"]));
+    expect(untoldOnlyCountryCodes(trips, [])).toEqual(new Set(["MA", "PE"]));
   });
 
   it("counts a country listed twice by one untold trip once", () => {
@@ -271,6 +271,6 @@ describe("untoldOnlyCountryCodes", () => {
     // the same posture `tallyVisitedCountries` records.
     const trips = [untoldTrip("maroc-2026", "MA", "MA")];
 
-    expect(untoldOnlyCountryCodes(trips)).toEqual(new Set(["MA"]));
+    expect(untoldOnlyCountryCodes(trips, [])).toEqual(new Set(["MA"]));
   });
 });

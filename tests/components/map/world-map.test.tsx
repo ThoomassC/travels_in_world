@@ -56,6 +56,7 @@ function tripMark(index: number): TripMark {
   const slug = `voyage-${index}`;
 
   return {
+    kind: "trip",
     slug,
     title: `Voyage ${index}`,
     // Descending with the index, like the content façade's own order.
@@ -76,6 +77,7 @@ function tripMark(index: number): TripMark {
 
 /** Dead centre of the world box, which makes the expected percentages exact. */
 const CENTRED_MARK: TripMark = {
+  kind: "trip",
   slug: "japon-2024",
   title: "Japon 2024",
   startDate: "2024-04-12",
@@ -96,6 +98,7 @@ const CENTRED_MARK: TripMark = {
  */
 const UNTOLD_MARK: TripMark = {
   ...CENTRED_MARK,
+  kind: "trip",
   slug: "maroc-2026",
   title: "Maroc 2026",
   placeName: "Marrakech",
@@ -158,7 +161,7 @@ describe("WorldMap", () => {
 
       expect(screen.getByRole("figure")).toBeInTheDocument();
       expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length);
-      expect(screen.getByText("Carte du monde : aucun voyage publié, aucun pays")).toBeVisible();
+      expect(screen.getByText("Carte du monde : aucun pays")).toBeVisible();
     });
   });
 
@@ -366,7 +369,7 @@ describe("WorldMap", () => {
     const cases: readonly { trips: number; countries: number; expected: string }[] = [
       // 0 and 60 trips both frame the whole world — the first for having no
       // extent at all, the second for spanning it — so both keep "du monde".
-      { trips: 0, countries: 0, expected: "Carte du monde : aucun voyage publié, aucun pays" },
+      { trips: 0, countries: 0, expected: "Carte du monde : aucun pays" },
       { trips: 60, countries: 23, expected: "Carte du monde : 60 voyages, 23 pays" },
       // 1 and 2 trips are cropped by `frameAround`, hence the other wording.
       // Kept in this table rather than moved out, because the plural rules are
@@ -374,12 +377,12 @@ describe("WorldMap", () => {
       {
         trips: 1,
         countries: 1,
-        expected: "Carte du monde, recadrée sur les voyages publiés : 1 voyage, 1 pays",
+        expected: "Carte du monde, recadrée sur les balises : 1 voyage, 1 pays",
       },
       {
         trips: 2,
         countries: 2,
-        expected: "Carte du monde, recadrée sur les voyages publiés : 2 voyages, 2 pays",
+        expected: "Carte du monde, recadrée sur les balises : 2 voyages, 2 pays",
       },
     ];
 
@@ -430,7 +433,7 @@ describe("WorldMap", () => {
       // The 30 % legibility floor, normalised to the world's ratio.
       expect(viewBoxOf(container)).toBe("336 175 288 150");
       expect(captionOf(container)).toBe(
-        "Carte du monde, recadrée sur les voyages publiés : 1 voyage, 1 pays"
+        "Carte du monde, recadrée sur les balises : 1 voyage, 1 pays"
       );
     });
 
@@ -475,7 +478,7 @@ describe("WorldMap", () => {
       renderMap({ countries: [], visited: [], marks: [] });
 
       expect(screen.getByRole("figure")).toBeInTheDocument();
-      expect(screen.getByText("Carte du monde : aucun voyage publié, aucun pays")).toBeVisible();
+      expect(screen.getByText("Carte du monde : aucun pays")).toBeVisible();
     });
 
     it("drops the markers with the drawing rather than piling them in a corner", () => {
@@ -503,6 +506,7 @@ describe("WorldMap", () => {
  */
 describe("WorldMap — the newest récit's marker", () => {
   const OLDER: TripMark = {
+    kind: "trip",
     slug: "perou-2019",
     title: "Pérou 2019",
     startDate: "2019-08-01",

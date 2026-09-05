@@ -1,6 +1,11 @@
 import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
-import { tallyVisitedCountries, type CountingTrip, type CountryLabels } from "./countries";
+import {
+  tallyVisitedCountries,
+  type CountingPlace,
+  type CountingTrip,
+  type CountryLabels,
+} from "./countries";
 import styles from "./visited-countries.module.css";
 
 /**
@@ -56,6 +61,22 @@ export type VisitedCountriesProps = {
    */
   readonly trips: readonly CountingTrip[];
   /**
+   * The visited places (TIW-36) — somewhere the journal has been with no journey
+   * written, so with no date and no page.
+   *
+   * **Required and not optional**, which is the one call worth arguing here. The
+   * drawing tints a country as soon as anything reaches it, places included; a
+   * caller that could omit this list would render « Aucun pays sur la carte pour
+   * l'instant » beside a map showing five tinted countries and fourteen markers.
+   * The compiler asking the page is the cheapest way that cannot happen.
+   *
+   * It is also what makes the map's own markers honest: each place below carries
+   * `id="lieu-<slug>"`, which is exactly where its marker points. Nothing here
+   * links out — a place has no page — so the anchor is the destination, on this
+   * very document.
+   */
+  readonly places: readonly CountingPlace[];
+  /**
    * How to name and order a country. Passed in rather than derived, so this
    * component knows no locale and no `Intl` — the same contract `buildCatalogue`
    * takes in `src/components/trips/catalogue.ts`.
@@ -69,13 +90,14 @@ export type VisitedCountriesProps = {
 
 export function VisitedCountries({
   trips,
+  places,
   labels,
   tripHref,
   allTripsHref,
 }: VisitedCountriesProps): ReactElement {
   const t = useTranslations("map");
 
-  const tally = tallyVisitedCountries(trips, labels);
+  const tally = tallyVisitedCountries(trips, places, labels);
 
   return (
     /*
@@ -156,11 +178,83 @@ export function VisitedCountries({
              */
             const nothingWritten = country.toldTripSlugs.length === 0;
 
+            /**
+             * **Whether this row leads anywhere at all** (TIW-36).
+             *
+             * A country reached only by dateless places has no trip to offer, and
+             * the link's whole purpose is to lead into the trips. Pointing it at
+             * the listing would not be a dead link — that page exists and renders
+             * its own empty state — it would be worse: a row saying « France, 7
+             * lieux visités » whose click answers « Aucun voyage publié ». So the
+             * name is plain text there, and the places below it are the
+             * destinations, `#lieu-<slug>`, which is exactly where each marker on
+             * the map points.
+             */
+            const leadsSomewhere = country.tripSlugs.length > 0;
+            /**
+             * The clauses that carry something, in reading order — never a total.
+             * A trip and a dateless place are different things, and one number
+             * standing for both would call fourteen places fourteen voyages.
+             */
+            const counts = [
+              country.tripSlugs.length > 0
+                ? t("countryTrips", { count: country.tripSlugs.length })
+                : undefined,
+              country.places.length > 0
+                ? t("countryPlaces", { count: country.places.length })
+                : undefined,
+            ].filter((part): part is string => part !== undefined);
+
+            /**
+             * The row's own content, rendered once and wrapped in an `<a>` only
+             * when there is somewhere to go. Written as a value rather than
+             * duplicated in two branches: the accessible name of this row is the
+             * concatenation of these nodes, and two copies of it are two chances
+             * for one of them to lose the count.
+             */
+            const row = (
+              <>
+                <span className={styles.name}>{country.name}</span>
+                {/*
+                  An explicit space, and it is load-bearing. The accessible name
+                  of this link is the concatenation of its descendants' text, and
+                  whether a separator appears between two sibling elements is up
+                  to the engine: the accname algorithm's separator rules depend
+                  on computed display, so a flex item may or may not contribute
+                  one. Measured under jsdom with no space in the markup: the name
+                  came out "Japon2 voyages", and at two digits "Pays 102
+                  voyages" is ambiguous to a reader and to a parser alike.
+
+                  A whitespace-only text node between two flex items is not laid
+                  out as an anonymous flex item, so `gap` still owns the visual
+                  spacing and nothing shifts.
+                */}{" "}
+                <span className={styles.trips}>{counts.join(", ")}</span>
+                {/*
+                  Inside the row's accessible name, like the count beside it and
+                  for the same reason: a screen reader announces the link and not
+                  its neighbours, so a note left outside would be a fact the
+                  keyboard never hears.
+
+                  The explicit space is load-bearing for the reason recorded
+                  above — whether two sibling flex items contribute a separator
+                  to an accessible name is up to the engine, and « 1 voyagerécit
+                  à venir » is what the markup gives without it.
+                */}
+                {nothingWritten ? (
+                  <>
+                    {" "}
+                    <span className={styles.pending}>{t("countryStoryToCome")}</span>
+                  </>
+                ) : null}
+              </>
+            );
+
             return (
               <li key={country.code}>
                 {/*
-                  One link per row, holding both the name and the count, and not a
-                  link around the name with the count beside it. A screen reader
+                  One row holding both the name and the count, and not a link
+                  around the name with the count beside it. A screen reader
                   announces the link and not its neighbours, so a count left
                   outside would be a number the keyboard never hears — and the
                   acceptance criterion asks for the countries *with their number
@@ -171,43 +265,44 @@ export function VisitedCountries({
                   accessible name of a *heading*, and a reader navigating by
                   heading wants chapter titles, not chapter sizes.
                 */}
-                <a className={styles.link} href={href}>
-                  <span className={styles.name}>{country.name}</span>
-                  {/*
-                    An explicit space, and it is load-bearing. The accessible name
-                    of this link is the concatenation of its descendants' text, and
-                    whether a separator appears between two sibling elements is up
-                    to the engine: the accname algorithm's separator rules depend
-                    on computed display, so a flex item may or may not contribute
-                    one. Measured under jsdom with no space in the markup: the name
-                    came out "Japon2 voyages", and at two digits "Pays 102
-                    voyages" is ambiguous to a reader and to a parser alike.
+                {leadsSomewhere ? (
+                  <a className={styles.link} href={href}>
+                    {row}
+                  </a>
+                ) : (
+                  <p className={styles.link}>{row}</p>
+                )}
+                {/*
+                  **The visited places of this country, and the anchors their own
+                  markers point at** (TIW-36).
 
-                    A whitespace-only text node between two flex items is not laid
-                    out as an anonymous flex item, so `gap` still owns the visual
-                    spacing and nothing shifts.
-                  */}{" "}
-                  <span className={styles.trips}>
-                    {t("countryTrips", { count: country.tripSlugs.length })}
-                  </span>
-                  {/*
-                    Inside the link's accessible name, like the count beside it and
-                    for the same reason: a screen reader announces the link and not
-                    its neighbours, so a note left outside would be a fact the
-                    keyboard never hears.
+                  Nested under the country rather than given a section of their
+                  own, because the join between the two channels is precisely what
+                  the audit of TIW-20 found missing: five countries on one side,
+                  four cities on the other, and nothing saying which city is in
+                  which country. A place lives under its country here, which is
+                  the answer.
 
-                    The explicit space is load-bearing for the reason recorded
-                    above — whether two sibling flex items contribute a separator
-                    to an accessible name is up to the engine, and « 1 voyagerécit
-                    à venir » is what the markup gives without it.
-                  */}
-                  {nothingWritten ? (
-                    <>
-                      {" "}
-                      <span className={styles.pending}>{t("countryStoryToCome")}</span>
-                    </>
-                  ) : null}
-                </a>
+                  **No link on a place, deliberately.** It has no page —
+                  `src/content/loader.ts` has no door that could produce an address
+                  for one — so the `id` *is* the destination, on this very
+                  document. That is what makes a marker's `#lieu-<slug>` a
+                  fragment that resolves rather than a promise, which is the defect
+                  `#pays-bo` cost this repository once already.
+
+                  On the `<li>` and not on a `<span>` inside it, so a browser's
+                  sequential navigation starting point lands on the entry rather
+                  than past it.
+                */}
+                {country.places.length > 0 ? (
+                  <ul className={styles.places} role="list">
+                    {country.places.map((place) => (
+                      <li key={place.slug} id={`lieu-${place.slug}`} className={styles.place}>
+                        {place.name}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </li>
             );
           })}

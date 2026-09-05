@@ -52,6 +52,7 @@ function renderCountries(props: Partial<VisitedCountriesProps> = {}) {
     <NextIntlClientProvider locale={defaultLocale} messages={frMessages}>
       <VisitedCountries
         trips={TRIPS}
+        places={[]}
         labels={LABELS}
         tripHref={(slug) => `/fr/voyages/${slug}`}
         allTripsHref="/fr/voyages"

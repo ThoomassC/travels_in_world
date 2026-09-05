@@ -32,6 +32,16 @@ export type ContentValidation = {
   readonly validCount: number;
   readonly failedCount: number;
   /**
+   * How many visited places `content/places.yaml` declared (TIW-36) — the second
+   * collection, whose entries have no date, no step and no page.
+   *
+   * Counted apart from the trips and never added to them: they are not the same
+   * kind of thing, and a single total would let « 14 » stand for a journal with no
+   * récit at all. Zero when there is no file, which is not a fault — a journal
+   * holding no dateless place is the ordinary case.
+   */
+  readonly placeCount: number;
+  /**
    * Findings that belong to no trip: a stray file, an unreadable content root.
    * Counted apart so the summary cannot say "1 file in error" and "0 trips in
    * error" in the same breath.

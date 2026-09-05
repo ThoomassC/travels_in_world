@@ -54,6 +54,7 @@ const COUNTRIES: readonly MapCountry[] = [
  * panel's "date descending" is asserted against a sort and not against the input.
  */
 const TOKYO: TripMark = {
+  kind: "trip",
   slug: "japon-2024",
   title: "Japon, printemps 2024",
   startDate: "2024-04-12",
@@ -64,6 +65,7 @@ const TOKYO: TripMark = {
 };
 
 const OSAKA: TripMark = {
+  kind: "trip",
   slug: "japon-2025",
   title: "Japon, retour à Osaka",
   startDate: "2025-03-02",
@@ -74,6 +76,7 @@ const OSAKA: TripMark = {
 };
 
 const REYKJAVIK: TripMark = {
+  kind: "trip",
   slug: "islande-2022",
   title: "Islande, cercle d’or",
   startDate: "2022-09-10",
