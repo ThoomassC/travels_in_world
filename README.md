@@ -319,9 +319,14 @@ n'est pas réécrivable pour arranger un script. D'où
 scripts de contenu de TIW-10 le réutiliseront.
 
 **Styles.** CSS nu avec custom properties, aucun Tailwind, aucun CSS-in-JS. Un seul fichier
-global, `src/styles/tokens.css`, qui porte les jetons ; le style par composant se fait en CSS
-Modules à côté du composant. La palette est volontairement identique à celle du portfolio :
-toute modification de couleur doit y être répercutée.
+global, `src/styles/tokens.css` ; le style par composant se fait en CSS Modules à côté du
+composant. **Depuis TIW-37 ce fichier ne porte plus la palette** : il importe celle de
+`@thomascaron/ui`, partagée avec le portfolio, et ne déclare que ce qui est propre à ce site
+(`--content-max-width`, les trois `--logo-*`). Cette ligne disait auparavant que la palette
+était « volontairement identique à celle du portfolio » et que toute modification devait y
+être répercutée — six jetons avaient divergé quand même, parce qu'une consigne écrite dans un
+README n'est pas un garde. Le garde, désormais, est
+`tests/styles/colour-contract.test.ts`.
 
 **La marque est provisoire, et remplaçable sans toucher au code.** Le logotype est une
 comète en `--logo-ink` — une seule masse connexe — accompagnée d'une trajectoire en
@@ -348,13 +353,21 @@ l'image de partage **doit** rester en 1200 × 630, sans quoi `og:image:width` /
 `tests/build/brand.test.ts` refuse ce dernier cas en lisant l'en-tête du PNG.
 
 Deux contraintes de dessin sont mesurées et ne se contournent pas. **Encre contre accent ne
-vaut que 1,99:1 en clair et 1,35:1 en sombre** : aucune forme ne peut donc reposer sur cette
+vaut que 1,56:1 en clair et 1,45:1 en sombre** : aucune forme ne peut donc reposer sur cette
 frontière, et c'est pourquoi la comète et la trajectoire sont deux objets séparés par du fond
-nu — chacun se lit contre la page (encre 10,54:1 clair et 16,73:1 sombre, accent 5,30:1 et
-12,40:1) et jamais contre l'autre. **Le favicon abandonne la trajectoire** : à 16 px ses
-points et leurs vides passent sous le pixel, alors que la masse de la comète tient (10,31:1
-au pire sur les huit gris de barres d'onglets de Chrome, Firefox et Safari, tous thèmes
-confondus).
+nu — chacun se lit contre la page (encre 10,28:1 clair et 12,01:1 sombre, accent 6,60:1 et
+8,30:1) et jamais contre l'autre. Ces quatre chiffres sont recalculés par
+`tests/styles/colour-contract.test.ts` ; la palette partagée de TIW-37 a **resserré** la
+contrainte plutôt que de la desserrer (1,99 → 1,56 en clair), parce que l'accent y est un
+seul teal dans les deux thèmes au lieu d'un teal sombre et d'un cyan clair.
+
+**Le favicon abandonne la trajectoire** : à 16 px ses points et leurs vides passent sous le
+pixel, alors que la masse de la comète tient. Le relevé de 10,31 au pire sur les huit gris
+de barres d'onglets de Chrome, Firefox et Safari **n'a pas été refait pour la nouvelle
+encre** et n'est donc plus valable : la liste de ces huit gris n'est consignée nulle part
+dans le dépôt, seul son résultat l'est (`docs/adr/0013`). Ce qui est mesuré, c'est le sens de
+la bascule — `tests/e2e/brand.spec.ts` rastérise le favicon à 16 px et vérifie qu'il s'encre
+sombre sur un système clair (luma 0,199) et clair sur un système sombre (0,827).
 
 Enfin, `src/app/icon.svg` est un document **XML**, pas du HTML, et il a cassé trois fois
 avant d'être juste — chaque fois en silence, parce qu'un SVG en ligne dans une page se répare
@@ -394,7 +407,7 @@ Trois choses à savoir avant d'y toucher, chacune détaillée dans
 
 Les couleurs viennent toutes de `tokens.css`, mais pas de n'importe lesquelles : le trait de
 côte et la bordure de la carte sont en `--control-border` (le jeton documenté `>= 3:1`) parce
-que `--border-subtle` mesurait 1,37:1 et que la forme du monde est l'objet graphique
+que `--border-subtle` mesure 1,33:1 et que la forme du monde est l'objet graphique
 nécessaire à la compréhension ; la distinction visité / non visité est portée par un contour
 en `--text-accent` **et par son épaisseur**, parce qu'aucune valeur de remplissage ne dépasse
 3:1 en thème clair et qu'un canal non coloré est nécessaire.

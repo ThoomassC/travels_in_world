@@ -120,6 +120,94 @@ que la frontière ESLint mord. Le reste a été prouvé par échec volontaire �
 gardes exécutables » pour la sortie réelle et pour ce qu'elle apprend sur la répartition entre
 les deux gardes.
 
+## La palette n'appartient plus à ce dépôt (TIW-37)
+
+`src/styles/tokens.css` déclarait sa propre palette sous un commentaire promettant
+qu'elle était « deliberately identical to the portfolio's ». **Six jetons et les deux
+fonds sombres avaient divergé sans que rien ne le dise**, parce qu'un commentaire n'est
+pas un garde. La feuille n'est plus qu'un `@import "@thomascaron/ui/tokens.css"` suivi de
+ce qui est strictement local : `--content-max-width` et les trois `--logo-*`.
+
+Trois conséquences à connaître avant de toucher à une couleur.
+
+- **Les trois `--logo-*` sont des alias** (`var(--text-strong)`, `var(--text-accent)`,
+  `var(--site-background)`) et non plus trois hexadécimaux répétés dans les trois blocs de
+  thème. `var()` se résout à l'emploi, donc l'ancien bug — un dark block qui oublie le
+  jeton et rend la marque invisible sur son propre fond — n'a plus de forme.
+  `src/app/icon.svg` garde des littéraux parce qu'un favicon est un document séparé ;
+  `tests/components/site/brand-art.test.ts` les **résout depuis la feuille** au lieu de les
+  retaper, ce qui était la troisième copie de la même valeur.
+- **Ne redéclare pas dans la feuille locale** `:focus-visible`, le bloc
+  `prefers-reduced-motion`, `box-sizing`, ni les propriétés `body` que la librairie pose
+  déjà. La recette de focus de la librairie met `--focus-outer` sur l'`outline` — l'outline
+  se peint AU-DESSUS du `box-shadow`, et l'ancienne recette repeignait la bande extérieure
+  en couleur intérieure. Le bloc de mouvement réduit restreint la liste des propriétés
+  animables au lieu d'écraser toutes les durées : moins de mouvement était demandé, pas
+  moins de retour d'information.
+- **`--surface-muted` n'existe plus**, remplacé par `--panel-surface`. En thème clair la
+  terre de la carte est donc désormais un peu plus **sombre** que la mer au lieu d'être
+  plus claire ; le contraste terre/mer reste 1,10:1 et le trait de côte porte toujours le
+  dessin, à 4,64:1.
+
+**Ce que la bascule a fait aux paires que le contrat ne mesure PAS.** Les vingt-cinq paires
+de la table sont celles que les commentaires citent ; treize autres ont été mesurées à la
+main, sur les deux palettes, pour répondre à la seule question qui compte — la bascule
+fait-elle passer quelque chose sous 3:1 ? **Non, et elle en remonte une** : le point
+`--accent` d'une balise sur la terre neutre en thème sombre passe de 2,82:1 à 3,08:1. Onze
+paires sur treize s'améliorent ; deux baissent en restant au-dessus du seuil (le souligné
+`:target` d'un titre, 3,77 → 3,28 en sombre ; le glyphe désactivé de la visionneuse,
+3,87 → 3,05).
+
+Ce que ce relevé a en revanche mis au jour, et qui est **antérieur** à ce ticket — chacun
+était déjà sous 3:1 sur l'ancienne palette, donc rien ici n'est une régression de TIW-37 :
+
+- `src/components/photos/photo-lightbox.module.css:141` peint son état désactivé avec
+  `opacity: 0.45`. C'est **exactement la recette que la librairie partagée a mesurée et
+  refusée** (« un écart d'un tiers entre deux thèmes pour la même règle est un accident,
+  pas une intention ») : la bordure y mesure 1,87:1 en clair et 2,31:1 en sombre. La
+  librairie fournit le remplacement — `--panel-surface-active` + `--text-muted` + une
+  bordure tiretée, pour que le sens ne passe pas par la couleur seule.
+- l'itinéraire de la mini-carte (`trip-mini-map.module.css:98`, `--accent` à 85 %) mesure
+  2,58:1 sur la terre en sombre. Il vit dans un SVG `aria-hidden` dont l'ordre est dit en
+  toutes lettres par la liste numérotée des étapes, donc 1.4.11 ne s'y applique pas — mais
+  le chiffre est là plutôt qu'oublié.
+- l'anneau blanc d'une balise (`--text-on-accent`) mesure 1,12:1 sur la mer en thème clair.
+  Son travail n'est pas de se lire contre la carte mais de séparer le point de la teinte
+  sous lui, et point contre anneau vaut 5,44:1 — c'est cette paire-là qui porte la charge.
+
+**Le garde, c'est `tests/styles/colour-contract.test.ts`**, et il a deux moitiés. Il
+recalcule 25 paires depuis la feuille assemblée, sur le support **composé** où chaque encre
+vit vraiment ; et il exige que tout `N.NN:1` écrit dans `src/**` soit enregistré dans sa
+table de citations. Écrire un ratio dans un commentaire sans l'enregistrer fait rougir la
+suite — c'est cette seconde moitié qui empêche un chiffre non mesuré de rentrer. Prouvé
+par échec volontaire dans les deux sens, sortie réelle en en-tête du fichier. Un chiffre
+**historique** s'écrit sans son `:1` : une valeur qui fut vraie n'est pas une mesure de
+cette feuille. Les ratios qui n'en sont pas — le 1,91:1 de l'image Open Graph, le seuil
+4,5:1 de WCAG — sont dans une liste `NOT_A_CONTRAST` nommée un par un.
+
+Ce que le garde ne fait pas : il lit la feuille comme du texte, donc il prouve
+l'arithmétique d'une paire, pas que le navigateur peint cette paire sur cet élément. Cette
+moitié-là est couverte par axe dans `tests/e2e/map-equivalent.spec.ts`, dans les deux
+thèmes.
+
+Coût mesuré de la bascule, sur `develop` @ `5eb9528` puis sur cette branche, quatre builds
+du même contenu : **zéro octet de JavaScript sur les cinq routes, à l'octet et au chunk** —
+126 137 o (123,18 Ko) en 7 chunks sur `/fr`, 122 866 o (119,99 Ko) en 6 sur `/fr/voyages` et
+`/fr/a-propos`, 113 877 o (111,21 Ko) en 5 sur `/_not-found` et `/_global-error`, **identiques
+au dernier octet dans les quatre builds**. C'est ce qu'on attend d'une bascule de jetons :
+elle ne s'exécute pas.
+
+**Et une mesure qui invalide une méthode que ce fichier employait jusqu'ici : le poids du
+DOCUMENT n'est pas déterministe d'un build à l'autre.** Deux `npm run build` successifs sur
+un arbre de travail strictement identique, sans toucher une ligne entre les deux, donnent
+`/fr` à **39 839** puis **39 765** octets brotli — 74 octets d'écart pour zéro octet de
+différence en entrée. Les relevés « +0,1 Ko sur `/fr` » des paragraphes TIW-18 et TIW-35
+ci-dessus sont donc du même ordre que le bruit de mesure, et l'« écart non instruit de
+0,1 Ko » que TIW-35 signalait entre deux commits n'avait probablement rien à instruire.
+Conséquence pratique : **ne conclus rien d'un écart de document inférieur à ~200 octets**
+sans l'avoir vu tenir sur plusieurs builds. Le chiffre du JS, lui, est stable et c'est celui
+que `npm run test:build` plafonne.
+
 ## Dépendances écartées, délibérément
 
 Aucun Tailwind (CSS nu avec custom properties). Aucune bibliothèque de carte : la carte est
@@ -196,27 +284,30 @@ du compilateur, ce qui casse `typescript-eslint` **et** le typecheck intégré d
 À lever quand `typescript-eslint` publiera une majeure acceptant `>=7`.
 **Node 24.x** (`.nvmrc`, `engines`) pour l'alignement avec Vercel.
 
-## Les cinq gardes exécutables
+## Les six gardes exécutables
 
-Cinq invariants de ce projet ne se défendent ni par le typage ni par une revue de code :
+Six invariants de ce projet ne se défendent ni par le typage ni par une revue de code :
 ils se cassent en silence, avec un build vert. Chacun a donc un test qui lit un artefact
 réel, et chacun a été prouvé par un échec volontaire. **Ne les désactive pas.**
 
-| Commande                     | Ce qu'elle garde                                       | Ce qui se passe sans elle                                         |
-| ---------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------- |
-| `npm run test:build`         | `/fr` et `/_not-found` sont bien prérendus             | le prérendu disparaît, `next build` sort en 0                     |
-| `npm run test:build`         | aucun voyage `draft: true` n'est prérendu              | un brouillon part en ligne, et personne n'en est averti           |
-| `npm run test:lint`          | la frontière de pureté de `src/domain` mord vraiment   | la règle existe et ne refuse plus rien                            |
-| `npm run test:lint`          | `@/content/trips` reste la seule porte vers le contenu | le lecteur de disque non gardé s'importe de partout dans `src/**` |
-| `npm run check:photo-weight` | les images suivies par git restent sous 150 Mo         | le dépôt grossit d'un commit à l'autre, et git ne rend rien       |
+| Commande                     | Ce qu'elle garde                                         | Ce qui se passe sans elle                                         |
+| ---------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------- |
+| `npm run test:build`         | `/fr` et `/_not-found` sont bien prérendus               | le prérendu disparaît, `next build` sort en 0                     |
+| `npm run test:build`         | aucun voyage `draft: true` n'est prérendu                | un brouillon part en ligne, et personne n'en est averti           |
+| `npm run test:lint`          | la frontière de pureté de `src/domain` mord vraiment     | la règle existe et ne refuse plus rien                            |
+| `npm run test:lint`          | `@/content/trips` reste la seule porte vers le contenu   | le lecteur de disque non gardé s'importe de partout dans `src/**` |
+| `npm run check:photo-weight` | les images suivies par git restent sous 150 Mo           | le dépôt grossit d'un commit à l'autre, et git ne rend rien       |
+| `npm test`                   | les ratios de contraste écrits en commentaire sont vrais | une table de mesures devient un argument que personne n'a vérifié |
 
 Les quatre premières exigent une étape préalable — `test:build` a besoin d'un build,
 `test:lint` de charger tout le graphe de configuration d'ESLint — et vivent donc hors de
 `npm run test`. `check:photo-weight` n'exige rien : il interroge `git ls-files`, coûte ~0,2 s,
 et vit hors de `npm run test` pour une autre raison — c'est une propriété du _dépôt_ et non du
-code, et elle n'a rien à faire dans une suite unitaire.
+code, et elle n'a rien à faire dans une suite unitaire. La dernière, le contrat de couleur
+de TIW-37, est la seule des six à vivre **dans** `npm run test` : elle ne lit qu'une feuille
+de style et un dossier de sources, donc elle n'exige rien et coûte 5 ms.
 
-**Un sixième invariant est gardé depuis TIW-18, et il n'a pas de commande à lui** — raison
+**Un septième invariant est gardé depuis TIW-18, et il n'a pas de commande à lui** — raison
 pour laquelle il n'est pas dans le tableau plutôt que par oubli : **aucun lien interne rendu
 ne mène à une adresse qui n'existe pas.** Il vit dans `npm run test:e2e`
 (`tests/e2e/dead-links.populated.spec.ts`), qui parcourt en largeur les documents servis
@@ -241,7 +332,7 @@ pourquoi ce garde peut se permettre de refuser plutôt que d'avertir.
 
 **Elles sont branchées, depuis TIW-22** — et cette ligne a dit successivement le contraire de
 la vérité dans les deux sens, ce qui est la raison de la préciser plutôt que de l'abréger.
-`.github/workflows/ci.yml` lance les cinq gardes sur chaque pull request et sur chaque
+`.github/workflows/ci.yml` lance les six gardes sur chaque pull request et sur chaque
 poussée vers `main` et `develop`, et la protection de branche fait de la vérification
 `Vérifications` un préalable à toute fusion : une PR rouge n'est pas fusionnable, administrateur
 compris sur `main`. Le hook `prebuild` de `package.json` lance `validate:content` avant **tout**
