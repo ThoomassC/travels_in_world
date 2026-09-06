@@ -97,11 +97,17 @@
   /* 44 px of height at the root size — WCAG 2.2 target size (minimum). */
   min-block-size: 2.75rem;
   padding-inline: var(--space-4);
-  /* `--accent` (3.27:1) and not `--accent-quiet-border` (1.66:1): these two links
+  /* `--accent` (4.53:1) and not `--accent-quiet-border` (1.78:1): these two links
      are the page's only ways out, and with the quiet border the pill was
-     invisible in the light theme — they read as coloured text, 1.54:1 away from
+     invisible in the light theme — they read as coloured text, 1.27:1 away from
      the body text. Not a 1.4.11 failure (they sit in a labelled `<nav>` and
-     their text is at 4.66:1), but the affordance was carried by colour alone. */
+     their text is at 5.80:1), but the affordance was carried by colour alone.
+
+     Both numbers moved when the palette became the shared one, and they moved
+     the same way: the accent border gained (3.27 → 4.53) and the quiet border
+     stayed invisible (1.66 → 1.78). The link ink is now only 1.27:1 from the body
+     text, closer than before, which makes the border the whole affordance rather
+     than half of it. */
   border: 1px solid var(--accent);
   border-radius: var(--radius-pill);
   background: var(--accent-quiet);

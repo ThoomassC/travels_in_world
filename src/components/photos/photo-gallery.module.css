@@ -76,8 +76,8 @@
 @media (prefers-reduced-motion: reduce) {
   .link:hover .image,
   .link:focus-visible .image {
-    /* A filter is not an animation, so the global reduce block in `tokens.css`
-       does not cover it; the hover is instantaneous either way, but a reader who
+    /* A filter is not an animation, so the global reduce block of the shared
+       sheet does not cover it; the hover is instantaneous either way, but a reader who
        asked for less motion gets no brightness flicker under the pointer. */
     filter: none;
   }

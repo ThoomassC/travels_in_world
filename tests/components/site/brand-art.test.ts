@@ -8,6 +8,13 @@ import {
   BRAND_LOCKUP_VIEWBOX,
   BRAND_MARK_VIEWBOX,
 } from "@/components/site/brand-art";
+import { siteToken, type MeasuredTheme } from "../../styles/sheet";
+
+/**
+ * `--logo-ink` as the site's own sheet resolves it — the value the favicon has
+ * to repeat, read from the one place that defines it rather than typed here.
+ */
+const logoInk = (theme: MeasuredTheme): string => siteToken(theme, "--logo-ink");
 
 /**
  * THE GEOMETRY DRIFT GUARD.
@@ -140,14 +147,28 @@ describe("the favicon names no unconditioned colour", () => {
 
   it("declares both theme values, dark behind the media query", () => {
     /**
-     * The structure of `src/styles/tokens.css`, transcribed: light in `:root`,
-     * dark behind `prefers-color-scheme`. Both literals are asserted, so a copy
-     * that kept the media query and dropped its value — leaving the light ink on
-     * a dark tab bar — fails here.
+     * The structure of the site's sheet, transcribed: light in `:root`, dark
+     * behind `prefers-color-scheme`. Both literals are asserted, so a copy that
+     * kept the media query and dropped its value — leaving the light ink on a
+     * dark tab bar — fails here.
+     *
+     * **The two colours are RESOLVED from the sheet, not written down.** They
+     * used to be `#0c2731` and `#eef7fa` typed into this file, which made three
+     * copies of one value and left this test asserting that the favicon agreed
+     * with the test rather than with the site: adopting the shared palette moved
+     * the token and this assertion would have gone on passing on the old ink. A
+     * favicon is a separate document and its literals are unavoidable; a *test*
+     * repeating them is not.
      */
-    expect(icon).toMatch(/:root\s*\{\s*--logo-ink:\s*#0c2731;\s*\}/);
     expect(icon).toMatch(
-      /@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{\s*--logo-ink:\s*#eef7fa;/
+      new RegExp(String.raw`:root\s*\{\s*--logo-ink:\s*${logoInk("light")};\s*\}`)
+    );
+    expect(icon).toMatch(
+      new RegExp(
+        String.raw`@media \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{\s*--logo-ink:\s*${logoInk(
+          "dark-os"
+        )};`
+      )
     );
   });
 });

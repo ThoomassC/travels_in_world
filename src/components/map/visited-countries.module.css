@@ -8,20 +8,25 @@
 
    | pair                                          | light   | dark     |
    | --------------------------------------------- | ------- | -------- |
-   | `--text-accent` on `--surface` (country name) | 6.48:1  | 10.88:1  |
-   | `--text-muted` on `--surface` (the count)     | 7.15:1  | 12.03:1  |
-   | `--control-border` vs `--site-background`     | 3.22:1  |  5.99:1  |
-   | `--control-border` vs `--surface`             | 3.93:1  |  5.26:1  |
-   | `--accent-quiet-border` vs `--site-background` | 1.66:1 |  4.53:1  |
+   | `--text-accent` on `--surface` (country name) | 7.10:1  |  8.59:1  |
+   | `--text-muted` on `--surface` (the count)     | 7.27:1  |  8.77:1  |
+   | `--control-border` vs `--site-background`     | 4.77:1  |  6.42:1  |
+   | `--control-border` vs `--surface`             | 5.13:1  |  6.64:1  |
+   | `--accent-quiet-border` vs `--site-background` | 1.78:1 |  1.84:1  |
 
    The first two are text (4.5:1 needed at this size); the border is the boundary
    of a user interface component (1.4.11, 3:1). The last row is the token this
    file must NOT use on the border, and the reason is in `.link:hover` below.
 
    The first version of this header quoted the two text pairs against
-   `--site-background` (5.30:1 / 5.85:1). Conservative, so never a conformance
+   `--site-background` (6.60:1 / 6.76:1). Conservative, so never a conformance
    risk — but it measured a background the text is not on, which in a repository
    where these tables *are* the review artefact costs more than the numbers.
+
+   Every number above is recomputed by `tests/styles/colour-contract.test.ts`
+   from the sheet the site ships, on the composed substrate named in each row. It
+   is no longer possible for this table to be wrong in silence, which is what it
+   was for the whole time it quoted a palette this project had already left.
    ============================================================================ */
 
 .countries {
@@ -93,11 +98,17 @@
  * are the whole argument.
  *
  * The border is this pill's only visible boundary: its `--surface` fill measures
- * 1.22:1 against the page. Swapping the border to `--accent-quiet-border` on
- * hover — which is what this rule did first — took that boundary from 3.22:1 to
- * **1.66:1** in the light theme, so pointing at the pill made it *less*
- * delimitable than leaving it alone, and 1.4.11 failed on hover only. The dark
- * theme stayed conformant at 4.53:1, which is exactly why the audit runs in both.
+ * 1.08:1 against the page. Swapping the border to `--accent-quiet-border` on
+ * hover — which is what this rule did first — took that boundary from 4.77:1 to
+ * **1.78:1** in the light theme, so pointing at the pill made it *less*
+ * delimitable than leaving it alone, and 1.4.11 failed on hover only.
+ *
+ * When that was written the dark theme stayed conformant, on a bright cyan the
+ * shared palette does not have, and this comment said so — "which is exactly why
+ * the audit runs in both". The shared accent is the same teal in both themes:
+ * the same swap now measures 1.84:1 in dark as well. The audit still has to run
+ * in both, and the lesson survives its own example: a token that is safe in one
+ * theme only is a token whose safety is on loan from a palette.
  *
  * `src/components/trips/trip-card.module.css` had already measured and settled
  * this same token pair for a pill, in favour of `--control-border`. This file
@@ -118,7 +129,10 @@
 
 /**
  * The count, quieter than the name but still text: `--text-muted` measures
- * 5.85:1 on the page background in the light theme and 13.70:1 in the dark one.
+ * 7.27:1 on the pill it actually sits on in the light theme and 8.77:1 in the
+ * dark one — the same pair as the header table, and no longer the page
+ * background this comment used to quote while the table beside it argued that
+ * the page is never where this text is painted.
  * `--text-sm` and not `--text-xs`, which at 12 px would be the one thing on this
  * page a reader has to lean in for.
  */

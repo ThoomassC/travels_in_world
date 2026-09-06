@@ -35,16 +35,34 @@
   gap: var(--space-3);
   padding: var(--space-3);
   background: var(--surface);
-  /* `--control-border` and not `--border-subtle`: the latter measures 1.37:1 and
-     its own declaration in `tokens.css` says `decorative only`. A card's edge is
-     what separates one trip from the next. */
+  /* `--control-border` and not `--border-subtle`: the latter measures 1.33:1 and
+     its own declaration in the shared sheet says `décoratif seul`. A card's edge
+     is what separates one trip from the next. */
   border: 1px solid var(--control-border);
   border-radius: var(--radius-md);
   transition: border-color 120ms ease;
 }
 
+/**
+ * **The hover cue must not be a loss of contrast**, and adopting the shared
+ * palette is what forced this rule to change.
+ *
+ * The border is this card's only hover affordance. It used to swap to
+ * `--accent-quiet-border`, which was a bright cyan in the old dark theme and
+ * survived there at 4.29 against a card. In the shared palette the accent is the
+ * *same* teal in both themes, so that same token now composites to 1.82:1 on a
+ * card in light and 1.85:1 in dark: pointing at a card would have taken its edge
+ * from 5.13:1 down to 1.82:1 and made it *less* delimitable than leaving it
+ * alone.
+ *
+ * That is the exact defect `src/components/map/visited-countries.module.css`
+ * measured and rejected for its own pills, one ticket earlier. `--text-accent`
+ * is the way out: it is in the teal family, so hover still reads as the accent,
+ * and it measures 7.10:1 on a card in the light theme and 8.59:1 in the dark —
+ * above the resting border in both, so the cue is now a gain and never a loss.
+ */
 .card:hover {
-  border-color: var(--accent-quiet-border);
+  border-color: var(--text-accent);
 }
 
 /**
@@ -99,7 +117,7 @@
   aspect-ratio: 3 / 2;
   overflow: hidden;
   border-radius: var(--radius-sm);
-  background: var(--surface-muted);
+  background: var(--panel-surface);
 }
 
 .image {
@@ -129,8 +147,11 @@
  *
  * No colour carries meaning here and there is nothing to fail 1.4.1 with: the
  * tile is `aria-hidden` decoration whose every word is also in the card's facts.
- * The text is `--text-accent`, measured 7.03:1 against neutral surface where the
- * map's visited countries already use the pair.
+ * The text is `--text-accent`, measured 6.43:1 against the neutral end of the
+ * gradient — where the map's visited countries already use the pair — and 5.66:1
+ * against its accent end in the light theme, 6.75:1 in the dark. The second
+ * number is the one that governs: a gradient's worst case is not its ground, and
+ * measuring only the pale end would be measuring the best case.
  */
 .tile {
   display: flex;
@@ -142,7 +163,7 @@
   inline-size: 100%;
   block-size: 100%;
   overflow: hidden;
-  background: linear-gradient(135deg, var(--surface-muted), var(--accent-quiet));
+  background: linear-gradient(135deg, var(--panel-surface), var(--accent-quiet));
   color: var(--text-accent);
   text-align: center;
   text-wrap: balance;
@@ -188,9 +209,17 @@
  * the map's marker, because a 44 px dot has no room for a word; a card does.
  *
  * `--accent-quiet` fill with a `--text-accent` label, the pair the map's visited
- * countries already use (7.03:1 against neutral land, measured there), and an
- * `--accent-quiet-border` edge so the chip keeps a shape in the dark theme where
- * the fill is a 16 % wash.
+ * countries already use (6.43:1 against neutral land, measured there), and an
+ * `--accent-quiet-border` edge.
+ *
+ * **That edge is a hairline and nothing more, since the palette became the
+ * shared one.** It used to be justified by the dark theme, where the old bright
+ * cyan border held 4.29 and gave the chip a shape its 16 % wash could not. The
+ * shared accent is the same teal in both themes, so the border now measures
+ * 1.82:1 in light and 1.85:1 in dark — visible as a hint, never as a boundary.
+ * It is kept because it is decoration on decoration: this chip is `aria-hidden`,
+ * its shape is carried by the fill and its meaning by its own text at 7.10:1.
+ * Were it a control, `--control-border` would be the token, as on `.cta` below.
  *
  * `align-self: start` and `max-content` so the chip is as wide as its word and
  * not as wide as the card — the default in a flex column is to stretch.
@@ -305,23 +334,29 @@
  *
  * | token                   | light   | dark    |
  * | ----------------------- | ------- | ------- |
- * | `--accent-quiet-border` | 1.79:1  | 4.29:1  |
- * | `--accent`              | 4.00:1  | 3.31:1  |
- * | `--control-border`      | 3.93:1  | 5.26:1  |
+ * | `--accent-quiet-border` | 1.82:1  | 1.85:1  |
+ * | `--accent`              | 4.87:1  | 3.40:1  |
+ * | `--control-border`      | 5.13:1  | 6.64:1  |
  *
- * (Against `--site-background` behind the card the light column reads 1.66,
- * 3.27 and 3.22 — the same ranking, since the two backgrounds are neighbours.)
+ * (Against `--site-background` behind the card the light column reads 1.78:1,
+ * 4.53:1 and 4.77:1 — the same ranking, since the two backgrounds are
+ * neighbours.)
+ *
+ * The shared palette did not change the conclusion, it hardened it: on the old
+ * local palette the quiet border was defensible in the dark theme (4.29 against
+ * a card, on a cyan the shared sheet does not have) and it is now as invisible
+ * there as in light, so `--control-border` wins in both columns instead of one.
  *
  * This is **not** a 1.4.11 failure: the pill is `aria-hidden` decoration whose
- * own text sits at 6.48:1, so nothing here is a control needing a visible
- * boundary. It is simply that at 1.79:1 the pill was practically invisible to a
+ * own text sits at 7.10:1, so nothing here is a control needing a visible
+ * boundary. It is simply that at 1.82:1 the pill was practically invisible to a
  * low-contrast eye, which costs the card the one thing this element exists for —
  * saying that it is readable.
  *
  * `--control-border` rather than `--accent`, which was the other candidate: it
- * is the only one of the two that improves **both** themes (`--accent` would
- * take the dark theme down from 4.29 to 3.31), and it is the token whose
- * declaration in `tokens.css` is annotated `>= 3:1, WCAG 1.4.11` — the
+ * is the only one of the two that is the stronger token in **both** themes
+ * (`--accent` sits a full point and a half below it in dark, at 3.40 against
+ * 6.64), and it is the shared sheet's designated `>= 3:1` boundary token — the
  * repository's "a border you can see" token, which is exactly the job. What it
  * gives up is the teal family, and the pill keeps it where it matters: the text
  * is `--text-accent`, and `.card:hover .cta` below brings the accent back to the

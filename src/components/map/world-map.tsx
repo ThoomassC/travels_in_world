@@ -72,7 +72,7 @@ export type MapCountry = {
    *
    * Until TIW-15 the name was rendered here, as a visually hidden enumeration
    * inside the `<figcaption>`: without it, which countries hold a trip was
-   * carried by the tint alone — a distinction measured at 1.16:1 — so a screen
+   * carried by the tint alone — a distinction measured at 1.14:1 — so a screen
    * reader learnt "7 pays" and never which seven (WCAG 1.1.1). That enumeration
    * is gone because `VisitedCountries` supersedes it on every count: the names
    * are visible rather than hidden, each carries the number of trips that reach

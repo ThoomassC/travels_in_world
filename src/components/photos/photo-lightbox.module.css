@@ -157,12 +157,16 @@
 /**
  * Motion, neutralised locally as well as globally.
  *
- * `tokens.css` already carries a blanket `prefers-reduced-motion` block with
- * `!important`, and it does cover both declarations below. This block is here
- * anyway, and the duplication is deliberate: the global rule collapses durations
- * to 0.01 ms, which is a *simulation* of no motion and depends on a
- * `*`-selector rule staying in a file this component does not own. Saying it
- * where the animation is declared makes the intent local and reviewable.
+ * The shared sheet of `@thomascaron/ui` carries a blanket
+ * `prefers-reduced-motion` block with `!important`. It covers the `.viewer`
+ * animation below; it deliberately does NOT stop the `.control` transition,
+ * because it restricts the animatable property list instead of clamping every
+ * duration — less movement was asked for, less feedback was not.
+ *
+ * So this block is not the duplication it used to be: half of it is now the only
+ * thing that stops that transition, and the other half says locally what the
+ * global rule says globally. Saying it where the animation is declared makes the
+ * intent reviewable in the file that owns it.
  */
 @media (prefers-reduced-motion: reduce) {
   .viewer {

@@ -60,21 +60,26 @@
     */
 
     /*
-      The theme contract of src/styles/tokens.css, transcribed: light in :root, dark
-      behind the media query, same structure and the same two values. A favicon is
-      fetched in its own document, so it cannot inherit the page's custom properties —
-      the media query here IS the theme switch, and :root matches this svg element.
+      The theme contract of the site's sheet, transcribed: light in :root, dark behind
+      the media query, same structure and the same two values. A favicon is fetched in
+      its own document, so it cannot inherit the page's custom properties — the media
+      query here IS the theme switch, and :root matches this svg element.
 
       No unconditioned literal: the light value is the light theme's own declaration,
-      in exactly the place tokens.css puts it.
+      in exactly the place the sheet puts it.
+
+      The two values below are `--logo-ink` resolved out of the shared palette of
+      @thomascaron/ui, where it is an alias of --text-strong. They are literals here
+      because they have to be, and they cannot drift: tests/components/site/brand-art.test.ts
+      resolves the token from the sheet and compares it with what is written here.
     */
     :root {
-      --logo-ink: #0c2731;
+      --logo-ink: #193940;
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --logo-ink: #eef7fa;
+        --logo-ink: #b6dae3;
       }
     }
 

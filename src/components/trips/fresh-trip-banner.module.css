@@ -19,8 +19,8 @@
  * 1152 × 800 desktop it costs about 110 px, which the map's own `45vh` cap
  * absorbs.
  *
- * `--control-border` and not `--border-subtle`: the latter measures 1.37:1 and
- * its own declaration in `tokens.css` says `decorative only`. This box is what
+ * `--control-border` and not `--border-subtle`: the latter measures 1.33:1 and
+ * its own declaration in the shared sheet says `décoratif seul`. This box is what
  * separates an announcement from the page's introduction, so its edge is a
  * graphical object required to understand the content (WCAG 1.4.11, ≥ 3:1).
  */

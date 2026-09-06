@@ -22,14 +22,21 @@
  * refuses it: it reads `src/app/icon.svg` off the disk and compares its path
  * data with {@link BRAND_COMET_PATH}, character for character.
  *
- * THE DRAWING CONSTRAINT THIS SHAPE ABSORBS. Measured on the palette of
- * `src/styles/tokens.css`, ink against accent is **1.99:1 in light and 1.35:1 in
+ * THE DRAWING CONSTRAINT THIS SHAPE ABSORBS. Measured on the shared palette of
+ * `@thomascaron/ui`, ink against accent is **1.56:1 in light and 1.45:1 in
  * dark** — far below the 3:1 a graphical object needs. So no edge of this mark is
  * ever an ink/accent edge: the comet is a single connected mass of `--logo-ink`,
  * the trajectory is a dotted rule of `--logo-accent`, and the two are separated
  * by ~7 units of bare background. Each reads against the page
- * (ink 10.54:1 light / 16.73:1 dark, accent 5.30:1 / 12.40:1), never against the
+ * (ink 10.28:1 light / 12.01:1 dark, accent 6.60:1 / 8.30:1), never against the
  * other. Merge them and the mark becomes one flat silhouette.
+ *
+ * The constraint got *tighter* with the shared palette, not looser: the two
+ * colours were 1.99 apart in light and are 1.56 apart now, because the shared
+ * accent is one teal in both themes instead of a dark teal and a bright cyan.
+ * The clearance below is what absorbs it, and it is the reason this file has a
+ * geometry argument at all. `tests/styles/colour-contract.test.ts` recomputes all
+ * six numbers above from the sheet.
  */
 
 /**
@@ -84,7 +91,7 @@ export const BRAND_LOCKUP_COMET_TRANSFORM = "translate(11.8 -2.6) scale(0.595)";
  *
  * It passes ~7 units below the comet's tail at the closest point. That clearance
  * is the load-bearing number of this file: close it and the accent starts sharing
- * an edge with the ink, at 1.99:1.
+ * an edge with the ink, at 1.56:1.
  */
 export const BRAND_LOCKUP_TRACK_PATH = "M2 30 Q19 31 36 26";
 export const BRAND_LOCKUP_TRACK_WIDTH = 3;

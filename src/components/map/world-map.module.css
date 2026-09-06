@@ -155,7 +155,7 @@
      has to fill the ratio-locked box, not re-derive a height from its own. */
   height: 100%;
   background: var(--surface);
-  /* Same reason as the coastline below: `--border-subtle` measures 1.34:1
+  /* Same reason as the coastline below: `--border-subtle` measures 1.33:1
      against the page background, so the map had no perceivable edge at all.
      `--control-border` is the token documented `>= 3:1`. */
   border: 1px solid var(--control-border);
@@ -172,16 +172,24 @@
  * an affordance would promise an interaction that does not exist until TIW-14.
  *
  * **The coastline carries the map, not the fill.** Measured: land composed over
- * sea is 1.08:1 in the light theme and 1.17:1 in the dark one — the continents
+ * sea is 1.10:1 in the light theme and 1.10:1 in the dark one — the continents
  * are, as fills, invisible. So the only thing that draws the world is this
  * stroke, which makes it a graphical object required to understand the content
- * (WCAG 1.4.11, 3:1). `--border-subtle` scored 1.37:1 and its own declaration in
- * `tokens.css` says `decorative only`; `--control-border` is the token the
- * palette documents as `>= 3:1` and measures 4.26:1 against land and 3.93:1
- * against sea in the light theme, 4.48 and 5.26 in the dark one.
+ * (WCAG 1.4.11, 3:1). `--border-subtle` scored 1.33:1 and its own declaration in
+ * the shared sheet says `décoratif seul`; `--control-border` is the token the
+ * palette documents as `>= 3:1` and measures 4.64:1 against land and 5.13:1
+ * against sea in the light theme, 6.02:1 and 6.64:1 in the dark one.
+ *
+ * **The land is `--panel-surface`, and its polarity flipped with the palette.**
+ * It used to be a project-local `--surface-muted`, a white veil that made the
+ * continents a shade *lighter* than the sea; the shared sheet has no such token,
+ * and its panel role sits a shade *darker* than a surface in the light theme, so
+ * land now reads slightly darker than water there — the more conventional of the
+ * two readings, and the dark theme is unchanged. What did not change is the
+ * argument: at 1.10:1 either way, the fill was never what drew the world.
  */
 .land path {
-  fill: var(--surface-muted);
+  fill: var(--panel-surface);
   stroke: var(--control-border);
 }
 
@@ -190,10 +198,11 @@
  * belt-and-braces.
  *
  * The fill alone cannot do it: composed over neutral land, `--accent-quiet`
- * measures 1.16:1 in the light theme, and no alpha fixes it — measured, α=0.5
- * reaches 1.98:1 and α=0.8 only 3.15:1, by which point the map is a flat wash.
- * So the contrast is carried by the outline, in `--text-accent`: 7.03:1 against
- * neutral land, well past the 3:1 of 1.4.11.
+ * measures 1.14:1 in the light theme, and no alpha fixes it — measured, α=0.5
+ * reaches 1.99:1 and α=0.8 only 3.19:1, by which point the map is a flat wash.
+ * So the contrast is carried by the outline, in `--text-accent`: 6.43:1 against
+ * neutral land in the light theme and 7.79:1 in the dark one, well past the 3:1
+ * of 1.4.11.
  *
  * And the outline is also **thicker**, which is the part that matters for 1.4.1
  * (use of colour): a heavier line is a non-colour visual cue, so the distinction
@@ -213,8 +222,8 @@
  *
  * **Distinct by the stroke's PATTERN, not by its hue**, and that is the whole
  * design. The visited state already spends both of the channels a fill and a
- * colour can offer — `--accent-quiet` over neutral land measures 1.16:1, which is
- * why the contrast is carried by a `--text-accent` outline at 7.03:1 and the
+ * colour can offer — `--accent-quiet` over neutral land measures 1.14:1, which is
+ * why the contrast is carried by a `--text-accent` outline and the
  * non-colour cue by its 2 px weight (see the note above). A third state cannot be
  * a third hue: it would be a colour-only distinction from the second, failing WCAG
  * 1.4.1 for exactly the reader the thick outline was chosen for.
@@ -459,8 +468,10 @@
 /**
  * **Under `prefers-reduced-motion`, and the distinction survives it.**
  *
- * `src/styles/tokens.css` already carries a blanket reduce block that clamps
- * every animation to 0.01 ms. Leaning on it would have *deleted* this channel
+ * The shared sheet of `@thomascaron/ui` already carries a blanket reduce block
+ * that clamps every animation to 0.01 ms — animations only: it deliberately
+ * leaves colour transitions running, because less movement was asked for and
+ * less feedback was not. Leaning on it would have *deleted* this channel
  * rather than calmed it: the halo would freeze on whichever keyframe it stopped
  * at, and 0 % is the only visible one, so the ring would simply never appear —
  * for exactly the readers who asked for less motion, not for less information.

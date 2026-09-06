@@ -47,20 +47,20 @@
   pointer-events: none;
 }
 
-/* Land composed over sea measures 1.08:1 in the light theme — as a fill, the
+/* Land composed over sea measures 1.10:1 in the light theme — as a fill, the
    continents are invisible. The coastline is what draws the world, which makes
    it a graphical object required to understand the content (WCAG 1.4.11, 3:1):
    `--control-border` is the token documented `>= 3:1`, where `--border-subtle`
-   scores 1.37:1 and says `decorative only` in its own declaration. */
+   scores 1.33:1 and says `décoratif seul` in its own declaration. */
 .land path {
-  fill: var(--surface-muted);
+  fill: var(--panel-surface);
   stroke: var(--control-border);
   stroke-width: 1;
 }
 
 /* Three channels, not belt-and-braces: `--accent-quiet` over neutral land is
-   1.16:1 and no alpha fixes it, so contrast is carried by the outline
-   (`--text-accent`, 7.03:1), and the outline is also *thicker* — a non-colour
+   1.14:1 and no alpha fixes it, so contrast is carried by the outline
+   (`--text-accent`, 6.43:1), and the outline is also *thicker* — a non-colour
    cue, which is what 1.4.1 asks for. The fill stays as reinforcement. */
 .visited path {
   fill: var(--accent-quiet);

@@ -105,15 +105,23 @@ test("the favicon inks itself dark on a light system and light on a dark one", a
   const dark = await inkLuminanceAt16px(page);
 
   /**
-   * `#0c2731` is 0.02 relative luma, `#eef7fa` is 0.91. The thresholds are wide
-   * on purpose: this asserts that the embedded media query is honoured and which
-   * way round, not the exact hex — the hexes are pinned in
-   * `tests/components/site/brand-art.test.ts`, against `tokens.css`.
+   * The two inks measured in Rec. 709 luma: `#193940` is 0.199 and `#b6dae3` is
+   * 0.827. This asserts that the embedded media query is honoured and which way
+   * round, not the exact hex — the hexes are pinned in
+   * `tests/components/site/brand-art.test.ts`, resolved from the sheet.
    *
    * If BOTH came back dark, the mark would be near-invisible on a dark tab bar
    * and nothing else in this repository would notice.
+   *
+   * **The thresholds were 0.2 and 0.6, and TIW-37 moved them.** The shared
+   * palette's `--text-strong` is a lighter dark than the ink this file was
+   * written against: the light value went from 0.133 to 0.199, which cleared
+   * `< 0.2` by 0.001. The suite was green and one antialiased pixel at the
+   * sample point would have flipped it — a green that had stopped meaning
+   * anything. They now sit either side of the midpoint, which is the question
+   * actually being asked, with 0.20 of margin on each side.
    */
-  expect(light).toBeLessThan(0.2);
+  expect(light).toBeLessThan(0.4);
   expect(dark).toBeGreaterThan(0.6);
 });
 
