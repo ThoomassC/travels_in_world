@@ -38,7 +38,7 @@ export type { MapCountry, WorldMapProps } from "./world-map";
 export type { TripMark } from "./marks";
 export { VisitedCountries } from "./visited-countries";
 export type { VisitedCountriesProps } from "./visited-countries";
-export type { CountingTrip, CountryLabels, VisitedCountryTally } from "./countries";
+export type { CountingTrip, CountryLabels, CountryTargets, VisitedCountryTally } from "./countries";
 /**
  * A **value** export, unlike everything above it, and the only one on this list.
  *
@@ -51,3 +51,13 @@ export type { CountingTrip, CountryLabels, VisitedCountryTally } from "./countri
  * refuses by string comparison.
  */
 export { untoldOnlyCountryCodes } from "./countries";
+/**
+ * The second value export, and it is here for the same string-comparison reason
+ * as the first — `@/components/map/countries` is what the geometry façade's guard
+ * refuses, so `src/components/trips/**` cannot reach the rule any other way.
+ *
+ * `countryTargetHref` (TIW-36) is where a country's row decides its destination,
+ * extracted from `visited-countries.tsx` so the listing's search box asks the
+ * question through the same three rungs instead of growing a fourth answer.
+ */
+export { countryTargetHref } from "./countries";

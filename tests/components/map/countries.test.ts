@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  countryTargetHref,
   tallyVisitedCountries,
   untoldOnlyCountryCodes,
   type CountingTrip,
   type CountryLabels,
+  type CountryTargets,
   type VisitedCountryTally,
 } from "@/components/map/countries";
 
@@ -272,5 +274,108 @@ describe("untoldOnlyCountryCodes", () => {
     const trips = [untoldTrip("maroc-2026", "MA", "MA")];
 
     expect(untoldOnlyCountryCodes(trips)).toEqual(new Set(["MA"]));
+  });
+});
+
+/**
+ * **Where a country's row points**, extracted from `visited-countries.tsx` by
+ * TIW-36 so a second caller — the listing's search box — cannot arrive at a
+ * different answer to the same question.
+ *
+ * The rule the component shipped had two rungs, page-of-the-only-trip or the
+ * whole listing, and the listing rung is a link to *itself* when the caller is
+ * the listing. Measured on the end-to-end fixture: two of the five rows would
+ * have done nothing at all, and no crawl would ever say so — a link to the page
+ * you are on is a 200. Hence the middle rung, and hence the fallback being the
+ * caller's to name rather than this module's to assume.
+ */
+describe("countryTargetHref", () => {
+  const tally = (
+    code: string,
+    tripSlugs: readonly string[],
+    toldTripSlugs: readonly string[]
+  ): VisitedCountryTally => ({ code, name: code, tripSlugs, toldTripSlugs });
+
+  /** What `visited-countries.tsx` passes: no anchor, because it owns no section. */
+  const NO_ANCHOR: CountryTargets = {
+    tripHref: (slug) => `/fr/voyages/${slug}`,
+    fallbackHref: "/fr/voyages",
+  };
+
+  /** What the listing passes: it renders a section per country it files a trip under. */
+  const WITH_ANCHOR: CountryTargets = {
+    ...NO_ANCHOR,
+    fallbackHref: "#pays-visites",
+    sameDocumentAnchorId: (code) => (code === "IS" ? undefined : `pays-${code.toLowerCase()}`),
+  };
+
+  it("goes straight to the trip when a country holds exactly one and it is told", () => {
+    expect(
+      countryTargetHref(tally("BO", ["perou-bolivie-2023"], ["perou-bolivie-2023"]), NO_ANCHOR)
+    ).toBe("/fr/voyages/perou-bolivie-2023");
+  });
+
+  it("falls back when the country's only trip has no page", () => {
+    // TIW-18: `tripStaticParams` never built one, so the precise link would be a 404.
+    expect(countryTargetHref(tally("MA", ["maroc-2026"], []), NO_ANCHOR)).toBe("/fr/voyages");
+  });
+
+  /**
+   * The 2.4.4 rung: a row announcing "2 voyages" must not name one of them, even
+   * when exactly one of the two has a page to name.
+   */
+  it("does not single out the one told trip of a two-trip country", () => {
+    expect(
+      countryTargetHref(tally("CL", ["chili-2026", "chili-2020"], ["chili-2020"]), NO_ANCHOR)
+    ).toBe("/fr/voyages");
+  });
+
+  it("falls back when a country holds several told trips", () => {
+    expect(
+      countryTargetHref(
+        tally("JP", ["japon-2025", "japon-2024"], ["japon-2025", "japon-2024"]),
+        NO_ANCHOR
+      )
+    ).toBe("/fr/voyages");
+  });
+
+  it("takes the caller's anchor over the fallback when the section exists", () => {
+    expect(
+      countryTargetHref(tally("JP", ["japon-2025", "japon-2024"], ["japon-2025"]), WITH_ANCHOR)
+    ).toBe("#pays-jp");
+  });
+
+  it("takes the caller's anchor for a country whose only trip has no page", () => {
+    expect(countryTargetHref(tally("MA", ["maroc-2026"], []), WITH_ANCHOR)).toBe("#pays-ma");
+  });
+
+  it("falls back when the caller has no section for that country", () => {
+    // The catalogue files a trip under its *first arrival* only, so a country
+    // merely crossed has no section — the `#pays-bo` defect, in one branch.
+    expect(countryTargetHref(tally("IS", ["islande-2022", "islande-2019"], []), WITH_ANCHOR)).toBe(
+      "#pays-visites"
+    );
+  });
+
+  it("prefers the one told trip's page over an available anchor", () => {
+    // The precise rung stays first: a page about the trip beats a heading above it.
+    expect(countryTargetHref(tally("IS", ["islande-2022"], ["islande-2022"]), WITH_ANCHOR)).toBe(
+      "/fr/voyages/islande-2022"
+    );
+  });
+
+  /**
+   * **The misuse this API is shaped to refuse.** The first `#pays-xx` scheme
+   * dangled because the home page emitted a fragment against *another* page's
+   * document, and `tests/e2e/map-equivalent.populated.spec.ts` still forbids the
+   * spelling on `/fr`. A caller hands an element **id**, never a href, so the
+   * only URL this branch can produce is fragment-only — which the browser
+   * resolves against the document the reader is already in, whatever that is.
+   */
+  it("can only ever produce a same-document fragment from an anchor", () => {
+    const href = countryTargetHref(tally("JP", ["a", "b"], []), WITH_ANCHOR);
+
+    expect(href.startsWith("#")).toBe(true);
+    expect(href).not.toContain("/");
   });
 });

@@ -197,3 +197,86 @@ export function untoldOnlyCountryCodes(trips: readonly CountingTrip[]): Readonly
 
   return untold;
 }
+
+/**
+ * The three addresses a caller can send a country's row to, and which of them it
+ * is able to offer.
+ *
+ * Every href arrives ready-made, for the reason ADR 0003 gives about `mark.href`:
+ * the locale prefix belongs to `src/i18n/**`, and a module that concatenates a
+ * path is a module that loses the `/fr` segment.
+ */
+export type CountryTargets = {
+  /** One trip's own page, by slug — `tripPath` localised by the caller. */
+  readonly tripHref: (slug: string) => string;
+  /**
+   * Where a country goes when nothing more precise exists.
+   *
+   * **A parameter, and that is the change TIW-36 makes to this rule.** The
+   * version this was extracted from hard-coded the listing, which is right for
+   * the home page and a link to *itself* for the listing. Measured on the
+   * end-to-end fixture: two of five rows would have done nothing, and no crawl
+   * would ever have said so — a link to the page you are on is a 200.
+   */
+  readonly fallbackHref: string;
+  /**
+   * The `id` of the section naming this country **in the caller's own document**,
+   * or `undefined` when the caller renders none for it.
+   *
+   * **Why an id and not a href, which is the whole safety of this parameter.**
+   * The first `#pays-xx` scheme dangled, and the reason was not the scheme: the
+   * home page emitted a fragment against `/fr/voyages`' document, where the
+   * catalogue files a trip under its *first arrival* only, so a country merely
+   * crossed had no section at all. `#pays-bo` matched nothing and left the reader
+   * silently at the top of a sixty-entry page;
+   * `tests/e2e/map-equivalent.populated.spec.ts` still forbids the spelling on
+   * `/fr` for it. Taking an id means the only URL this branch can build is
+   * fragment-only, and a fragment-only URL resolves against the document the
+   * reader is already in — the cross-document mistake has no spelling here.
+   *
+   * What the shape still cannot refuse is a caller answering with a path in place
+   * of an id: `"/fr/voyages#pays-bo"` composes to `"#/fr/voyages#pays-bo"`, a
+   * fragment no element carries. That one is caught rather than prevented, by the
+   * half of `tests/e2e/dead-links.populated.spec.ts` that resolves every rendered
+   * fragment against the page it points at.
+   *
+   * Optional, and its absence is the pre-TIW-36 behaviour exactly: a caller that
+   * has not thought about sections gets the fallback, which is the fail-closed
+   * direction.
+   */
+  readonly sameDocumentAnchorId?: (code: string) => string | undefined;
+};
+
+/**
+ * Where one country's row points — one written récit's page, else the caller's
+ * own section for that country, else the caller's fallback.
+ *
+ * **Why the first rung is two conditions and not one.** `tripSlugs.length === 1`
+ * is the older half: a row announcing "2 voyages" must not name one of them,
+ * which is WCAG 2.4.4 and the defect the `#pays-xx` scheme already paid for.
+ * `onlyTold !== undefined` is TIW-18's half: that single trip must *have* a page.
+ * The moment a trip can exist without one — `tripStaticParams` never builds one
+ * for an unwritten récit — reading `tripSlugs` here points at an address the
+ * build never wrote. One untold trip in one country was enough.
+ *
+ * **Why the middle rung exists at all.** A country's section on the page the
+ * reader is already on is more precise than that page's own address and cannot
+ * dangle, because the caller only offers it for a section it renders. It sits
+ * *below* the trip page deliberately: a page about the journey beats a heading
+ * above a card of it.
+ *
+ * Pure and href-free, so both callers — the map's textual equivalent and the
+ * listing's search box — answer the same question the same way instead of
+ * arriving at two nearby answers.
+ */
+export function countryTargetHref(country: VisitedCountryTally, targets: CountryTargets): string {
+  const [onlyTold] = country.toldTripSlugs;
+
+  if (country.tripSlugs.length === 1 && onlyTold !== undefined) {
+    return targets.tripHref(onlyTold);
+  }
+
+  const anchorId = targets.sameDocumentAnchorId?.(country.code);
+
+  return anchorId === undefined ? targets.fallbackHref : `#${anchorId}`;
+}

@@ -1,6 +1,12 @@
 import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
-import { tallyVisitedCountries, type CountingTrip, type CountryLabels } from "./countries";
+import {
+  countryTargetHref,
+  tallyVisitedCountries,
+  type CountingTrip,
+  type CountryLabels,
+  type CountryTargets,
+} from "./countries";
 import styles from "./visited-countries.module.css";
 
 /**
@@ -77,6 +83,13 @@ export function VisitedCountries({
 
   const tally = tallyVisitedCountries(trips, labels);
 
+  /**
+   * Built once for the whole list rather than per row: it is the same three
+   * answers forty times, and one object is what makes "this page offers no
+   * anchor" a single statement instead of forty omissions.
+   */
+  const targets: CountryTargets = { tripHref, fallbackHref: allTripsHref };
+
   return (
     /*
       A named `<section>`, so this is a `region` landmark — matching `LatestTrips`,
@@ -108,41 +121,13 @@ export function VisitedCountries({
         >
           {tally.map((country) => {
             /**
-             * **Where the link goes, and why it is not a fragment.**
-             *
-             * The first version pointed at `/fr/voyages#pays-xx`, a section
-             * `TripCatalogue` renders. Measured on a production build: it
-             * dangled. The catalogue files a trip under its *first arrival*
-             * country only, so a country a trip merely crosses has no section —
-             * `#pays-bo` was emitted by the home page and matched nothing on
-             * `/fr/voyages`, which leaves the reader silently at the top of the
-             * listing. Worse, Bolivia does not appear on that page at all: its
-             * trip is filed under Peru.
-             *
-             * So the target is chosen from what certainly exists. One trip: its
-             * own page, which is more precise than any listing section could be.
-             * Several: the whole listing. Neither can dangle, because both are
-             * routes rather than fragments.
+             * The rule lives in `./countries.ts`, beside the type it reads, so
+             * the listing's search box cannot answer the same question
+             * differently. This page offers no anchor: it renders no section per
+             * country, and the one it used to point at was on another document —
+             * the `#pays-bo` defect the rule's header records.
              */
-            const [onlyTold] = country.toldTripSlugs;
-            /**
-             * **`toldTripSlugs` and not `tripSlugs`** (TIW-18), and this one word
-             * is where the "no dead link" criterion is won or lost on this
-             * component. The precise branch links to a trip's *own page*; the
-             * moment a trip can exist without one, reading the wider list points
-             * at an address `tripStaticParams` never built. One untold trip in
-             * one country was enough.
-             *
-             * The two conditions are both needed and say different things.
-             * `tripSlugs.length === 1` is the pre-existing rule — a row announcing
-             * "2 voyages" must not name one of them, which is the 2.4.4 defect the
-             * `#pays-xx` note above already paid for. `onlyTold !== undefined` is
-             * the new one: that single trip must have a page.
-             */
-            const href =
-              country.tripSlugs.length === 1 && onlyTold !== undefined
-                ? tripHref(onlyTold)
-                : allTripsHref;
+            const href = countryTargetHref(country, targets);
             /**
              * Whether **nothing** in this country is written yet — the same
              * "every, not any" rule `untoldOnlyCountryCodes` applies to the tint,

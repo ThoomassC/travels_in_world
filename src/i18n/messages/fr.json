@@ -25,6 +25,8 @@
     "metaDescription": "La liste complète des voyages du carnet, groupée par continent puis par pays.",
     "allHeading": "Tous les voyages",
     "allIntro": "{count, plural, one {# voyage, groupé par continent puis par pays, du plus récent au plus ancien.} other {# voyages, groupés par continent puis par pays, du plus récent au plus ancien.}}",
+    "countrySearchLabel": "Rechercher un pays",
+    "countrySearchResults": "{count, plural, =0 {Aucun pays ne correspond à cette recherche.} one {# pays correspond.} other {# pays correspondent.}}",
     "continentCount": "{count, plural, one {# voyage} other {# voyages}}",
     "emptyHeading": "Aucun voyage publié",
     "emptyBody": "Le carnet est encore vide. Les récits apparaîtront ici, groupés par continent puis par pays, dès le premier voyage publié.",
