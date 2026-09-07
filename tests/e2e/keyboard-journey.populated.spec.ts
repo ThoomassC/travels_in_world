@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
+import { MAP_DRAWING_IN_FIGURE } from "./support/map";
 
 /**
  * TIW-26's fifth acceptance criterion, whole and in one go: **accueil → carte →
@@ -184,7 +185,7 @@ test("a keyboard alone walks accueil → carte → panneau → voyage → retour
    */
   const figure = page.locator("figure").first();
   await expect(figure).toBeVisible();
-  await expect(figure.locator("svg")).toHaveAttribute("viewBox", /[\d. ]+/);
+  await expect(figure.locator(MAP_DRAWING_IN_FIGURE)).toHaveAttribute("viewBox", /[\d. ]+/);
 
   /**
    * **The journey closes on the marker it left from**, and this assertion is not

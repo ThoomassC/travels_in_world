@@ -170,7 +170,14 @@ describe("what the server rendered is still what is drawn", () => {
     // `children`, so it is in the DOM once and the client never re-renders it.
     const { container } = renderMap();
 
-    expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length * 2);
+    /*
+      The drawing's paths, not the document's: since the marker became a pennant
+      it carries an inline `<svg><path>` of its own, and counting every path in
+      the container would count the markers too. The markers are HTML beside the
+      drawing, never inside it (ADR 0003), so scoping to the `<svg>` is exact.
+    */
+    const drawing = container.querySelector("figure svg");
+    expect(drawing?.querySelectorAll("path")).toHaveLength(COUNTRIES.length * 2);
     expect(svgOf(container)).toHaveAttribute("aria-hidden", "true");
     expect(svgOf(container)).toHaveAttribute("focusable", "false");
   });

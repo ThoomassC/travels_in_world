@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
 import { auditPage, describeViolations } from "./support/axe";
+import { MAP_DRAWING } from "./support/map";
 
 /**
  * The map's accessible equivalent, on the content the repository really ships:
@@ -41,7 +42,7 @@ test("no country of the drawing is a tab stop, and the map traps no focus", asyn
   await page.goto("/fr");
 
   // The drawing is really there: 177 shapes of the 110m dataset.
-  const paths = page.locator("figure svg path");
+  const paths = page.locator(`${MAP_DRAWING} path`);
   expect(await paths.count()).toBeGreaterThan(100);
 
   /**
@@ -52,7 +53,7 @@ test("no country of the drawing is a tab stop, and the map traps no focus", asyn
    * `<svg>` plus no interactive descendant is the mechanism, and this is the
    * outcome.
    */
-  const svg = page.locator("figure svg");
+  const svg = page.locator(MAP_DRAWING);
   await expect(svg).toHaveAttribute("aria-hidden", "true");
   await expect(svg).toHaveAttribute("focusable", "false");
   expect(await svg.locator("a, button, [tabindex], title, [role]").count()).toBe(0);

@@ -5,6 +5,7 @@ import { MapViewport, type MapViewportZone } from "./map-viewport";
 import { ZOOM_VALUE_TOKEN } from "./viewport";
 import { placeMarks, spreadCoincident, type TripMark } from "./marks";
 import { worldPointOf, zonesOf } from "./zones";
+import { MARK_PENNANT_PATH, MARK_VIEWBOX } from "./mark-art";
 import styles from "./world-map.module.css";
 
 /**
@@ -364,7 +365,31 @@ export function WorldMap({
                 */
                 data-story={mark.story === "unwritten" ? "unwritten" : undefined}
               >
-                <span className={styles.dot} aria-hidden="true" />
+                {/*
+                  The pennant. `aria-hidden`, like the dot it replaces: the link
+                  around it already carries the trip's name, the country and, for
+                  an unwritten trip, « récit à venir ». An announced decoration is
+                  noise.
+
+                  Inline and not a `<span>` shaped by CSS, which is what this was:
+                  the mast and the flag are one closed contour, and the ring that
+                  separates the marker from whichever tint it lands on is that
+                  contour stroked before it is filled (`paint-order` in the
+                  stylesheet). Two pseudo-elements cannot share one outline, so the
+                  seam between mast and flag would have shown as a line across the
+                  mark. Thirteen of these cost about 2.6 KB of markup.
+
+                  `focusable="false"` is not redundant with `aria-hidden` — old
+                  Trident and Edge put SVG elements in the tab order regardless.
+                */}
+                <svg
+                  className={styles.dot}
+                  viewBox={MARK_VIEWBOX}
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d={MARK_PENNANT_PATH} />
+                </svg>
                 {/*
                   The halo, and **only** the halo: it is decoration on top of a
                   distinction the accessible name below already carries in words.

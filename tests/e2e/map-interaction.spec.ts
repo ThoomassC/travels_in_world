@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { MAP_DRAWING } from "./support/map";
 
 /**
  * TIW-14's interaction layer on the content the repository really ships:
@@ -19,7 +20,7 @@ import { expect, test } from "@playwright/test";
  */
 
 const viewBox = async (page: import("@playwright/test").Page): Promise<readonly number[]> => {
-  const raw = await page.locator("figure svg").getAttribute("viewBox");
+  const raw = await page.locator(MAP_DRAWING).getAttribute("viewBox");
 
   return (raw ?? "").split(" ").map(Number);
 };
@@ -34,7 +35,7 @@ const viewBox = async (page: import("@playwright/test").Page): Promise<readonly 
  * rather than "the test is wrong".
  */
 async function wheelZoom(page: import("@playwright/test").Page, notches: number): Promise<void> {
-  const box = await page.locator("figure svg").boundingBox();
+  const box = await page.locator(MAP_DRAWING).boundingBox();
   await page.mouse.move(
     (box?.x ?? 0) + (box?.width ?? 0) / 2,
     (box?.y ?? 0) + (box?.height ?? 0) / 2
@@ -98,7 +99,7 @@ test("there is nothing to select, and nothing pretends there is", async ({ page 
   // And an address naming a trip that cannot exist yet leaves the map alone.
   await page.goto("/fr?voyage=japon-2024");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator("figure svg")).toBeVisible();
+  await expect(page.locator(MAP_DRAWING)).toBeVisible();
   expect(await viewBox(page)).toEqual([0, 0, 960, 500]);
 });
 

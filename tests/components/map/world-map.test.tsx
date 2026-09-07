@@ -138,6 +138,25 @@ const viewBoxOf = (container: HTMLElement): string =>
 const layersOf = (container: HTMLElement): readonly Element[] =>
   Array.from(mapSvg(container).querySelectorAll(":scope > g"));
 
+/**
+ * Every `<path>` of the DRAWING, and none of the markers'.
+ *
+ * The marker used to be a `<span>`; since it became a pennant it is an inline
+ * `<svg><path>` of its own, so `container.querySelectorAll("path")` counts one
+ * per marker on top of the world. Four cases here and in `map-viewport.test.tsx`
+ * were counting land and got the sum — which is the kind of assertion that goes
+ * green again for the wrong reason the day someone drops a country.
+ *
+ * Scoped to the `<svg>` that carries the map rather than filtering by class: the
+ * markers live in the HTML overlay beside it, never inside it, which is ADR 0003's
+ * whole arrangement and a property worth leaning on.
+ */
+function drawnPaths(container: HTMLElement): readonly SVGPathElement[] {
+  const drawing = container.querySelector("figure svg");
+
+  return drawing === null ? [] : [...drawing.querySelectorAll("path")];
+}
+
 describe("WorldMap", () => {
   describe("with no published trip", () => {
     it("frames the whole world", () => {
@@ -157,7 +176,7 @@ describe("WorldMap", () => {
       const { container } = renderMap({ marks: [] });
 
       expect(screen.getByRole("figure")).toBeInTheDocument();
-      expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length);
+      expect(drawnPaths(container)).toHaveLength(COUNTRIES.length);
       expect(screen.getByText("Carte du monde : aucun voyage publié, aucun pays")).toBeVisible();
     });
   });
@@ -338,7 +357,7 @@ describe("WorldMap", () => {
 
       expect(background?.querySelectorAll("path")).toHaveLength(COUNTRIES.length);
       expect(tinted?.querySelectorAll("path")).toHaveLength(visited.length);
-      expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length + visited.length);
+      expect(drawnPaths(container)).toHaveLength(COUNTRIES.length + visited.length);
     });
 
     it("hides the whole drawing from assistive technology", () => {
@@ -590,7 +609,14 @@ describe("WorldMap — the newest récit's marker", () => {
 
     expect(items).toHaveLength(2);
     for (const item of items) {
-      expect(item.querySelectorAll("span[aria-hidden='true']").length).toBeGreaterThanOrEqual(2);
+      /*
+        `[aria-hidden]` on any tag, not `span[aria-hidden]`: the marker's glyph
+        was a `<span>` shaped by CSS and is now an inline `<svg>` pennant, so a
+        tag-qualified selector counted one decoration where there are two. What
+        the case is about is that BOTH exist on every marker — the glyph and the
+        halo — and that is what it now counts.
+      */
+      expect(item.querySelectorAll("[aria-hidden='true']").length).toBeGreaterThanOrEqual(2);
     }
   });
 });
@@ -773,7 +799,7 @@ describe("WorldMap — the untold country layer", () => {
     const untold = COUNTRIES.slice(2, 4);
     const { container } = renderMap({ visited, untold, marks: [CENTRED_MARK] });
 
-    expect(container.querySelectorAll("path")).toHaveLength(
+    expect(drawnPaths(container)).toHaveLength(
       COUNTRIES.length + visited.length + untold.length
     );
   });

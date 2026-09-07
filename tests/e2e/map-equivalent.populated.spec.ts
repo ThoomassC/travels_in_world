@@ -1,11 +1,7 @@
 import { expect, test } from "@playwright/test";
 import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
-import {
-  auditPage,
-  describeViolations,
-  firedOnlyInsideTheMap,
-  type AxeViolation,
-} from "./support/axe";
+import { auditPage, describeViolations } from "./support/axe";
+import { MAP_DRAWING } from "./support/map";
 
 /**
  * The map's accessible equivalent on a **populated** journal, against its own
@@ -111,11 +107,11 @@ test("only the visited countries are links; the other 174 shapes are not", async
 
   // The whole dataset is drawn — 177 shapes plus a second pass over the 5 tinted
   // ones, now split across two layers: 4 told, and Morocco untold (TIW-18).
-  const paths = page.locator("figure svg path");
+  const paths = page.locator(`${MAP_DRAWING} path`);
   expect(await paths.count()).toBeGreaterThan(170);
 
   // And none of them is reachable, nameable or focusable.
-  const svg = page.locator("figure svg");
+  const svg = page.locator(MAP_DRAWING);
   await expect(svg).toHaveAttribute("aria-hidden", "true");
   expect(await svg.locator("a, button, [tabindex], title, [role]").count()).toBe(0);
 
@@ -356,7 +352,7 @@ test("the caption tells the truth about what the drawing shows", async ({ page }
    */
   await page.goto("/fr");
 
-  const viewBox = await page.locator("figure svg").getAttribute("viewBox");
+  const viewBox = await page.locator(MAP_DRAWING).getAttribute("viewBox");
   const width = Number(viewBox?.split(" ")[2]);
 
   expect(width).toBeLessThan(960);
@@ -370,28 +366,41 @@ test("the caption tells the truth about what the drawing shows", async ({ page }
  * this map could not do, because it ran on an empty journal where there is no
  * marker, no country row and no count.
  *
- * **It found one violation, and it is allowed through by name.** `target-size`
- * (WCAG 2.5.8) fires on the map's *markers* as soon as two trips sit close
- * together at the rendered scale: Tokyo and Osaka are about 400 km apart, which
- * over a 764-unit crop of the world is a handful of pixels, so the two 44 px
- * targets overlap and the one underneath keeps less than 24 px of reachable area.
+ * **It used to allow one violation through by name, and no longer needs to.**
+ * `target-size` (WCAG 2.5.8) fired on the map's *markers* as soon as two trips
+ * sat close together at the rendered scale: Tokyo and Osaka are about 400 km
+ * apart, which over a 764-unit crop of the world is a handful of pixels, so the
+ * two 44 px targets overlap and the one underneath keeps less than 24 px of
+ * reachable area.
  *
- * That is not a defect of the textual equivalent and not a regression of this
- * ticket — the markers are untouched here.
- * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` records it as a measured,
- * accepted cost of positioning HTML markers in percentages over a fluid map
- * ("chaque `<a>` mesure bien 44 px … mais l'aire réellement atteignable de la
+ * **The overlap is still there. What changed is that axe stopped ruling on it,**
+ * and this distinction is the whole reason the allowance was deleted rather than
+ * quietly left in place. Since the marker became the inline pennant of
+ * `src/components/map/mark-art.ts`, the drawing is translated up and left out of
+ * its 44 px link box, and axe answers — measured, running the rule alone on this
+ * fixture:
+ *
+ *   violations: []
+ *   incomplete: target-size on a[data-trip="japon-2024"]
+ *               "Element size could not be accurately determined due to
+ *                overflow content"
+ *
+ * So the audit below is green because the rule became *undecidable*, not because
+ * the markers were separated. The test after it is what keeps that from reading
+ * as a fix: it measures the two boxes itself and fails if the overlap ever
+ * silently becomes something else.
+ *
+ * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` records the overlap as a
+ * measured, accepted cost of positioning HTML markers in percentages over a fluid
+ * map ("chaque `<a>` mesure bien 44 px … mais l'aire réellement atteignable de la
  * balise du dessous ne l'est pas") and assigns the real fix — clustering, with a
- * zoom that can actually separate them — to TIW-14. What this ticket did was make
- * it visible.
+ * zoom that can actually separate them — to TIW-14.
  *
- * The allowance is as narrow as it can be made: the `target-size` rule only, and
- * only while every element it fired on is inside the map's `<figure>`. The
- * country list is a sibling of that figure, so a target-size failure on a country
- * row fails this test — as does any other rule, anywhere.
+ * This audit therefore demands **zero** violations, on both routes and in both
+ * themes. If an axe bump (the dependency is a caret range) starts ruling on the
+ * overlap again, this goes red and someone re-reads the trade rather than
+ * inheriting an allowance nobody has looked at.
  */
-const KNOWN_MARKER_OVERLAP = "target-size";
-
 test("the populated pages have no WCAG 2.2 AA violation, in either theme", async ({ page }) => {
   /**
    * Both prerendered routes, and `/fr/voyages` matters here specifically: on the
@@ -405,52 +414,73 @@ test("the populated pages have no WCAG 2.2 AA violation, in either theme", async
 
       const report = await auditPage(page);
 
-      const unexpected: AxeViolation[] = [];
-
-      for (const violation of report.violations) {
-        const confinedToTheDrawing =
-          violation.id === KNOWN_MARKER_OVERLAP &&
-          (await firedOnlyInsideTheMap(page, violation.targets));
-
-        if (!confinedToTheDrawing) {
-          unexpected.push(violation);
-        }
-      }
-
-      expect(
-        unexpected,
-        `${route} (${colorScheme}): ${describeViolations({ ...report, violations: unexpected })}`
-      ).toEqual([]);
+      expect(report.violations, `${route} (${colorScheme}): ${describeViolations(report)}`).toEqual(
+        []
+      );
       expect(report.passes).toBeGreaterThan(10);
     }
   }
 });
 
-test("the marker overlap is the only violation, and it never reaches the country list", async ({
-  page,
-}) => {
+test("the marker overlap is still there, undecided rather than fixed", async ({ page }) => {
   /**
-   * The other half of the allowance above: an exception nobody re-reads becomes a
-   * blanket. This pins what is actually being tolerated — one rule, on the
-   * drawing's markers — so that the day TIW-14 clusters them, this test goes red
-   * and the allowance can be deleted rather than inherited.
+   * The other half of the deleted allowance, and the reason this test exists at
+   * all: a green audit above says only that axe found nothing to rule on, and
+   * "axe stopped ruling" and "the defect went away" are not the same sentence.
+   * This one asks the *page*, not axe.
+   *
+   * It asserts on geometry rather than on a rule id, so it survives the caret
+   * range on `axe-core` and it survives the marker's shape changing again. It
+   * goes red the day TIW-14 clusters the markers — which is the day to delete it,
+   * and to say so in the ADR.
    */
   await page.goto("/fr");
 
-  const report = await auditPage(page);
+  const overlap = await page.evaluate(() => {
+    const boxes = [...document.querySelectorAll<HTMLElement>("a[data-trip]")].map((link) => ({
+      slug: link.dataset.trip ?? "?",
+      rect: link.getBoundingClientRect(),
+    }));
+
+    let worst = 0;
+    let pair: readonly [string, string] = ["", ""];
+
+    for (const [i, a] of boxes.entries()) {
+      for (const b of boxes.slice(i + 1)) {
+        const x = Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.left, b.rect.left);
+        const y = Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top);
+        const area = Math.max(0, x) * Math.max(0, y);
+
+        if (area > worst) {
+          worst = area;
+          pair = [a.slug, b.slug];
+        }
+      }
+    }
+
+    return { worst, pair, size: boxes[0]?.rect.width ?? 0 };
+  });
+
+  // The targets are the full 44 px WCAG 2.5.8 asks for — that half was never the
+  // problem, and a marker that shrank would be a different, real regression.
+  expect(overlap.size).toBeCloseTo(44, 0);
 
   /**
-   * This goes red in **two** directions, and only one of them is a defect.
-   *
-   * A *new* rule id appearing is a regression to fix. `target-size` *ceasing* to
-   * fire is the good news — TIW-14 clustered the markers, or the fixture moved, or
-   * axe changed its heuristic (`axe-core` is a caret range) — and the action then
-   * is to delete the allowance in the audit above along with this test, not to
-   * make either of them pass again.
+   * Tokyo and Osaka, measured on this fixture at the default viewport: the two
+   * boxes overlap by 32 × 40 px, so the one underneath keeps far less than the
+   * 24 px of clear space the rule asks for. The assertion is loose on purpose —
+   * the exact figure moves with the crop — and tight on the thing that matters:
+   * there IS a substantial overlap, and it is between the two Japanese trips.
    */
-  expect(
-    report.violations.map((violation) => violation.id),
-    `Expected exactly the known marker overlap. If target-size no longer fires, delete the allowance in the audit test above and this test with it; if a different rule appears, that one is a regression. Got: ${describeViolations(report)}`
-  ).toEqual([KNOWN_MARKER_OVERLAP]);
-  expect(await firedOnlyInsideTheMap(page, report.violations[0]?.targets ?? [])).toBe(true);
+  expect(overlap.worst).toBeGreaterThan(24 * 24);
+  expect([...overlap.pair].sort()).toEqual(["japon-2024", "japon-2025"]);
+
+  /**
+   * And axe's own current answer, recorded so the next reader does not have to
+   * re-run the probe to learn why the audit above is green: the rule is
+   * `incomplete`, not passing. If it ever moves back into `violations`, the audit
+   * test goes red first and this line explains what happened.
+   */
+  const report = await auditPage(page);
+  expect(report.incomplete).toContain("target-size");
 });

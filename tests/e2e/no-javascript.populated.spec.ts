@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
+import { MAP_DRAWING_IN_FIGURE } from "./support/map";
 
 /**
  * TIW-26's sixth acceptance criterion, as a journey rather than as four
@@ -55,10 +56,10 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
 
     const figure = drawing(page);
     await expect(figure).toBeVisible();
-    await expect(figure.locator("svg")).toHaveAttribute("viewBox", /[\d. ]+/);
+    await expect(figure.locator(MAP_DRAWING_IN_FIGURE)).toHaveAttribute("viewBox", /[\d. ]+/);
     // The drawing itself, and not an empty ratio-locked box: 174 country shapes
     // are in the document the server sent.
-    expect(await figure.locator("svg path").count()).toBeGreaterThan(170);
+    expect(await figure.locator(`${MAP_DRAWING_IN_FIGURE} path`).count()).toBeGreaterThan(170);
 
     /**
      * "Figée" is the half of the criterion that is about what must NOT be there.
@@ -94,7 +95,7 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
     }
 
     // ---- 3. Navigation: a link in the site's nav, followed with no script. ----
-    await page.getByRole("navigation", { name: NAV.navLabel }).getByText(NAV.navAll).click();
+    await page.getByRole("navigation", { name: NAV.navLabel }).getByText(NAV.navCountries).click();
     await expect(page).toHaveURL(/\/fr\/voyages$/);
     await expect(page.getByRole("heading", { level: 1, name: NAV.allHeading })).toBeVisible();
     /**
@@ -104,6 +105,33 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
      */
     await expect(page.getByText("5 voyages", { exact: false }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: new RegExp(TRIP.title) }).first()).toBeVisible();
+
+    /**
+     * ---- 3b. The places listing (TIW-38), and a row that leads back into the
+     * catalogue. ----
+     *
+     * Seven rows over five trips on this fixture — Tokyo and Kyoto in one journey,
+     * Cusco and La Paz in another — which is the arithmetic that makes this page
+     * something `/voyages` does not already say. Counted on `main` and not by
+     * role: the header's own `<ul>` is four `<li>` of navigation.
+     *
+     * The row's href is a FRAGMENT into the catalogue, and following it with no
+     * script is the point: it is the one link shape on this page, and a fragment
+     * that names nothing drops the reader silently at the top of the listing.
+     * `dead-links.populated.spec.ts` proves it resolves; this proves a reader with
+     * no JavaScript can use it.
+     */
+    await page.getByRole("navigation", { name: NAV.navLabel }).getByText(NAV.navPlaces).click();
+    await expect(page).toHaveURL(/\/fr\/villes$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: frMessages.places.heading })
+    ).toBeVisible();
+    await expect(page.locator("main ul > li")).toHaveCount(7);
+    await expect(page.getByRole("link", { name: /^Kyoto/ })).toBeVisible();
+
+    await page.getByRole("link", { name: /^Kyoto/ }).click();
+    await expect(page).toHaveURL(/\/fr\/voyages#voyage-japon-2024$/);
+    await expect(page.getByRole("heading", { level: 1, name: NAV.allHeading })).toBeVisible();
 
     // ---- 4. Reading a trip, reached from the listing. ----
     await page
@@ -129,7 +157,7 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
     await expect(page.getByText("Transport : Train")).toBeVisible();
 
     // The trip's own map is drawn here too, server-side and inert.
-    await expect(drawing(page).locator("svg")).toHaveAttribute("viewBox", /[\d. ]+/);
+    await expect(drawing(page).locator(MAP_DRAWING_IN_FIGURE)).toHaveAttribute("viewBox", /[\d. ]+/);
 
     /**
      * The photographs: every one carries both dimensions, which is what reserves
@@ -158,7 +186,7 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
     // ---- 5. And back to the map, still with no script. ----
     await page.getByRole("link", { name: frMessages.trip.seeOnWorldMap }).click();
     expect(new URL(page.url()).pathname.replace(/\/$/, "")).toBe("/fr");
-    await expect(drawing(page).locator("svg")).toHaveAttribute("viewBox", /[\d. ]+/);
+    await expect(drawing(page).locator(MAP_DRAWING_IN_FIGURE)).toHaveAttribute("viewBox", /[\d. ]+/);
   } finally {
     await context.close();
   }

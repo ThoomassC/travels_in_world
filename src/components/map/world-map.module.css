@@ -474,15 +474,43 @@
   background: var(--accent-quiet);
 }
 
+/**
+ * The pennant — `src/components/map/mark-art.ts` holds its geometry and the
+ * reason it is one closed contour.
+ *
+ * **The foot of the mast sits on the projected point, and that is the whole of
+ * this rule.** `.mark` above places the 44 px box centred on the point; the glyph
+ * is centred inside it by `place-items`, so its own centre lands there too. The
+ * translate below moves it by half its box in each axis, which puts its
+ * bottom-left corner — the foot, at (3, 23) of a 18 x 26 viewBox — on the point,
+ * and hangs the flag above and to the right of it.
+ *
+ * A disc was anchored by its middle, which is correct for a disc and meaningless
+ * for a mast. This is the one behavioural difference between the two markers, and
+ * it is why the change is not only a new `d`.
+ *
+ * **The target box does not move.** `inline-size`/`block-size` on `.link` are
+ * untouched: the 44 px the reader aims at is still centred on the point, and the
+ * flag drawn above it is paint. A pennant whose 44 px box followed the flag would
+ * put the target where the place is not.
+ *
+ * `paint-order: stroke` is the ring, and it replaces the `box-shadow` a round dot
+ * could use: a shadow is a rectangle around an SVG box, so on a pennant it would
+ * outline the air. Stroking the contour first and filling over it leaves the
+ * stroke showing as an even outline on the shape itself, which is what separates
+ * the marker from tinted land, neutral land and sea alike.
+ */
 .dot {
-  inline-size: var(--space-3);
-  block-size: var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  /* A ring, not a border: it separates the dot from whichever tint it lands on —
-     tinted land, neutral land or sea — without changing its size. */
-  box-shadow: 0 0 0 2px var(--text-on-accent);
+  inline-size: 1.125rem;
+  block-size: 1.625rem;
+  translate: 0.5625rem -0.8125rem;
+  fill: var(--accent);
+  stroke: var(--text-on-accent);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+  paint-order: stroke;
   transition: transform 120ms ease;
+  transform-origin: 3px 23px;
 }
 
 .link:hover .dot,
@@ -514,14 +542,28 @@
  * venir », and the country under it is dashed.
  */
 .link[data-story="unwritten"] .dot {
-  /* `--surface`, the canvas the drawing sits on (line 157), and not
-     `transparent`: a transparent hole would show whichever country tint happens
-     to be underneath, so the same marker would read differently over sea, over
-     neutral land and over its own dashed country. */
-  background: var(--surface);
-  box-shadow:
-    0 0 0 2px var(--text-on-accent),
-    inset 0 0 0 3px var(--accent);
+  /**
+   * Hollow, exactly as the dot was: `--surface` inside, the accent as the
+   * contour. On a pennant the two swap roles rather than nesting — the fill
+   * becomes the page's own canvas and the stroke becomes the accent — which is
+   * the same "outline, not filled in" reading at the same size, in greyscale, in
+   * both themes.
+   *
+   * `--surface` and not `transparent`, for the reason the dot recorded: a
+   * transparent hole would show whichever country tint happens to be underneath,
+   * so the same marker would read differently over sea, over neutral land and
+   * over its own dashed country.
+   *
+   * The white separation ring is lost here, and that is the trade: two strokes on
+   * one contour is not a thing SVG can do without a second element. The accent
+   * contour is itself the separation — it is the token the map already measures
+   * against land and sea — and the state is never carried by paint alone: the
+   * accessible name of this marker ends in « — récit à venir », and the country
+   * under it is drawn in the copper of the untold tint.
+   */
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2.6;
 }
 
 /* =============================================================================

@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
 import { auditPage, describeViolations, firedOnlyInsideTheMap } from "./support/axe";
+import { MAP_DRAWING } from "./support/map";
 
 /**
  * TIW-14's interaction layer, against a **production build** of
@@ -33,8 +34,6 @@ import { auditPage, describeViolations, firedOnlyInsideTheMap } from "./support/
  * Both are named in the ticket's report as manual, not as covered.
  */
 
-const MAP = "figure";
-
 const marker = (page: Page, title: string, place: string): Locator =>
   page.getByRole("link", {
     name: frMessages.map.markLabel.replace("{title}", title).replace("{place}", place),
@@ -49,7 +48,7 @@ const REYKJAVIK = {
 } as const;
 
 const viewBox = async (page: Page): Promise<readonly number[]> => {
-  const raw = await page.locator(`${MAP} svg`).getAttribute("viewBox");
+  const raw = await page.locator(MAP_DRAWING).getAttribute("viewBox");
 
   return (raw ?? "").split(" ").map(Number);
 };
@@ -73,7 +72,7 @@ async function wheelZoom(page: Page, notches: number, fx = 0.5, fy = 0.5): Promi
  * the design ADR 0003 records — Playwright refuses to hover it, and that refusal
  * is itself the proof that no country can be hovered or clicked.
  */
-const canvas = (page: Page): Locator => page.locator(`${MAP} svg`).locator("..");
+const canvas = (page: Page): Locator => page.locator(MAP_DRAWING).locator("..");
 
 /**
  * Puts the pointer at a fraction of the canvas, by coordinates.
@@ -477,8 +476,8 @@ test.describe("zoom and pan", () => {
     await page.goto("/fr");
 
     const drift = async () =>
-      page.evaluate(() => {
-        const svg = document.querySelector("figure svg");
+      page.evaluate((drawing) => {
+        const svg = document.querySelector(drawing);
         const canvas = svg?.parentElement;
         const link = document.querySelector<HTMLElement>('a[data-trip="islande-2022"]');
         const item = link?.closest("li");
@@ -510,7 +509,7 @@ test.describe("zoom and pan", () => {
           ratio: box.width / box.height,
           frameRatio: frame("--frame-w") / frame("--frame-h"),
         };
-      });
+      }, MAP_DRAWING);
 
     // Four levels, driven by the wheel since TIW-38: the initial frame, two
     // notches in, then one back out.
@@ -574,10 +573,10 @@ test.describe("zoom and pan", () => {
       // measure a relayout rather than the rendering a reader gets.
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto("/fr");
-      await expect(page.locator(`${MAP} svg`)).toBeVisible();
+      await expect(page.locator(MAP_DRAWING)).toBeVisible();
 
-      const measured = await page.evaluate(() => {
-        const svg = document.querySelector("figure svg");
+      const measured = await page.evaluate((drawing) => {
+        const svg = document.querySelector(drawing);
         const canvas = svg?.parentElement;
         if (!(svg instanceof SVGSVGElement) || canvas === null || canvas === undefined) {
           return null;
@@ -654,7 +653,7 @@ test.describe("zoom and pan", () => {
           drawn: { width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y },
           marks,
         };
-      });
+      }, MAP_DRAWING);
 
       expect(measured).not.toBeNull();
       // Five markers since TIW-18, the untold trip's included — the same count
@@ -903,7 +902,7 @@ test.describe("the state a shared address restores", () => {
     await page.goto("/fr?voyage=un-voyage-disparu");
 
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.locator(`${MAP} svg`)).toBeVisible();
+    await expect(page.locator(MAP_DRAWING)).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get("voyage")).toBeNull();
   });
 
