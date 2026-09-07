@@ -1,7 +1,7 @@
 import { geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
-import RAW_TOPOLOGY from "world-atlas/countries-110m.json";
+import RAW_TOPOLOGY from "world-atlas/countries-50m.json";
 import { z } from "zod";
 import { createRoundingPathContext } from "./path-context";
 import { worldProjection } from "./projection";
@@ -18,46 +18,65 @@ import { worldProjection } from "./projection";
  */
 
 /**
- * **Why the 110m vintage is the default, and what it costs.**
+ * **The 50m vintage, and the budget decision that put it here.**
+ *
+ * THIS FILE ARGUED THE OPPOSITE UNTIL NOW, AND THE ARGUMENT IS KEPT RATHER THAN
+ * DELETED, because none of its measurements were wrong — only the trade it drew
+ * from them. It read: "a factor of six, on the single largest thing a page of
+ * this site ships […] a world map at the size this site draws it cannot resolve
+ * more anyway". The second half is what turned out to be false, and it took real
+ * content to show it.
  *
  * Measured on this repository, paths projected and rounded to one decimal,
  * brotli-compressed:
  *
  * | vintage | geometries | paths, brotli |
  * | ------- | ---------- | ------------- |
- * | 110m    | 177        | 30.1 KB       |
- * | 50m     | 241        | 182.5 KB      |
+ * | 110m    | 177        | 30.2 KB       |
+ * | 50m     | 241        | 182.6 KB      |
+ * | 10m     | 255        | 512.6 KB      |
  *
- * A factor of six, on the single largest thing a page of this site ships.
- * `AGENTS.md` budgets 150 KB brotli of initial JS and 120 KB is already spent —
- * so the 50m vintage does not fit *and* the paths are not JS, meaning the true
- * page weight would grow past the budget without the budget noticing. 110m is
- * the default because a world map at the size this site draws it cannot resolve
- * more anyway.
+ * WHAT 110m COST, on the thirteen trips this journal really holds. Point-in-
+ * polygon against each vintage, on the fourteen places: at 110m **three markers
+ * fall in the sea** — Les Sables-d'Olonne by 2.0 px, Roses by 0.8, Noirmoutier by
+ * 0.2 — because the simplification straightens the French Atlantic façade into
+ * something close to a line. Noirmoutier is an island the vintage does not draw
+ * at all. At 50m the same three are still technically outside, by 0.1 to 0.4 px,
+ * which no reader can see. At 10m none of them is.
  *
- * **What 110m does not contain.** No micro-state. Verified absent from 110m and
- * present in 50m: Singapore (702), Monaco (492), Malta (470), San Marino (674),
- * Liechtenstein (438), Andorra (020), Bahrain (048), Maldives (462). A trip to
- * Singapore is not an exotic scenario, so the failure for those codes is its own
- * message in `world.ts`, and it names the way out: `world-atlas` already ships
- * `countries-50m.json` and `countries-10m.json`, so switching vintage adds no
- * dependency — it adds ~152 KB brotli to every page. That is a budget decision,
- * not a checkbox, and the paths budget test caps them at 34 KB precisely so a
- * silent switch fails instead of shipping.
+ * So the sentence "cannot resolve more anyway" was true of a world map with no
+ * markers on it, and false of this one: the owner reported the misplacement
+ * before anyone measured it, which is the strongest form a defect report takes.
  *
- * Switching means editing the `import` at the top of this file *and* the
+ * WHAT IT COSTS, stated plainly because it is the largest single regression this
+ * repository has accepted on purpose: **~152 KB brotli added to the home
+ * document**, which is the only route rendering the full map. It is not
+ * JavaScript — it is path data in the HTML — so it does not touch the 150 KB JS
+ * budget and would not have been caught by it. The paths budget exists precisely
+ * so this could not happen silently, and it did not: it was raised deliberately,
+ * with this paragraph, at the owner's explicit direction after being shown the
+ * figure.
+ *
+ * WHAT IT BUYS BESIDES THE COASTLINE. 241 geometries against 177, so every
+ * micro-state 110m omitted is now drawable: Singapore, Monaco, Malta, San Marino,
+ * Liechtenstein, Andorra, Bahrain, the Maldives. `src/basemap-coverage.ts` is
+ * generated from whatever vintage this file imports and must be regenerated with
+ * `npm run basemap:coverage` whenever the import changes — its guard recomputes
+ * the list from the delivered TopoJSON and goes red otherwise.
+ *
+ * Switching again means editing the `import` at the top of this file *and* the
  * `DATASET_MODULE` constant below it, for the reason given there.
  */
 
 /** The resolution, as the package names it — quoted in the error messages. */
-export const DATASET_RESOLUTION = "110m";
+export const DATASET_RESOLUTION = "50m";
 
 /**
  * The next vintage up, named here so the failure for an absent country can point
  * at the exact specifier to swap in. Already shipped by the package: switching
  * costs bundle weight, not a dependency. Weights are in the table above.
  */
-export const RICHER_DATASET_MODULE = "world-atlas/countries-50m.json";
+export const RICHER_DATASET_MODULE = "world-atlas/countries-10m.json";
 
 /** The `objects` key holding one geometry per country. */
 const COUNTRIES_OBJECT = "countries";
@@ -111,7 +130,7 @@ const COUNTRIES_OBJECT = "countries";
  * quotes the wrong filename in an error, which is why this is a comment and not
  * a runtime check.
  */
-export const DATASET_MODULE = "world-atlas/countries-110m.json";
+export const DATASET_MODULE = "world-atlas/countries-50m.json";
 
 /**
  * **How deep the validation goes, and where it deliberately stops.**
@@ -295,12 +314,43 @@ function readWorldDataset(): WorldDataset {
      * numeric per code, checked there — and this is the other half: a vintage
      * that split a country into two entries sharing an id would otherwise make
      * the join pick whichever came last, silently.
+     *
+     * **This threw until the 50m switch, and merging is not a weakening of the
+     * rule — it is the rule applied to what the finer vintage actually contains.**
+     * 110m had no duplicate at all. 50m has exactly one, and 10m the same one:
+     * numeric 036 carries `Australia` and `Ashmore and Cartier Is.`, an Australian
+     * external territory that the coarse vintage simply did not draw. Two disjoint
+     * pieces of one country are a multi-part shape, which is what a country shape
+     * has always been — France is already one path with Corsica in it.
+     *
+     * So the pieces are concatenated into a single `d`. That is sound because the
+     * projection writes each ring as its own `M …Z` subpath: appending one path
+     * string to another is exactly the multi-part shape, with no coordinate
+     * arithmetic and nothing to get wrong. The name kept is the first one seen —
+     * the country's, not the territory's, because the dataset lists the parent
+     * first and because "Ashmore and Cartier Is." is not a name any reader of this
+     * site is looking for.
+     *
+     * What is NOT merged, and must keep failing loudly: two geometries under one
+     * code that are not pieces of one country. Nothing here can tell the
+     * difference, so this is a place to re-read rather than trust the day a
+     * vintage bump makes the count above go from one to several — the guard is
+     * `tests/map/dataset.test.ts`, which pins the merge to that single code.
      */
     const clash = byNumericId.get(geometry.id);
     if (clash !== undefined) {
-      throw new Error(
-        `${DATASET_MODULE} has two geometries for ISO 3166-1 numeric ${geometry.id} (${clash.datasetName} and ${geometry.datasetName}): a country code can only resolve to one shape.`
-      );
+      const merged: CountryGeometry = Object.freeze({
+        id: clash.id,
+        datasetName: clash.datasetName,
+        path: `${clash.path}${geometry.path}`,
+      });
+
+      // The entry pushed for this geometry a few lines up is the piece, not a
+      // country: it is dropped, and the country it belongs to grows instead.
+      geometries.pop();
+      geometries[geometries.indexOf(clash)] = merged;
+      byNumericId.set(geometry.id, merged);
+      continue;
     }
     byNumericId.set(geometry.id, geometry);
   }

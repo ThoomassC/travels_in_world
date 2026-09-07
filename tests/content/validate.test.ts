@@ -153,11 +153,15 @@ describe("a country code of the right shape that no country bears", () => {
 /**
  * TIW-30, and the case TIW-29 left open on purpose.
  *
- * `SG` is not `XK`. Nothing is misspelled and nothing is unassigned: ISO 3166-1
- * gives Singapore `SG` and numeric `702`, and this validator's registry check
- * clears it. What refuses it is the *basemap*, which at the 110m vintage carries
- * no micro-state at all — measured, 75 of the 249 assigned codes have no shape —
- * so `buildWorldGeometry` threw in the middle of the prerender of `/fr`.
+ * `GI` is not `XK`. Nothing is misspelled and nothing is unassigned: ISO 3166-1
+ * gives Gibraltar `GI` and numeric `292`, and this validator's registry check
+ * clears it. What refuses it is the *basemap*, which at the shipped vintage has
+ * no shape for it — measured, 14 of the 249 assigned codes have none at 50m — so
+ * `buildWorldGeometry` threw in the middle of the prerender of `/fr`.
+ *
+ * The fixture used to be Singapore, which is what the 110m vintage refused. 50m
+ * draws Singapore, so the fixture moved to a code that vintage still cannot draw;
+ * the block is unchanged otherwise, which is the useful thing about it.
  *
  * The map's message was already good (it never sent the author back here, which
  * was TIW-29's actual defect); it was simply the wrong *moment*. This block is
@@ -177,7 +181,7 @@ describe("a country the ISO assigns but the shipped basemap cannot draw", () => 
 
   it("names the file, the line and the column the code is written on", () => {
     expect(finding.file).toBe(
-      "tests/fixtures/content/undrawable-country-code/trips/asie-du-sud-est-2025/trip.yaml"
+      "tests/fixtures/content/undrawable-country-code/trips/andalousie-2025/trip.yaml"
     );
     expect(finding.location).toEqual({ line: 21, column: 5 });
   });
@@ -189,9 +193,9 @@ describe("a country the ISO assigns but the shipped basemap cannot draw", () => 
    * typo that is not there.
    */
   it("says the code is valid and the basemap is what lacks the shape", () => {
-    expect(finding.problem).toContain("Singapour");
-    expect(finding.problem).toContain("SG");
-    expect(finding.problem).toContain("110m");
+    expect(finding.problem).toContain("Gibraltar");
+    expect(finding.problem).toContain("GI");
+    expect(finding.problem).toContain("50m");
     expect(finding.problem).not.toMatch(/n'attribue|aucun pays/);
   });
 
@@ -206,13 +210,18 @@ describe("a country the ISO assigns but the shipped basemap cannot draw", () => 
 
   /**
    * The escape route is a budget decision, so it is quoted with its price. A
-   * finer vintage of the same package does draw Singapore — measured 182.5 KB
-   * brotli of paths against a 34 KB ceiling — and an action that mentioned the
-   * switch without the number would be an invitation to blow the budget.
+   * finer vintage of the same package does draw Gibraltar — 10m, measured 512.6
+   * KiB brotli of paths against the 200 KiB ceiling — and an action that mentioned
+   * the switch without the number would be an invitation to blow the budget.
+   *
+   * The vintage named here moved once already: before the site shipped 50m, this
+   * assertion read `"50m"` and the example was Singapore. It is written against
+   * the *finer* vintage rather than the shipped one on purpose — the shipped one
+   * is what refused the code, the finer one is what the way out costs.
    */
   it("prices the finer vintage rather than merely naming it", () => {
-    expect(finding.action).toContain("50m");
-    expect(finding.action).toMatch(/34|182/);
+    expect(finding.action).toContain("10m");
+    expect(finding.action).toMatch(/200|512/);
   });
 
   it("never leaks the schema's own English message", () => {

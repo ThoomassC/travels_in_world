@@ -582,11 +582,17 @@ function unassignedCode(label: string, code: string): Pick<ContentFinding, "prob
  * **TIW-30: a real country the shipped basemap has no shape for.** The third
  * notch of the chain, and the one that is hardest to word.
  *
- * Nothing is wrong with the code. `SG` is Singapore, ISO 3166-1 numeric 702, and
+ * Nothing is wrong with the code. `GI` is Gibraltar, ISO 3166-1 numeric 292, and
  * every check upstream of here clears it — the schema's `/^[A-Z]{2}$/`, then
- * `isAssignedCountryCode`. What refuses it is `world-atlas` at the 110m vintage,
- * which carries no micro-state at all: measured, 75 of the 249 assigned codes
- * have no geometry, Hong Kong, Malta, Mauritius and French Polynesia among them.
+ * `isAssignedCountryCode`. What refuses it is `world-atlas` at the vintage the
+ * site ships: measured, 14 of the 249 assigned codes have no geometry at 50m —
+ * BQ, BV, CC, CX, GF, GI, GP, MQ, RE, SJ, TK, TV, UM, YT.
+ *
+ * **The example moved with the vintage, and that is the point of the block.** At
+ * 110m the case was Singapore, and 75 codes were in it — every micro-state. 50m
+ * draws Singapore, Monaco, Malta and the rest, so the list is now short and
+ * mostly French overseas départements. What did *not* move is the shape of the
+ * refusal, which is why this function survived a vintage change untouched.
  *
  * So the sentence must not read like the one above it. Told "this code is
  * assigned to no country" the author goes hunting for a typo that is not there,
@@ -594,14 +600,14 @@ function unassignedCode(label: string, code: string): Pick<ContentFinding, "prob
  * that the code is right and the map is what is missing, and it names the vintage
  * so the claim is checkable.
  *
- * **The way out is priced, and it is not the same way out for every code.** 64 of
- * the 75 are drawn by a finer vintage the package already ships; 11 — the French
- * overseas départements and a few dependencies — are drawn by none of them. The
- * finer vintage costs 182.5 KB brotli of paths against a 34 KB ceiling, measured,
- * so it is quoted with its number rather than suggested: an action that said
- * "switch vintage" and stopped there would be an invitation to blow a budget the
- * author cannot see. And for the eleven, saying it at all would be sending them
- * to buy 152 KB that still would not draw their country.
+ * **The way out is priced, and it is not the same way out for every code.** 3 of
+ * the 14 — GI, TV, UM — are drawn by the finer vintage the package already ships;
+ * 11 are drawn by none of them. That finer vintage costs 512.6 KiB brotli of
+ * paths against the 200 KiB ceiling, measured, so it is quoted with its number
+ * rather than suggested: an action that said "switch vintage" and stopped there
+ * would be an invitation to blow a budget the author cannot see. And for the
+ * eleven, saying it at all would be sending them to buy 330 KiB that still would
+ * not draw their country.
  *
  * **What it deliberately does not say.** Not "run `npm run validate:content`" —
  * this *is* that command. Not a substitute country either: the map draws no shape
@@ -612,7 +618,7 @@ function undrawableCode(label: string, code: string): Pick<ContentFinding, "prob
   const wayOut = FINER_VINTAGE_COUNTRY_CODES.has(code)
     ? `retire le lieu du voyage, ou rattache-le à un pays que la carte dessine. ` +
       `Le millésime ${quoted(FINER_BASEMAP_VINTAGES[0])} du même paquet le dessinerait, mais il porte les tracés ` +
-      `de 30,1 à 182,5 Ko brotli pour un plafond de 34 Ko : c'est une décision de budget, pas une option de contenu`
+      `de 182,6 à 512,6 Kio brotli pour un plafond de 200 Kio : c'est une décision de budget, pas une option de contenu`
     : `retire le lieu du voyage, ou rattache-le à un pays que la carte dessine. ` +
       `Changer de millésime n'y ferait rien : aucun de ceux que world-atlas livre ` +
       `(${[BASEMAP_VINTAGE, ...FINER_BASEMAP_VINTAGES].join(", ")}) ne porte de forme pour ce code`;
@@ -621,7 +627,7 @@ function undrawableCode(label: string, code: string): Pick<ContentFinding, "prob
     problem:
       `${label} porte le code pays ${quoted(code)}, que l'ISO 3166-1 alpha-2 attribue bien — ` +
       `mais le fond de carte du site, ${quoted(`world-atlas ${BASEMAP_VINTAGE}`)}, n'a aucune forme pour lui : ` +
-      `à cette résolution il ne contient aucun micro-État`,
+      `à ce millésime, world-atlas ne distingue pas ce territoire`,
     action: wayOut,
   };
 }

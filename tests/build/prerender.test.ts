@@ -49,6 +49,61 @@ const KB = 1024;
 // here for two tickets, which is why every figure below now carries the commit it was
 // taken on: a number with no date is a number nobody can check.
 const HTML_BUDGET_BYTES = 100 * KB;
+
+/**
+ * **THE SECOND HTML CEILING, AND WHY THERE ARE TWO INSTEAD OF ONE RAISED ONE.**
+ *
+ * Moving the basemap from the 110m vintage to 50m — the owner's call, so that
+ * Brittany, the Vendée islands, Corsica and the Greek islands read as coastline
+ * rather than as a smooth curve — takes the projected paths from 30.2 to 182.6
+ * KiB brotli. Those paths are inline in the document, so the three locale
+ * homepages went from ~59 KiB to **199.0 KiB /fr, 199.0 /es, 197.0 /en**,
+ * measured on this build. The single 100 KiB ceiling above refused all three.
+ *
+ * Raising that one constant to fit them would have been the cheap move and the
+ * wrong one: **every other document on the site is under 8.5 KiB** — 8.4 KiB
+ * /fr/voyages, 7.7 /fr/villes, 7.4 /fr/a-propos, 1.3 /_not-found — and a 240 KiB
+ * ceiling would let any of them grow thirtyfold in silence. The routes that carry
+ * the map are the routes that get the map's budget; nothing else does.
+ *
+ * What each ceiling still catches, which is the only question that matters for a
+ * guard that has just been loosened:
+ *
+ * - on the map routes, 41 KiB of headroom over the measurement — enough for real
+ *   content on the home page, and nowhere near the 512.6 KiB a third silent
+ *   vintage bump to 10m would cost, nor the ~150 KiB a client-side map library
+ *   would add;
+ * - on everything else, the original ceiling is untouched and now sits 12x above
+ *   the heaviest document it covers, which is where it has always sat.
+ *
+ * `tests/map/world.test.ts` budgets the paths alone at 200 KiB. This budgets the
+ * whole document, so the two are not redundant: the 41 KiB between 199.0 and 240
+ * is everything that is *not* path data, and it is what this line watches.
+ *
+ * PROVEN BY DELIBERATE FAILURE, on the build this comment quotes — a loosened
+ * guard that nobody re-proved is a guard nobody has:
+ *
+ *   -const MAP_HTML_BUDGET_BYTES = 240 * KB;
+ *   +const MAP_HTML_BUDGET_BYTES = 190 * KB;
+ *
+ *   npm run test:build -> Tests  3 failed | 46 passed (49)
+ *                         × /en, /es, /fr "keeps the document under the HTML budget"
+ *                         AssertionError: expected 203822 to be less than 194560
+ */
+const MAP_HTML_BUDGET_BYTES = 240 * KB;
+
+/**
+ * The routes whose document carries the projected world map, and therefore the
+ * only ones the larger ceiling applies to.
+ *
+ * Derived from the manifest rather than listed, so a fourth locale gets the right
+ * budget without anyone remembering this file — and so a *new* route that starts
+ * rendering the map is refused by the strict ceiling until someone says here that
+ * it should carry it.
+ */
+function htmlBudgetFor(route: string): number {
+  return /^\/[a-z]{2}$/.test(route) ? MAP_HTML_BUDGET_BYTES : HTML_BUDGET_BYTES;
+}
 // measured on develop @ 5c5bf34: 123.2 KB /fr in 7 chunks — the heaviest route, and the
 // only margin that means anything — 120.0 KB /fr/voyages, 111.2 KB /_not-found and
 // /_global-error in 5. TIW-14's `map-viewport` chunk is 3.2 KB of the /fr figure and is
@@ -234,7 +289,7 @@ describe.each(DOCUMENT_ROUTES)("the %s payload stays within budget", (route) => 
   it("keeps the document under the HTML budget", () => {
     const bytes = brotliBytes(Buffer.from(documentHtml(route), "utf8"));
 
-    expect(bytes).toBeLessThan(HTML_BUDGET_BYTES);
+    expect(bytes).toBeLessThan(htmlBudgetFor(route));
   });
 
   it("keeps the initial JavaScript under budget, legacy chunk excluded", () => {

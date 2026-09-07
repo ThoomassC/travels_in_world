@@ -12,7 +12,7 @@ import { readMapSource, stripComments } from "./support";
 
 const DATASET_SOURCE_PATH = "src/map/dataset.ts";
 
-const DATASET_SPECIFIER = "world-atlas/countries-110m.json";
+const DATASET_SPECIFIER = "world-atlas/countries-50m.json";
 
 /**
  * A ring in raw degrees, big enough to project to a visible polygon. No
@@ -259,24 +259,37 @@ describe("a dataset that parses but cannot be drawn", () => {
   });
 
   /**
-   * THE OTHER HALF OF ACCEPTANCE CRITERION 3, and it was covered by nothing.
+   * THE OTHER HALF OF ACCEPTANCE CRITERION 3 — a declared code resolves to
+   * *exactly one* shape. `iso-3166.test.ts` proves "at most one" on the table's
+   * side, one numeric per alpha-2; this is the dataset's side.
    *
-   * The criterion is that a declared code resolves to *exactly one* geometry.
-   * `iso-3166.test.ts` proves the "at most one" on the table's side — one numeric
-   * per alpha-2. This is the dataset's side: a vintage that split a country into
-   * two entries sharing an id. Without the check the join takes whichever came
-   * last, silently, and the map shades half a country.
+   * **This case asserted a refusal until the 50m switch, and now asserts a
+   * merge.** The criterion has not moved: what changed is what satisfies it. 110m
+   * had no duplicate id at all, so refusing was free. 50m has exactly one —
+   * numeric 036 arrives as `Australia` and as `Ashmore and Cartier Is.`, an
+   * external territory the coarse vintage did not draw — and two disjoint pieces
+   * of one country are a multi-part shape, not two candidate answers. Refusing
+   * them would have been refusing the vintage.
    *
-   * The message has to name both labels, because the actionable question is
-   * *which two* entries collided.
+   * What the criterion still forbids is the join *picking* one of two, silently.
+   * It cannot: there is one shape, and it carries both pieces. The assertions
+   * below are the three halves of that — one shape, the country's name and not
+   * the territory's, and a path that really contains both subpaths rather than
+   * the last one seen.
    */
-  it("refuses two geometries sharing one numeric id, and names both", async () => {
-    const message = await failureOf(topology([ALPHA, { ...ALPHA, properties: { name: "Beta" } }]));
+  it("merges two geometries sharing one numeric id into one multi-part shape", async () => {
+    const alone = await loadWith(topology([ALPHA]));
+    const merged = await loadWith(topology([ALPHA, { ...ALPHA, properties: { name: "Beta" } }]));
 
-    expect(message).toContain("004");
-    expect(message).toContain("Alpha");
-    expect(message).toContain("Beta");
-    expect(message).toContain("can only resolve to one shape");
+    expect(merged.error).toBeNull();
+    expect(merged.paths).toHaveLength(1);
+
+    const [onlyPath] = merged.paths;
+    const [alonePath] = alone.paths;
+
+    // Both pieces are in it, and it is the concatenation rather than a redraw:
+    // twice the one-piece path, because the fixture's two geometries are equal.
+    expect(onlyPath).toBe(`${String(alonePath)}${String(alonePath)}`);
   });
 });
 

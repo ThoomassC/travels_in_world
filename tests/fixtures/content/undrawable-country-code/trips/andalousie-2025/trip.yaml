@@ -1,0 +1,39 @@
+# Un pays que l'ISO attribue bien, et que le fond de carte ne dessine pas (TIW-30).
+#
+# « GI » est le code officiel de Gibraltar. Il passe la forme, il passe le
+# registre ISO — et le millésime 50m de « world-atlas » ne porte aucune forme
+# pour lui : il est l'un des trois codes que seul le 10m dessine. Ce fichier
+# disait « SG » jusqu'à la bascule en 50m, qui dessine Singapour : le millésime
+# qui a corrigé le trait de côte a vidé cette fixture de son sujet.
+slug: andalousie-2025
+title: Andalousie, hiver 2025
+startDate: 2025-01-10
+endDate: 2025-01-14
+places:
+  - slug: malaga
+    name: Málaga
+    countryCode: ES
+    coordinates:
+      lat: 36.7213
+      lon: -4.4213
+  - slug: gibraltar
+    name: Gibraltar
+    countryCode: GI
+    coordinates:
+      lat: 36.1408
+      lon: -5.3536
+steps:
+  - kind: stay
+    placeSlug: malaga
+    startDate: 2025-01-10
+    endDate: 2025-01-12
+  - kind: move
+    fromSlug: malaga
+    toSlug: gibraltar
+    mode: train
+    date: 2025-01-12
+  - kind: stay
+    placeSlug: gibraltar
+    startDate: 2025-01-12
+    endDate: 2025-01-14
+publishedAt: 2025-02-01
