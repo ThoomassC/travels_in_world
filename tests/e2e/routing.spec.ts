@@ -101,13 +101,41 @@ test("the main navigation reaches the full listing, at the same level as the map
   const nav = page.getByRole("navigation", { name: frMessages.trips.navLabel });
   await expect(nav.getByRole("link", { name: frMessages.trips.navMap })).toBeVisible();
 
-  await nav.getByRole("link", { name: frMessages.trips.navAll }).click();
+  await nav.getByRole("link", { name: frMessages.trips.navCountries }).click();
 
   // The listing is the index of the collection the trip pages are items of, so
   // its URL is `tripsPath()` — built on the same segment as `tripPath()`.
+  //
+  // **The label changed with TIW-38 and the URL deliberately did not**, which is
+  // exactly what this pair of assertions is now worth: « Pays » is the entry a
+  // reader clicks, `/fr/voyages` is the address every marker and every card
+  // already links into, and `src/i18n/paths.ts` records why moving the second to
+  // match the first was refused.
   await expect(page).toHaveURL(/\/fr\/voyages$/);
   await expect(
     page.getByRole("heading", { level: 1, name: frMessages.trips.allHeading })
+  ).toBeVisible();
+});
+
+test("the main navigation reaches the places listing, its own page at its own URL", async ({
+  page,
+}) => {
+  /**
+   * The other half of TIW-38's navigation: « Villes » is a *new* page, so unlike
+   * « Pays » above it the URL is new too. Asserted from `/fr` and by clicking
+   * rather than by `goto`, because what is under test is the entry in the bar —
+   * a page that exists and is unreachable from the header is the failure this
+   * catches.
+   */
+  await page.goto("/fr");
+
+  const nav = page.getByRole("navigation", { name: frMessages.trips.navLabel });
+
+  await nav.getByRole("link", { name: frMessages.trips.navPlaces }).click();
+
+  await expect(page).toHaveURL(/\/fr\/villes$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: frMessages.places.heading })
   ).toBeVisible();
 });
 
@@ -140,6 +168,49 @@ test("the full listing is readable with JavaScript disabled", async ({ browser, 
   } finally {
     await context.close();
   }
+});
+
+test("the places listing is readable with JavaScript disabled", async ({ browser, baseURL }) => {
+  /**
+   * The same criterion as the catalogue above, on the page TIW-38 adds: it is a
+   * heading, a `<ul>` and plain anchors, and there is no `'use client'` in its
+   * tree — so a script-less browser must get the whole of it.
+   *
+   * This config serves the EMPTY content fixture, so what has to be readable here
+   * is the waiting message and the way back to the map. A page with neither is a
+   * dead end, and this page is reachable from the header of every other one.
+   */
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+  const page = await context.newPage();
+
+  try {
+    const response = await page.goto("/fr/villes");
+
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByRole("heading", { level: 1, name: frMessages.places.heading })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: frMessages.places.emptyHeading })
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: frMessages.places.emptyBackHome })).toBeVisible();
+    // The count is announced only when there is something to count: an intro
+    // reading "0 ville" over an empty page is the empty block the criteria refuse.
+    await expect(page.getByText(/\b0\b/)).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("the places listing carries the skip link's target too", async ({ page }) => {
+  // The `id` and the `tabIndex={-1}` belong to the page, so they are exactly the
+  // kind of thing that ships on three routes and not on the fourth.
+  await page.goto("/fr/villes");
+
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+
+  await expect(page.locator("main")).toBeFocused();
 });
 
 test("an unknown path under the active locale renders the localised 404", async ({ page }) => {

@@ -18,11 +18,12 @@
     "noticeBody": "El cuaderno se está escribiendo: los lugares se van posando en el mapa, los relatos y las fotografías vienen después.",
     "navLabel": "Navegación principal",
     "navMap": "Mapa",
-    "navAll": "Todos los viajes",
+    "navCountries": "Pa\u00edses",
+    "navPlaces": "Ciudades",
     "navAbout": "Acerca de",
-    "metaTitle": "Todos los viajes",
+    "metaTitle": "Viajes por pa\u00eds",
     "metaDescription": "La lista completa de los viajes del cuaderno, agrupados por continente y luego por país.",
-    "allHeading": "Todos los viajes",
+    "allHeading": "Viajes por pa\u00eds",
     "allIntro": "{count, plural, one {# viaje, agrupado por continente y luego por país, del más reciente al más antiguo.} other {# viajes, agrupados por continente y luego por país, del más reciente al más antiguo.}}",
     "continentCount": "{count, plural, one {# viaje} other {# viajes}}",
     "emptyHeading": "Ningún viaje publicado",
@@ -45,6 +46,16 @@
     "languageEn": "English",
     "languageEs": "Español",
     "languageNote": "Los relatos de viaje siguen en francés."
+  },
+  "places": {
+    "metaTitle": "Ciudades",
+    "metaDescription": "Las ciudades y los lugares del cuaderno, con el número de estancias en cada uno.",
+    "heading": "Ciudades",
+    "intro": "{count, plural, one {# ciudad o lugar visitado, por orden alfabético, con su número de estancias.} other {# ciudades y lugares visitados, por orden alfabético, con su número de estancias.}}",
+    "placeTrips": "{count, plural, one {# estancia} other {# estancias}}",
+    "emptyHeading": "Ningún lugar en el mapa",
+    "emptyBody": "El cuaderno todavía está vacío. Las ciudades y los lugares recorridos aparecerán aquí, por orden alfabético, desde el primer viaje publicado.",
+    "emptyBackHome": "Volver al mapa"
   },
   "map": {
     "summary": "Mapa del mundo: {trips, plural, =0 {ningún viaje publicado} one {# viaje} other {# viajes}}, {countries, plural, =0 {ningún país} one {# país} other {# países}}",

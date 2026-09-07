@@ -272,14 +272,20 @@
  * This is a visual reinforcement for a returning reader, and calling it an
  * accessibility fix would be a lie the next reviewer would have to unpick.
  *
- * **THE COUPLING, since it is silent.** The three strings below are the third
- * copy of a vocabulary `./site-nav.tsx` exports as `PAGE_MARK` and the three
+ * **THE COUPLING, since it is silent.** The four strings below are the third
+ * copy of a vocabulary `./site-nav.tsx` exports as `PAGE_MARK` and the four
  * pages write onto their `<main>`. A spelling that drifts loses the underline and
  * breaks nothing else — it fails open, which is why a literal here is acceptable
  * and a literal in the markup is not.
+ *
+ * `villes` is the places listing (TIW-38). It is the one mark whose page did not
+ * exist when this rule was written, which is the case the "fails open" note was
+ * about: a new page that forgets its `data-page` renders correctly and simply
+ * never underlines its own entry.
  */
 :global(body:has(main[data-page="carte"])) .link[data-nav="carte"],
 :global(body:has(main[data-page="voyages"])) .link[data-nav="voyages"],
+:global(body:has(main[data-page="villes"])) .link[data-nav="villes"],
 :global(body:has(main[data-page="a-propos"])) .link[data-nav="a-propos"] {
   color: var(--text-on-accent);
   text-decoration: underline;

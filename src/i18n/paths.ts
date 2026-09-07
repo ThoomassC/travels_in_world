@@ -73,3 +73,32 @@ export function tripsPath(): string {
 export function aboutPath(): string {
   return "/a-propos";
 }
+
+/**
+ * The index of the journal's cities and places (TIW-38) — the third entry of the
+ * main navigation, between the countries listing and the colophon.
+ *
+ * **TOP-LEVEL, and deliberately not `/voyages/villes`.** The trip segment already
+ * owns a `[slug]` route, so a static `villes` folder under it would shadow, for
+ * good, any trip whose slug is `villes` — Next resolves a static segment before a
+ * dynamic one, silently and with a green build. A collection of places is not an
+ * item of the collection of trips either, so nesting it would have been a URL
+ * claiming a containment that does not hold.
+ *
+ * French, like {@link aboutPath} and {@link TRIP_SEGMENT}, in every locale:
+ * `src/i18n/routing.ts` records at length why the segments are not translated and
+ * what declaring a `pathnames` map would cost.
+ *
+ * A function and not a constant, so the four paths of this module read alike at
+ * every call site.
+ *
+ * WHAT KEEPS IT AGREEING WITH THE FOLDER NAME: the same guard `aboutPath` names
+ * above — `tests/build/durable-urls.test.ts` reads every prerendered document and
+ * compares its canonical with its own URL, and it holds `sitemap.xml` and the
+ * prerendered set to each other in both directions. A value that stopped matching
+ * `src/app/[locale]/villes/` makes that suite red rather than shipping a
+ * navigation entry pointing at nothing.
+ */
+export function placesPath(): string {
+  return "/villes";
+}

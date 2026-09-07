@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
 import { localePathname } from "@/i18n/pathname";
-import { aboutPath, tripsPath } from "@/i18n/paths";
+import { aboutPath, placesPath, tripsPath } from "@/i18n/paths";
 import { locales } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
 import { SiteBrand } from "./site-brand";
@@ -12,20 +12,27 @@ import styles from "./site-nav.module.css";
  *
  * Each page writes its own mark onto its `<main>` — `data-page="carte"` and so on
  * — and `./site-nav.module.css` reads it backwards through `:has()`. The constant
- * exists so that the three pages and the three `data-nav` attributes below cannot
+ * exists so that the four pages and the four `data-nav` attributes below cannot
  * disagree; the stylesheet holds a third copy, which no constant can reach, and
  * the note on that rule says what happens if it drifts (nothing but a missing
  * underline — it fails open).
  *
- * The keys are the nav's own words for its three destinations; the values are the
+ * The keys are the nav's own words for its four destinations; the values are the
  * URL-ish slugs a reader would recognise in the address bar. They are the same
  * strings on purpose, and they are NOT read from `@/i18n/paths`: these are marks
  * in a stylesheet, not routes, and coupling a selector to a path constant would
  * mean a URL rename silently repaints the header.
+ *
+ * **`trips` still reads `voyages`, and the entry above it now says « Pays ».**
+ * The label of that destination changed with the places listing; its URL did not,
+ * and this constant follows the URL. Renaming the key to `countries` would have
+ * been a third spelling of one page — the folder is `voyages`, the mark is
+ * `voyages`, and only the word a reader clicks is new.
  */
 export const PAGE_MARK = {
   map: "carte",
   trips: "voyages",
+  places: "villes",
   about: "a-propos",
 } as const;
 
@@ -106,10 +113,10 @@ const FLAG: Readonly<Record<Locale, ReactElement>> = {
 };
 
 /**
- * The site's header: the brand lock-up against the window's left edge, the three
+ * The site's header: the brand lock-up against the window's left edge, the four
  * main destinations centred, and the language menu on the right.
  *
- * **No `'use client'`, and no JavaScript at all.** Five `<a href>`, a `<nav>` and
+ * **No `'use client'`, and no JavaScript at all.** Seven `<a href>`, a `<nav>` and
  * a native `<details>` are the whole component; the milestone's two client
  * boundaries belong to the map's interaction (TIW-14) and to the photo viewer
  * (TIW-17), and neither is this. The language menu in particular is a disclosure
@@ -216,13 +223,39 @@ export function SiteNav({ locale }: { readonly locale: Locale }): ReactElement {
                 {t("navMap")}
               </a>
             </li>
+            {/*
+              « Pays », and it is the same page « Tous les voyages » was: the
+              catalogue groups continent → country → trips, so the label now names
+              what the page has always done rather than restating the site. The
+              URL is untouched — `tripsPath()` is still `/voyages`, which is what
+              every marker on the map and every card links into.
+            */}
             <li>
               <a
                 className={styles.link}
                 data-nav={PAGE_MARK.trips}
                 href={localePathname({ href: tripsPath(), locale })}
               >
-                {t("navAll")}
+                {t("navCountries")}
+              </a>
+            </li>
+            {/*
+              « Villes », the other grain of the same collection. It sits between
+              the countries and the colophon because the two listings are peers —
+              a reader chooses between them — and because the colophon stays last
+              for the reason recorded below it.
+
+              The label is the owner's word and the page's own introduction
+              carries the nuance that Corse and Noirmoutier are not cities. See
+              the header of `src/app/[locale]/villes/page.tsx`.
+            */}
+            <li>
+              <a
+                className={styles.link}
+                data-nav={PAGE_MARK.places}
+                href={localePathname({ href: placesPath(), locale })}
+              >
+                {t("navPlaces")}
               </a>
             </li>
             {/*
@@ -314,7 +347,7 @@ export function SiteNav({ locale }: { readonly locale: Locale }): ReactElement {
               announce "3 éléments" before the choices. It is not one because the
               only list in this header is the navigation landmark, and
               `tests/components/site/site-brand.test.tsx` pins that landmark at
-              exactly three items — a count that exists to catch the lock-up being
+              exactly four items — a count that exists to catch the lock-up being
               tidied into the nav. Three `<li>` here would make that guard red for
               a reason it is not about, and loosening it to make room would be
               trading a real guard for an announcement three links do not need.

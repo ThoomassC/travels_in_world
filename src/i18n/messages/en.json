@@ -18,11 +18,12 @@
     "noticeBody": "The journal is being written: the places are landing on the map, the stories and the photographs follow.",
     "navLabel": "Main navigation",
     "navMap": "Map",
-    "navAll": "Every trip",
+    "navCountries": "Countries",
+    "navPlaces": "Cities",
     "navAbout": "About",
-    "metaTitle": "Every trip",
+    "metaTitle": "Trips by country",
     "metaDescription": "The complete list of the journal's trips, grouped by continent and then by country.",
-    "allHeading": "Every trip",
+    "allHeading": "Trips by country",
     "allIntro": "{count, plural, one {# trip, grouped by continent and then by country, newest first.} other {# trips, grouped by continent and then by country, newest first.}}",
     "continentCount": "{count, plural, one {# trip} other {# trips}}",
     "emptyHeading": "No trip published",
@@ -45,6 +46,16 @@
     "languageEn": "English",
     "languageEs": "Español",
     "languageNote": "The travel stories themselves stay in French."
+  },
+  "places": {
+    "metaTitle": "Cities",
+    "metaDescription": "The cities and places of the journal, with the number of stays in each.",
+    "heading": "Cities",
+    "intro": "{count, plural, one {# city or place visited, in alphabetical order, with its number of stays.} other {# cities and places visited, in alphabetical order, with their number of stays.}}",
+    "placeTrips": "{count, plural, one {# stay} other {# stays}}",
+    "emptyHeading": "No place on the map yet",
+    "emptyBody": "The journal is still empty. The cities and places travelled through will appear here, in alphabetical order, from the first published trip on.",
+    "emptyBackHome": "Back to the map"
   },
   "map": {
     "summary": "World map: {trips, plural, =0 {no trip published} one {# trip} other {# trips}}, {countries, plural, =0 {no country} one {# country} other {# countries}}",

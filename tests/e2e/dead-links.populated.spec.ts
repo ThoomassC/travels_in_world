@@ -206,12 +206,19 @@ test("no rendered link on any page leads to an address that does not exist", asy
    * the current URL. It also means this file now checks every fragment of every
    * translated page, which is where a mistranslated anchor would hide.
    *
+   * **Twenty-four since the places listing joined the bar**, one `/villes` per
+   * locale — the segment stays French under all three, which `src/i18n/routing.ts`
+   * argues at length. That page is made entirely of fragments into `/voyages`, so
+   * the half of this suite that matters most is the half below: every row of it is
+   * a `#voyage-<slug>` that has to name an element the catalogue really emits.
+   *
    * Written out rather than counted, so the day a route or a locale arrives
    * somebody has to decide whether a reader should reach it from `/fr` at all.
    */
   expect([...crawled].sort()).toEqual([
     "/en",
     "/en/a-propos",
+    "/en/villes",
     "/en/voyages",
     "/en/voyages/islande-2022",
     "/en/voyages/japon-2024",
@@ -219,6 +226,7 @@ test("no rendered link on any page leads to an address that does not exist", asy
     "/en/voyages/perou-bolivie-2023",
     "/es",
     "/es/a-propos",
+    "/es/villes",
     "/es/voyages",
     "/es/voyages/islande-2022",
     "/es/voyages/japon-2024",
@@ -226,6 +234,7 @@ test("no rendered link on any page leads to an address that does not exist", asy
     "/es/voyages/perou-bolivie-2023",
     "/fr",
     "/fr/a-propos",
+    "/fr/villes",
     "/fr/voyages",
     "/fr/voyages/islande-2022",
     "/fr/voyages/japon-2024",

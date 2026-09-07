@@ -18,11 +18,12 @@
     "noticeBody": "Le carnet est en cours d’écriture : les lieux se posent sur la carte, les récits et les photos suivent.",
     "navLabel": "Navigation principale",
     "navMap": "Carte",
-    "navAll": "Tous les voyages",
+    "navCountries": "Pays",
+    "navPlaces": "Villes",
     "navAbout": "À propos",
-    "metaTitle": "Tous les voyages",
+    "metaTitle": "Voyages par pays",
     "metaDescription": "La liste complète des voyages du carnet, groupée par continent puis par pays.",
-    "allHeading": "Tous les voyages",
+    "allHeading": "Voyages par pays",
     "allIntro": "{count, plural, one {# voyage, groupé par continent puis par pays, du plus récent au plus ancien.} other {# voyages, groupés par continent puis par pays, du plus récent au plus ancien.}}",
     "continentCount": "{count, plural, one {# voyage} other {# voyages}}",
     "emptyHeading": "Aucun voyage publié",
@@ -45,6 +46,16 @@
     "languageEn": "English",
     "languageEs": "Español",
     "languageNote": "Les récits de voyage restent en français."
+  },
+  "places": {
+    "metaTitle": "Villes",
+    "metaDescription": "Les villes et les lieux du carnet, avec le nombre de séjours dans chacun.",
+    "heading": "Villes",
+    "intro": "{count, plural, one {# ville ou lieu visité, par ordre alphabétique, avec son nombre de séjours.} other {# villes et lieux visités, par ordre alphabétique, avec leur nombre de séjours.}}",
+    "placeTrips": "{count, plural, one {# séjour} other {# séjours}}",
+    "emptyHeading": "Aucun lieu sur la carte",
+    "emptyBody": "Le carnet est encore vide. Les villes et les lieux traversés apparaîtront ici, par ordre alphabétique, dès le premier voyage publié.",
+    "emptyBackHome": "Retour à la carte"
   },
   "map": {
     "summary": "Carte du monde : {trips, plural, =0 {aucun voyage publié} one {# voyage} other {# voyages}}, {countries, plural, =0 {aucun pays} one {# pays} other {# pays}}",

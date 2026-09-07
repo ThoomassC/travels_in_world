@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { listTripSummaries } from "@/content/trips";
 import { hasStory } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
-import { aboutPath, tripPath, tripsPath } from "@/i18n/paths";
+import { aboutPath, placesPath, tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
 import { absoluteUrl } from "./site-url";
@@ -110,6 +110,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
      * deploy — which is exactly how a sitemap stops being believed.
      * `localisedEntry` omits the element entirely for `undefined`.
      */
+    /**
+     * The places listing (TIW-38). It takes the most recent trip's end date for
+     * the same reason the two entries above it do: it is a list, and what changes
+     * a list is a trip arriving — a new journey adds its places to this page as
+     * surely as it adds its card to the catalogue.
+     */
+    ...localisedEntry(placesPath(), mostRecentEnd),
     ...localisedEntry(aboutPath(), undefined),
     /**
      * **The trips that have a page, and not every trip in the list** (TIW-18).

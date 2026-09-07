@@ -137,13 +137,17 @@ describe("the header carries both the brand and the nav", () => {
      * This is the assertion that goes red if someone "tidies up" by moving the
      * lock-up into the list, which renders identically to the eye.
      *
-     * Three since TIW-25 added "À propos" — and the count is spelled out rather
+     * Three since TIW-25 added "À propos", **four since TIW-38 split the trips
+     * entry into « Pays » and « Villes »** — and the count is spelled out rather
      * than loosened to `toBeGreaterThan`, because "one item too many" is exactly
-     * the failure being guarded.
+     * the failure being guarded. Raising it is therefore a deliberate edit each
+     * time a destination is added, which is the whole design of this assertion:
+     * the number moved because a `<li>` was added on purpose, and the lock-up is
+     * still outside the list, which is the property under test.
      */
     const nav = screen.getByRole("navigation");
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
     expect(nav).not.toContainElement(
       screen.getByRole("link", { name: /^Travels in World\s*, retour/ })
     );
@@ -171,6 +175,30 @@ describe("the header carries both the brand and the nav", () => {
       .filter((link) => link.getAttribute("href") === `/${defaultLocale}`);
 
     expect(home).toHaveLength(3);
+  });
+
+  it("names the two grains of the collection, and only one of them is a new URL", () => {
+    renderBrand(<SiteNav locale={defaultLocale} />);
+
+    /**
+     * TIW-38 replaced « Tous les voyages » with two entries. The pair is pinned
+     * together because the interesting fact is not that either exists — it is
+     * that they point at two different pages while only ONE address was created.
+     *
+     * « Pays » is the catalogue, at the URL it has always had: every marker on
+     * the map and every card in the journal links into `/voyages`, and
+     * `src/i18n/paths.ts` records why renaming that segment was refused. A
+     * regression that "renamed the page" by moving its URL shows up here as a
+     * changed href under an unchanged label.
+     */
+    const nav = screen.getByRole("navigation");
+
+    expect(nav.querySelector(`a[href="/${defaultLocale}/voyages"]`)).toHaveTextContent(
+      frMessages.trips.navCountries
+    );
+    expect(nav.querySelector(`a[href="/${defaultLocale}/villes"]`)).toHaveTextContent(
+      frMessages.trips.navPlaces
+    );
   });
 
   it("carries the colophon on every page, because the layout renders this nav", () => {

@@ -14,6 +14,9 @@ import styles from "./trip-catalogue.module.css";
  * the reader's own alphabetical order and each trip in the content façade's —
  * `startDate` descending, ties broken by `slug`.
  *
+ * **Unless there is only one continent**, in which case its heading is dropped and
+ * the countries move up a level. The long note is at the branch itself.
+ *
  * All of the arranging is `buildCatalogue`, which is a pure function tested
  * against the three states the acceptance criteria name (zero, one, sixty
  * trips). This component supplies the three things that function refuses to
@@ -23,8 +26,9 @@ import styles from "./trip-catalogue.module.css";
  * **Structure by headings, not by landmarks.** Sixty trips over twelve countries
  * and five continents would be seventeen labelled `<section>` regions, and a
  * screen reader's landmark list would then be less useful than no list at all.
- * The heading outline — `h1` page, `h2` continent, `h3` country, `h4` trip — is
- * complete and is what a reader actually walks a long listing with. The one
+ * The heading outline — `h1` page, `h2` continent, `h3` country, `h4` trip, and
+ * `h1`, `h2` country, `h3` trip when there is a single continent — is complete
+ * either way and is what a reader actually walks a long listing with. The one
  * landmark is `<main>`, which the page owns.
  */
 
@@ -70,25 +74,84 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
     compare: collator.compare,
   });
 
+  /**
+   * **One continent means no continent heading**, and the levels below it move up
+   * with it.
+   *
+   * A journal whose every trip is European renders "Europe" once, at the top of
+   * the page, over the whole of it — a chapter title for a book with one chapter.
+   * It is not a grouping a reader can use, because there is nothing to tell it
+   * apart from; it is a word between the introduction and the first country.
+   *
+   * **The promotion is not cosmetic: without it the outline breaks.** Dropping the
+   * `h2` while leaving the countries at `h3` takes the document from `h1` straight
+   * to `h3`, which is the skipped level `tests/e2e/heading-order.populated.spec.ts`
+   * exists to refuse. So the countries become the `h2` chapters they now are, and
+   * the cards under them follow to `h3`.
+   *
+   * `TripCard` types `headingLevel` as `3 | 4`, which is what makes this pair a
+   * typecheck rather than a convention — a third level here would not compile.
+   *
+   * The count that rode beside the continent heading goes with it. Nothing is
+   * lost: with one group its number is the page's own total, which the intro above
+   * the listing already states.
+   */
+  const singleGroup = groups.length === 1;
+  const tripHeadingLevel = singleGroup ? 3 : 4;
+
   return (
     <div className={styles.catalogue}>
       {groups.map((group) => (
         <section key={group.continent ?? "unplaced"} className={styles.continent}>
-          <div className={styles.continentHeader}>
-            <h2 className={styles.continentHeading}>{group.continentName}</h2>
-            {/*
-              The count is beside the heading and not inside it: in the heading
-              it becomes part of the accessible name, so a reader navigating by
-              heading hears "Asie 12 voyages" twelve times over instead of the
-              chapter titles they are scanning for.
-            */}
-            <p className={styles.count}>{t("continentCount", { count: group.tripCount })}</p>
-          </div>
+          {singleGroup ? null : (
+            <div className={styles.continentHeader}>
+              <h2 className={styles.continentHeading}>{group.continentName}</h2>
+              {/*
+                The count is beside the heading and not inside it: in the heading
+                it becomes part of the accessible name, so a reader navigating by
+                heading hears "Asie 12 voyages" twelve times over instead of the
+                chapter titles they are scanning for.
+              */}
+              <p className={styles.count}>{t("continentCount", { count: group.tripCount })}</p>
+            </div>
+          )}
 
           <div className={styles.countries}>
             {group.countries.map((country) => (
-              <section key={country.countryCode} className={styles.country}>
-                <h3 className={styles.countryHeading}>{country.countryName}</h3>
+              /*
+                `id="pays-<CODE>"` — what makes a country's section addressable by
+                a fragment.
+
+                **The code is the schema's, so it is UPPERCASE**, and HTML
+                fragments are case-sensitive: the address is `#pays-FR`, never
+                `#pays-fr`. Worth saying out loud because this project has already
+                paid for a dangling `#pays-bo` once — `visited-countries.tsx`
+                records the measurement — and because the two spellings look
+                interchangeable in a diff.
+
+                **What still does NOT link here, and why the id is emitted
+                anyway.** The map's textual equivalent points at a trip's page or
+                at this listing whole, because the catalogue files a trip under
+                its *first arrival* only: a country a trip merely crosses has no
+                section, so a fragment built from the tally would dangle for
+                exactly the countries the tally added. That reasoning is about
+                which countries have a section — not about whether the ones that
+                do should be addressable. `tests/e2e/dead-links.populated.spec.ts`
+                resolves every fragment of every rendered link, so a future
+                linker is caught by a guard rather than by a reader.
+              */
+              <section
+                key={country.countryCode}
+                id={`pays-${country.countryCode}`}
+                className={styles.country}
+              >
+                {singleGroup ? (
+                  <h2 className={`${styles.countryHeading} ${styles.countryHeadingTop}`}>
+                    {country.countryName}
+                  </h2>
+                ) : (
+                  <h3 className={styles.countryHeading}>{country.countryName}</h3>
+                )}
 
                 {/*
                   A list, so the number of trips under a country is announced on
@@ -128,7 +191,7 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
                       <TripCard
                         trip={trip}
                         locale={locale}
-                        headingLevel={4}
+                        headingLevel={tripHeadingLevel}
                         isNew={trip.slug === freshSlug}
                       />
                     </li>
