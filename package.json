@@ -27,7 +27,8 @@
     "new-trip": "node --import ./scripts/runtime/register-typescript.mts scripts/new-trip.ts",
     "index-photos": "node --import ./scripts/runtime/register-typescript.mts scripts/index-photos.ts",
     "check:photo-weight": "node --import ./scripts/runtime/register-typescript.mts scripts/photo-weight.ts",
-    "basemap:coverage": "node --import ./scripts/runtime/register-typescript.mts scripts/generate-basemap-coverage.ts"
+    "basemap:coverage": "node --import ./scripts/runtime/register-typescript.mts scripts/generate-basemap-coverage.ts",
+    "brand:rasters": "node --import ./scripts/runtime/register-typescript.mts scripts/generate-brand-rasters.ts"
   },
   "dependencies": {
     "@thomascaron/ui": "github:ThoomassC/ui-commune#v0.2.0",

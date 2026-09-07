@@ -3,10 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   BRAND_PLANE_PATH,
-  BRAND_LOCKUP_PLANE_TRANSFORM,
-  BRAND_LOCKUP_TRACK_PATH,
-  BRAND_LOCKUP_TRACK_WIDTH,
-  BRAND_LOCKUP_VIEWBOX,
+  BRAND_MARK_PLANE_TRANSFORM,
   BRAND_MARK_VIEWBOX,
 } from "@/components/site/brand-art";
 import { siteToken, type MeasuredTheme } from "../../styles/sheet";
@@ -174,64 +171,94 @@ describe("the favicon names no unconditioned colour", () => {
   });
 });
 
-describe("the lock-up reuses the mark instead of redrawing it", () => {
-  it("places the same path with a transform", () => {
+describe("the square placements reuse the mark instead of redrawing it", () => {
+  it("sets the aeroplane in the favicon's square with a transform", () => {
     /**
      * Two hand-placed copies of a logo are two logos, and the day one is nudged
-     * the other stays put. The lock-up therefore carries no coordinates of its
-     * own for the aeroplane — only a `translate`/`scale`.
+     * the other stays put. The favicon therefore carries no coordinates of its
+     * own for the aeroplane — only a `translate`/`scale` around the one path.
+     *
+     * **This assertion changed side on 7 September 2026.** It used to check the
+     * header's transform, because the header drew the mark inside a wide lock-up
+     * box alongside a trajectory. The trajectory is gone with the old mark, so the
+     * header now draws the aeroplane in its own box with no transform at all, and
+     * the square that needs one is the favicon's.
      */
-    expect(BRAND_LOCKUP_PLANE_TRANSFORM).toMatch(
-      /^translate\(-?[\d.]+ -?[\d.]+\) scale\([\d.]+\)$/
-    );
+    expect(BRAND_MARK_PLANE_TRANSFORM).toMatch(/^translate\(-?[\d.]+ -?[\d.]+\) scale\([\d.]+\)$/);
+
+    const icon = readFileSync(ICON_PATH, "utf8");
+    expect(icon).toContain(`transform="${BRAND_MARK_PLANE_TRANSFORM}"`);
   });
 
-  it("keeps the trajectory clear of the aeroplane's ink", () => {
+  it("keeps the whole aeroplane inside that square, with margin to spare", () => {
     /**
-     * The load-bearing number of this mark, checked arithmetically because no
-     * rendered test can see it: ink against accent measures 1.56:1 in light and
-     * 1.45:1 in dark, so the two must never share an edge.
+     * A transform that overflows its box clips the mark, and a favicon is the one
+     * place nobody looks closely enough to notice. Checked arithmetically because
+     * no rendered test in this suite can see a 48-unit box.
      *
-     * **This test used to read the FIRST coordinate of the mark and call it the
-     * lowest point**, which was true of the welded comet — its path opened on the
-     * tail tip — and is a coincidence of that drawing rather than a property of a
-     * mark. On the banked aeroplane the first coordinate is the nose, near the
-     * TOP of the box, so the old arithmetic would have reported a clearance of
-     * 25.5 instead of 6.68 and stayed green while the accent sat on the ink. It
-     * now takes the maximum ordinate of the whole path, which is what "lowest
-     * ink" means for any drawing.
-     *
-     * The trajectory's side is measured the same way round: the minimum ordinate
-     * of its path, less half the stroke, is where the accent's paint actually
-     * starts. Taking the minimum over the control points as well as the endpoints
-     * can only UNDER-state the curve's top edge — a quadratic stays inside the
-     * convex hull of its three points — so the clearance this computes is never
-     * more generous than the truth.
-     *
-     * Below ~5 units of clearance in a 32-unit box the accent starts touching the
-     * ink at header size, and the mark collapses into one flat silhouette.
+     * The ordinates are taken over EVERY number of the path, control points
+     * included. That can only over-state the drawing's extent — a Bézier stays
+     * inside the convex hull of its control polygon — so a box this computes as
+     * fitting really does fit.
      */
-    const [, scale] = /scale\(([\d.]+)\)/.exec(BRAND_LOCKUP_PLANE_TRANSFORM) ?? [];
-    const [, , translateY] =
-      /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(BRAND_LOCKUP_PLANE_TRANSFORM) ?? [];
+    const [, scale = "0"] = /scale\(([\d.]+)\)/.exec(BRAND_MARK_PLANE_TRANSFORM) ?? [];
+    const [, translateX = "0", translateY = "0"] =
+      /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(BRAND_MARK_PLANE_TRANSFORM) ?? [];
 
-    /** Every second number of a path is an ordinate — these paths are all pairs. */
-    const ordinatesOf = (path: string): readonly number[] =>
-      [...path.matchAll(/-?\d+(?:\.\d+)?/g)]
-        .map((match) => Number(match[0]))
-        .filter((_, index) => index % 2 === 1);
+    const numbers = [...BRAND_PLANE_PATH.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) =>
+      Number(match[0])
+    );
+    const abscissae = numbers.filter((_, index) => index % 2 === 0);
+    const ordinates = numbers.filter((_, index) => index % 2 === 1);
 
-    const lowestInk =
-      Math.max(...ordinatesOf(BRAND_PLANE_PATH)) * Number(scale) + Number(translateY);
-    const trackTop =
-      Math.min(...ordinatesOf(BRAND_LOCKUP_TRACK_PATH)) - BRAND_LOCKUP_TRACK_WIDTH / 2;
+    const place = (value: number, offset: string) => value * Number(scale) + Number(offset);
+    const side = Number(BRAND_MARK_VIEWBOX.split(" ")[3]);
 
-    expect(trackTop - lowestInk).toBeGreaterThan(5);
+    expect(place(Math.min(...abscissae), translateX)).toBeGreaterThanOrEqual(0);
+    expect(place(Math.max(...abscissae), translateX)).toBeLessThanOrEqual(side);
+    expect(place(Math.min(...ordinates), translateY)).toBeGreaterThanOrEqual(0);
+    expect(place(Math.max(...ordinates), translateY)).toBeLessThanOrEqual(side);
 
-    // …and inside the box, so the clearance is not bought by pushing the
-    // trajectory off the bottom edge where it would be clipped.
-    const [, trackY] = /^M[\d.]+ ([\d.]+)/.exec(BRAND_LOCKUP_TRACK_PATH) ?? [];
-    const boxHeight = Number(BRAND_LOCKUP_VIEWBOX.split(" ")[3]);
-    expect(Number(trackY)).toBeLessThan(boxHeight);
+    // And it is set, not merely fitted: a mark filling its box edge to edge reads
+    // as clipped on a tab bar that adds no padding of its own.
+    expect(place(Math.max(...ordinates), translateY)).toBeLessThan(side - 2);
+  });
+
+  it("draws the header mark in the aeroplane's own box, with no transform", () => {
+    /**
+     * The other half of the same decision, and the reason it is asserted rather
+     * than left to the component: a square viewBox in the header would spend a
+     * fifth of the medallion on empty margin, and the temptation to reuse
+     * {@link BRAND_MARK_VIEWBOX} there is exactly the kind of tidy-looking edit
+     * that would do it.
+     */
+    const brand = readFileSync(
+      path.join(REPOSITORY_ROOT, "src/components/site/site-brand.tsx"),
+      "utf8"
+    );
+
+    expect(brand).toContain("viewBox={BRAND_PLANE_VIEWBOX}");
+    expect(brand).not.toContain("BRAND_MARK_PLANE_TRANSFORM");
+  });
+
+  it("cuts the needle out rather than filling it, everywhere the mark is drawn", () => {
+    /**
+     * `fill-rule: evenodd` is the difference between a compass needle and a solid
+     * fuselage, and it fails **silently**: the default non-zero rule paints the
+     * second contour solid, no error, no warning, a mark that has simply lost its
+     * only detail. Two files draw this path and both are checked, because getting
+     * it right in one of them is how a favicon and a header stop matching.
+     */
+    const icon = readFileSync(ICON_PATH, "utf8");
+    const brand = readFileSync(
+      path.join(REPOSITORY_ROOT, "src/components/site/site-brand.tsx"),
+      "utf8"
+    );
+
+    expect(icon).toContain('fill-rule="evenodd"');
+    expect(brand).toContain('fillRule="evenodd"');
+
+    // The rule only means something if there is a second contour to cut out.
+    expect(BRAND_PLANE_PATH.match(/M /g) ?? []).toHaveLength(2);
   });
 });

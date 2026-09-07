@@ -2,18 +2,11 @@ import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
 import { localePathname } from "@/i18n/pathname";
 import type { Locale } from "@/i18n/routing";
-import {
-  BRAND_LOCKUP_PLANE_TRANSFORM,
-  BRAND_LOCKUP_TRACK_DASH,
-  BRAND_LOCKUP_TRACK_PATH,
-  BRAND_LOCKUP_TRACK_WIDTH,
-  BRAND_LOCKUP_VIEWBOX,
-  BRAND_PLANE_PATH,
-} from "./brand-art";
+import { BRAND_PLANE_PATH, BRAND_PLANE_VIEWBOX } from "./brand-art";
 import styles from "./site-brand.module.css";
 
 /**
- * The header lock-up: the aeroplane, the trajectory, the name — and the link home.
+ * The header lock-up: the aeroplane on its medallion, the name — and the link home.
  *
  * **No `'use client'`, and no JavaScript at all.** One `<a href>` wrapping an
  * inline `<svg>` and a `<span>`. The milestone's two client boundaries belong to
@@ -39,10 +32,20 @@ import styles from "./site-brand.module.css";
  * visitor's theme, which is an acceptance criterion. Inline is also what lets the
  * *page* override the two tokens, which is the other half of that criterion.
  *
- * WHAT THE INLINE SVG COSTS, since it lands in the HTML of every route: 471 bytes
- * of markup, 172 bytes brotli. Measured against the budgets in
- * `tests/build/prerender.test.ts` — `/fr` went from 36.26 KB to 36.36 KB brotli
- * against a 100 KB ceiling.
+ * WHAT THE INLINE SVG COSTS, since it lands in the HTML of every route. The old
+ * lock-up — a banked aeroplane plus a dotted trajectory — was 471 bytes of markup.
+ * The mark the owner supplied on 7 September 2026 is a shorter *document* (one
+ * `<path>` instead of two, no `<g>`, no transform, no dash attributes) and a much
+ * longer *path*, because the airframe carries two nose curves and the needle is a
+ * second contour: **1343 bytes of markup**, measured in the built HTML.
+ *
+ * On the page, that is **+0.3 KiB brotli per document** — `/fr/a-propos` 7.4 to
+ * 7.7, `/fr/voyages` 8.4 to 8.6, `/fr/villes` 7.7 to 7.9 — against a 100 KiB
+ * ceiling. The figure is quoted with a caveat the README earns: this repository
+ * measured a 74-byte spread between two builds of an identical tree, so a
+ * document delta this size is only worth stating because it moved the same way on
+ * three routes at once and has an obvious cause. `tests/build/prerender.test.ts`
+ * is what actually holds the line.
  */
 export function SiteBrand({ locale }: { readonly locale: Locale }): ReactElement {
   const t = useTranslations("brand");
@@ -64,31 +67,30 @@ export function SiteBrand({ locale }: { readonly locale: Locale }): ReactElement
         The medallion (TIW-38) — a plain wrapper, because a disc is a box and an
         `<svg>` cannot be both the drawing and the round plate under it without
         the mark stretching to the plate's square.
+
+        It is filled with `--accent-active`, the header bar's own colour, so on
+        the bar it is invisible and below the bar it is the bar continuing. That
+        is what makes the owner's ask — "que le fond du header s'adapte" — a
+        property of the markup rather than of the image: the mark is a
+        transparent cut, and what shows through it is the header.
       */}
       <span className={styles.medallion}>
+        {/*
+          The aeroplane, in its own box rather than in a square one: the drawing
+          is 0.72 : 1 and a square viewBox would have spent a fifth of the disc on
+          empty margin. `./brand-art.ts` says why the favicon does the opposite.
+
+          `fillRule="evenodd"` is load-bearing, not decoration: the second contour
+          of the path is the compass needle, and it is a hole. With the default
+          non-zero rule it fills solid and the mark loses its only detail.
+        */}
         <svg
           className={styles.mark}
-          viewBox={BRAND_LOCKUP_VIEWBOX}
+          viewBox={BRAND_PLANE_VIEWBOX}
           aria-hidden="true"
           focusable="false"
         >
-          {/*
-          The trajectory first, so the aeroplane paints over it if a future placement
-          ever brings them within a hair of each other. They are 6.68 units apart
-          today; `./brand-art.ts` records why that clearance is the load-bearing
-          number of this mark.
-        */}
-          <path
-            className={styles.track}
-            d={BRAND_LOCKUP_TRACK_PATH}
-            fill="none"
-            strokeWidth={BRAND_LOCKUP_TRACK_WIDTH}
-            strokeLinecap="round"
-            strokeDasharray={BRAND_LOCKUP_TRACK_DASH}
-          />
-          <g transform={BRAND_LOCKUP_PLANE_TRANSFORM}>
-            <path className={styles.plane} d={BRAND_PLANE_PATH} />
-          </g>
+          <path className={styles.plane} d={BRAND_PLANE_PATH} fillRule="evenodd" />
         </svg>
       </span>
 

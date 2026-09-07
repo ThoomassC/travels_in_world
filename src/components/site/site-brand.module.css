@@ -1,12 +1,16 @@
 /* =============================================================================
    The header lock-up — no colour of its own, like every module here.
 
-   It reads FOUR tokens and no literal: `--logo-ink`, `--logo-accent`,
-   `--accent-quiet` and the spacing scale. The first two are the contract
-   `src/styles/tokens.css` declares for exactly this file: they are redeclared in
-   all three theme states, so a visitor in dark mode gets the light ink and the
-   bright accent without this file knowing that dark mode exists — and a page can
-   override either one locally without a fork of the component.
+   It reads THREE tokens and no literal: `--logo-ink`, `--accent-quiet` and the
+   spacing scale. The first is the contract `src/styles/tokens.css` declares for
+   exactly this file: it is redeclared in all three theme states, so a visitor in
+   dark mode gets the light ink without this file knowing that dark mode exists —
+   and a page can override it locally without a fork of the component.
+
+   `--logo-accent` is no longer read here. The mark the owner supplied on
+   7 September 2026 has no accented part: one ink, one silhouette. The token still
+   exists in `tokens.css` for whatever comes next; this file simply stopped using
+   it.
    ============================================================================ */
 
 /**
@@ -34,22 +38,20 @@
   text-decoration: none;
 
   /**
-   * **The lock-up now sits on the accent bar, so its two tokens are re-pointed
-   * here rather than forked.** `src/styles/tokens.css` declares `--logo-ink` and
-   * `--logo-accent` precisely so a page can re-point them locally without a
-   * second copy of the component, and this is that case: the defaults follow
-   * `--text-strong` and `--text-accent`, both of which are near-invisible on a
-   * teal fill.
+   * **The lock-up sits on the accent bar, so its ink is re-pointed here rather
+   * than forked.** `src/styles/tokens.css` declares `--logo-ink` precisely so a
+   * page can re-point it locally without a second copy of the component, and this
+   * is that case: the default follows `--text-strong`, which is near-invisible on
+   * a teal fill.
    *
-   * Both become `--text-on-accent`, and the constraint `brand-art.ts` documents
-   * dissolves rather than being broken: the aeroplane and its trajectory may not
-   * share an edge because ink against accent measures 1.56:1, and here they are
-   * the *same* colour on a single ground, so there is no ink/accent edge left to
-   * fail. The ~7 units of clearance in the geometry stay what separates the two
-   * shapes, which is what they were always for.
+   * It becomes `--text-on-accent`, the pair the header bar is already under
+   * contract for. And the constraint `brand-art.ts` used to document — the
+   * aeroplane and its trajectory may not share an edge, because ink against
+   * accent measures 1.56:1 — no longer has a subject: there is no trajectory, and
+   * the needle inside the silhouette is a *hole*, so what shows through it is the
+   * medallion rather than a second ink.
    */
   --logo-ink: var(--text-on-accent);
-  --logo-accent: var(--text-on-accent);
 }
 
 /**
@@ -155,10 +157,6 @@
   fill: var(--logo-ink);
 }
 
-.track {
-  stroke: var(--logo-accent);
-}
-
 /**
  * Windows high-contrast mode replaces author colours on text and borders, but NOT
  * `fill` and `stroke` on an SVG — so without this the mark keeps a palette colour
@@ -169,10 +167,6 @@
 @media (forced-colors: active) {
   .plane {
     fill: LinkText;
-  }
-
-  .track {
-    stroke: LinkText;
   }
 }
 
