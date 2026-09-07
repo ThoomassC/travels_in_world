@@ -156,7 +156,7 @@ describe("the logo is the link home", () => {
 
 describe("the header carries both the brand and the nav", () => {
   it("puts the lock-up outside the navigation landmark", () => {
-    renderBrand(<SiteNav locale={defaultLocale} />);
+    renderBrand(<SiteNav locale={defaultLocale} searchEntries={[]} />);
 
     /**
      * A logo that is also the way home is not a navigation *entry*. Inside the
@@ -185,7 +185,7 @@ describe("the header carries both the brand and the nav", () => {
   });
 
   it("offers exactly one way home per role it plays", () => {
-    renderBrand(<SiteNav locale={defaultLocale} />);
+    renderBrand(<SiteNav locale={defaultLocale} searchEntries={[]} />);
 
     /**
      * Three links to `/fr` — the logo, "Carte", and "Français" in the language
@@ -209,7 +209,7 @@ describe("the header carries both the brand and the nav", () => {
   });
 
   it("names the two grains of the collection, and only one of them is a new URL", () => {
-    renderBrand(<SiteNav locale={defaultLocale} />);
+    renderBrand(<SiteNav locale={defaultLocale} searchEntries={[]} />);
 
     /**
      * TIW-38 replaced « Tous les voyages » with two entries. The pair is pinned
@@ -233,7 +233,7 @@ describe("the header carries both the brand and the nav", () => {
   });
 
   it("carries the colophon on every page, because the layout renders this nav", () => {
-    renderBrand(<SiteNav locale={defaultLocale} />);
+    renderBrand(<SiteNav locale={defaultLocale} searchEntries={[]} />);
 
     /**
      * TIW-25's "accessible depuis la navigation principale, sur toutes les pages".

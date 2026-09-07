@@ -156,6 +156,19 @@
     "nameTail": "in World",
     "homeDestination": ", retour à l’accueil"
   },
+  "search": {
+    "open": "Rechercher",
+    "field": "Rechercher dans le carnet",
+    "placeholder": "Un voyage, un lieu, un pays…",
+    "listLabel": "Destinations du carnet",
+    "groupTrips": "Voyages",
+    "groupPlaces": "Lieux",
+    "groupCountries": "Pays",
+    "groupPages": "Pages",
+    "resultsNone": "Aucun résultat.",
+    "resultsOne": "1 résultat.",
+    "resultsMany": "{count} résultats."
+  },
   "purpose": {
     "heading": "Ce que cherche ce carnet",
     "body": "Je voyage, et j’écris ce que j’en retiens : les étapes dans l’ordre où elles ont eu lieu, les dates, les photos, et ce qu’un lieu m’a fait. Pas un guide, pas un classement — un carnet, tenu pour qu’un voyage se relise entier plutôt que par fragments.",

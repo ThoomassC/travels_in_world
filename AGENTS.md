@@ -32,11 +32,17 @@ segment de locale est perdu. Une règle ESLint le refuse partout sauf dans
 `src/i18n/navigation.ts`. Angle mort connu et non couvert : `await import("next/link")`.
 
 **3. Server Components par défaut.**
-Le jalon 1 n'autorise que deux composants `'use client'` : l'interaction de la carte et la
-visionneuse photo. **La seconde est dépensée** — `src/components/photos/photo-lightbox.tsx`,
-livrée par TIW-17 ; il n'en reste donc qu'une, celle de la carte (TIW-14). Tout autre
-`'use client'` se justifie en revue. `src/domain/**` reste du TypeScript pur — ni React, ni
-Next, ni `fs`, ni `d3`, ni `sharp`.
+Le jalon 1 n'autorisait que deux composants `'use client'` : l'interaction de la carte
+(TIW-14, `src/components/map/map-viewport.tsx`) et la visionneuse photo (TIW-17,
+`src/components/photos/photo-lightbox.tsx`). **Les deux sont dépensés, et il y en a un
+troisième depuis le 7 septembre 2026** : `src/components/search/site-search.tsx`, la
+recherche de l'en-tête, demandée par le propriétaire. Son en-tête porte l'argument et le
+README le résume — l'essentiel étant que tout ce qui n'est pas de l'interaction vit dans
+`src/components/search/entries.ts`, module pur, et que les lignes du panneau arrivent en
+`children` rendus par le serveur plutôt qu'en props sérialisées. Le compte est donc à
+**trois** ; tout `'use client'` supplémentaire se justifie en revue.
+
+`src/domain/**` reste du TypeScript pur — ni React, ni Next, ni `fs`, ni `d3`, ni `sharp`.
 
 `src/map/**` s'atteint par sa façade `@/map`, **seul** module du dossier à porter
 `import "server-only"` : le build casse si un composant client l'atteint. Les quatre modules

@@ -545,6 +545,57 @@ Elle n'est pas revenue avec la suppression de la liste, et
 `docs/adr/0003-carte-svg-inerte-et-balises-html.md` en décrit encore l'ancienne
 version : à reprendre avec TIW-27.
 
+**La recherche de l'en-tête est le TROISIÈME `'use client'` du jalon**, et c'est la seule
+chose de ce dépôt qui ait dépassé le budget de deux. L'argument est dans l'en-tête de
+`src/components/search/site-search.tsx` ; le résumé tient en trois points.
+
+1. **Ce qui a été demandé est de l'interaction.** Filtrer une liste à chaque frappe, sans
+   aller-retour serveur — et il ne peut pas y en avoir : toutes les routes sont prérendues,
+   donc une page de résultats `?q=` se rendrait à la demande, ce qui est l'invariant 1.
+2. **La frontière est aussi mince que possible.** Tout ce qui n'est pas de l'interaction vit
+   dans `src/components/search/entries.ts`, un module pur avec vingt cas : construction de
+   l'index, pliage des accents, règle de correspondance. Le composant client n'a qu'une
+   boucle de filtre, une carte de touches et deux écouteurs.
+3. **Les lignes ne sont pas des props.** Elles arrivent en `children`, déjà rendues par le
+   serveur — le même geste que `MapViewport` avec ses balises et ses cartes. L'index existe
+   donc **une seule fois**, en HTML, et n'est jamais aussi sérialisé dans la charge utile.
+
+**Sans JavaScript, ce n'est pas un lot de consolation.** La coquille est un `<details>` natif :
+on l'ouvre et le panneau montre l'index complet — chaque voyage, chaque lieu, chaque pays,
+chaque page — en liens réels, groupés, tous atteignables au Tab. Aucun `tabindex` n'est rendu
+par le serveur, et c'est délibéré : le motif combobox d'ARIA 1.2 en poserait un à `-1` sur
+chaque ligne, ce qui les sortirait de l'ordre de tabulation précisément pour le lecteur qui
+n'a pas de script. Les flèches déplacent donc le **vrai focus** sur le **vrai lien** — Entrée,
+clic du milieu et Cmd-clic marchent parce que ce sont des liens, et rien n'a à être tenu en
+phase. Prouvé par échec volontaire : ajouter `tabIndex={-1}` sort 21 lignes de l'ordre de
+tabulation et fait rougir `tests/e2e/search.populated.spec.ts`.
+
+**Ce que ça coûte, mesuré.** L'index est dans le HTML de **chaque** document, parce que le
+chrome l'est. Sur le contenu réel — 13 voyages, 36 lignes — c'est **11,7 Kio de balisage**,
+qui portent une page de contenu de 7,7 à 10,0 Kio brotli, et **+1,3 Kio de JavaScript initial**
+(`/fr` passe de 123,2 à 124,6 Kio pour un plafond de 150). C'est linéaire dans le contenu :
+soixante voyages font environ cent lignes et 32 Kio de balisage. Le plafond est donc posé —
+24 Kio dans `tests/build/prerender.test.ts` — avec sa porte de sortie chiffrée : au-delà,
+l'index devient un fichier JSON committé que le panneau va chercher au premier focus, ce qui
+coûte une requête, un mode de panne et un fichier à tenir en phase.
+
+**Il n'y a aucun corps de récit à indexer, et c'est une propriété du modèle.**
+`src/domain/schema.ts` donne à un voyage un titre, des lieux, des étapes, des photos et des
+tags — rien qui porte de la prose. « Chercher dans le texte des récits » se résout donc aux
+**légendes des photos et aux tags**, seul texte libre qu'un récit possède, et les deux sont
+repliés dans la botte de foin du voyage. Le jour où un champ de corps existe, c'est
+`buildSearchEntries` qui l'accueille : un cas de `tests/components/search/entries.test.ts` le
+dit en toutes lettres, pour que l'absence soit une décision consignée et non un manque que
+quelqu'un redécouvrira.
+
+Deux défauts que seul le navigateur a vus, notés parce qu'ils se reproduiraient :
+**les intitulés de groupe étaient des `<h2>`** et, l'en-tête précédant `<main>`, ils faisaient
+commencer le plan de titres de chaque page au niveau 2 — cinq cas de
+`heading-order.populated.spec.ts` d'un coup ; ce sont des `<p>` reliés par `aria-labelledby`.
+Et **le panneau s'ouvrait sous le logo** : `.inner` est une grille à trois colonnes dont celle
+du milieu centre la navigation, un quatrième enfant a pris la première cellule, vide par
+construction. La recherche et le menu de langue partagent maintenant une même zone à droite.
+
 **Dépendances écartées** (délibérément, ne pas les rajouter sans ticket) : bibliothèque de
 carte côté client (Leaflet, MapLibre), gestionnaire d'état (Redux, Zustand), client HTTP ou
 React Query, bibliothèque de formulaires, Tailwind, bibliothèque d'icônes React

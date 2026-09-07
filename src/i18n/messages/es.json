@@ -156,6 +156,19 @@
     "nameTail": "in World",
     "homeDestination": ", volver al inicio"
   },
+  "search": {
+    "open": "Buscar",
+    "field": "Buscar en el cuaderno",
+    "placeholder": "Un viaje, un lugar, un país…",
+    "listLabel": "Destinos del cuaderno",
+    "groupTrips": "Viajes",
+    "groupPlaces": "Lugares",
+    "groupCountries": "Países",
+    "groupPages": "Páginas",
+    "resultsNone": "Ningún resultado.",
+    "resultsOne": "1 resultado.",
+    "resultsMany": "{count} resultados."
+  },
   "purpose": {
     "heading": "Lo que busca este cuaderno",
     "body": "Viajo, y escribo lo que me queda de ello: las etapas en el orden en que ocurrieron, las fechas, las fotografías y lo que un lugar me hizo. Ni una guía ni una clasificación — un cuaderno, llevado para que un viaje se relea entero en lugar de a fragmentos.",

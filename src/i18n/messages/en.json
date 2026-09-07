@@ -156,6 +156,19 @@
     "nameTail": "in World",
     "homeDestination": ", back to the home page"
   },
+  "search": {
+    "open": "Search",
+    "field": "Search the journal",
+    "placeholder": "A trip, a place, a country…",
+    "listLabel": "Destinations in the journal",
+    "groupTrips": "Trips",
+    "groupPlaces": "Places",
+    "groupCountries": "Countries",
+    "groupPages": "Pages",
+    "resultsNone": "No result.",
+    "resultsOne": "1 result.",
+    "resultsMany": "{count} results."
+  },
   "purpose": {
     "heading": "What this journal is after",
     "body": "I travel, and I write down what I keep of it: the stops in the order they happened, the dates, the photographs, and what a place did to me. Not a guide, not a ranking — a journal, kept so that a trip can be read whole rather than in fragments.",

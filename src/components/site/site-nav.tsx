@@ -4,6 +4,9 @@ import { localePathname } from "@/i18n/pathname";
 import { aboutPath, placesPath, tripsPath } from "@/i18n/paths";
 import { locales } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
+import type { SearchEntry } from "@/components/search/entries";
+import { SearchIndex } from "@/components/search/search-index";
+import { SiteSearch } from "@/components/search/site-search";
 import { SiteBrand } from "./site-brand";
 import styles from "./site-nav.module.css";
 
@@ -158,8 +161,22 @@ const FLAG: Readonly<Record<Locale, ReactElement>> = {
  * > the accessibility tree, which is what `aria-current` is for and why this
  * > paragraph is still here rather than deleted.
  */
-export function SiteNav({ locale }: { readonly locale: Locale }): ReactElement {
+export type SiteNavProps = {
+  readonly locale: Locale;
+  /**
+   * The search index, built by the layout — see its note for why `loadTrips()`.
+   *
+   * A prop and not a call here: this component is synchronous (`useTranslations`
+   * needs it to be, and an `async` component cannot be rendered by Testing
+   * Library at all), and the content façade is `async`. The layout is already the
+   * place that awaits it.
+   */
+  readonly searchEntries: readonly SearchEntry[];
+};
+
+export function SiteNav({ locale, searchEntries }: SiteNavProps): ReactElement {
   const t = useTranslations("trips");
+  const s = useTranslations("search");
 
   return (
     /*
@@ -284,7 +301,61 @@ export function SiteNav({ locale }: { readonly locale: Locale }): ReactElement {
             </li>
           </ul>
         </nav>
+
         {/*
+          **The right-hand end of the bar: the search, then the language menu.**
+
+          One box for the two, and it is not tidiness. `.inner` is a three-column
+          grid — `mark | links | language` — whose middle column is what puts the
+          nav on the page's centre line; adding a fourth child would have given
+          the search a column of its own and moved that centre. Measured before it
+          was one box: the panel opened under the *lock-up*, because an unnamed
+          grid item takes the next free cell and the first column is empty by
+          design.
+        */}
+        <div className={styles.chromeEnd}>
+          {/*
+          **The search, and it sits before the language menu.**
+          After the nav in the DOM because that is the reading order a reader
+          expects: the four destinations first, then the way to find a fifth.
+
+          The panel's rows are rendered HERE, by the server, and handed to the
+          client component as children — `./search-index.tsx` and the header of
+          `../search/site-search.tsx` say why that is the whole design rather
+          than a detail. The consequence to know: the index is in the HTML of
+          every document, because the chrome is.
+
+          The three plural forms are resolved on the server, one string each,
+          rather than an ICU pattern crossing the boundary. The component
+          substitutes `{count}` in the third and does no plural arithmetic of its
+          own: plural rules belong to the language, and next-intl already owns
+          them here. Same move as the map's `zoomValue`.
+        */}
+        <SiteSearch
+          labels={{
+            open: s("open"),
+            field: s("field"),
+            placeholder: s("placeholder"),
+            resultsNone: s("resultsNone"),
+            resultsOne: s("resultsOne"),
+            resultsMany: s("resultsMany"),
+          }}
+        >
+          <SearchIndex
+            entries={searchEntries}
+            labels={{
+              listLabel: s("listLabel"),
+              groups: {
+                trips: s("groupTrips"),
+                places: s("groupPlaces"),
+                countries: s("groupCountries"),
+                pages: s("groupPages"),
+              },
+            }}
+          />
+          </SiteSearch>
+
+          {/*
           **The language menu, and it switches for real now** (TIW-38).
           `src/i18n/routing.ts` declares three locales and each has a catalogue, so
           the three entries below are three live routes rather than the one link
@@ -393,6 +464,7 @@ export function SiteNav({ locale }: { readonly locale: Locale }): ReactElement {
             <p className={styles.languageNote}>{t("languageNote")}</p>
           </div>
         </details>
+        </div>
       </div>
     </header>
   );

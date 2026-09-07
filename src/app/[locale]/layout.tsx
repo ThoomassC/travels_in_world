@@ -3,11 +3,15 @@ import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { buildSearchEntries } from "@/components/search/entries";
+import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { JournalNotice } from "@/components/site/journal-notice";
 import { PaperGrain } from "@/components/site/paper-grain";
 import { SiteNav } from "@/components/site/site-nav";
-import { listTripSummaries } from "@/content/trips";
+import { listTripSummaries, loadTrips } from "@/content/trips";
 import { holdsNoStory } from "@/domain/trip";
+import { localePathname } from "@/i18n/pathname";
+import { aboutPath, placesPath, tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import "@/styles/tokens.css";
 import { shareMetadata } from "../share";
@@ -123,6 +127,54 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
    */
   const noRecitYet = holdsNoStory(await listTripSummaries());
 
+  /**
+   * **The search index, built once per document and rendered as markup.**
+   *
+   * `loadTrips()` and not `listTripSummaries()`, which is the one unusual call
+   * added here. The summary carries the countries and a single `firstArrival`;
+   * the full list of a trip's places, its tags and its photographs' alt text —
+   * the only free text a récit owns — live on the detail alone. The façade
+   * memoises its parse for the whole build and both doors project from the same
+   * parsed trips, so this is a second projection and never a second read of the
+   * disk. `src/app/[locale]/villes/page.tsx` records the same trade for the same
+   * reason.
+   *
+   * **Built in the layout because the search lives in the chrome**, and the
+   * chrome is on every route. Two consequences worth stating rather than
+   * discovering: the index lands in the HTML of every document — measured in this
+   * ticket's report, and `tests/build/prerender.test.ts` is what caps it — and
+   * every page pays the projection, which is arithmetic over already-parsed
+   * objects.
+   *
+   * The naming and the collation come from the listing's own helpers, so a
+   * country reads the same here, on `/voyages`, on `/villes` and under the map,
+   * and so `buildSearchEntries` stays a pure function that knows no locale.
+   */
+  const searchEntries = buildSearchEntries({
+    trips: await loadTrips(),
+    labels: {
+      countryName: (code) => countryNameOf(locale, code),
+      compare: collatorFor(locale).compare,
+    },
+    tripHref: (slug) => localePathname({ href: tripPath(slug), locale }),
+    /*
+      An untold trip has no page — `tripStaticParams` never built one — so its row
+      addresses its entry in the listing instead. The same branch the map's
+      markers take, and for the same reason: a row pointing at a 404 would be in
+      the suggestions of every document on the site.
+    */
+    tripEntryHref: (slug) =>
+      localePathname({ href: `${tripsPath()}#voyage-${slug}`, locale }),
+    countriesHref: localePathname({ href: tripsPath(), locale }),
+    placesHref: localePathname({ href: placesPath(), locale }),
+    pages: [
+      { label: t("navMap"), href: localePathname({ href: "/", locale }) },
+      { label: t("navCountries"), href: localePathname({ href: tripsPath(), locale }) },
+      { label: t("navPlaces"), href: localePathname({ href: placesPath(), locale }) },
+      { label: t("navAbout"), href: localePathname({ href: aboutPath(), locale }) },
+    ],
+  });
+
   return (
     <html lang={locale}>
       <body>
@@ -179,7 +231,7 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
             subtree as the pages means one place decides what "the current locale"
             is.
           */}
-          <SiteNav locale={locale} />
+          <SiteNav locale={locale} searchEntries={searchEntries} />
           {/*
             The journal-state notice (TIW-35), and its three positions in this file
             are each a decision.

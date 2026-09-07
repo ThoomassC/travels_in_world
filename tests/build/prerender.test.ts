@@ -305,6 +305,64 @@ describe.each(DOCUMENT_ROUTES)("the %s payload stays within budget", (route) => 
 });
 
 /**
+ * **THE SEARCH INDEX IS IN EVERY DOCUMENT, AND THIS IS WHAT SAYS WHEN IT MUST
+ * STOP BEING.**
+ *
+ * The header's search renders its rows as markup rather than serialising them as
+ * props — `src/components/search/site-search.tsx` argues why, and the short
+ * version is that the obvious design pays for the index twice. The cost of the
+ * design that was chosen is that the index lands in the HTML of every route,
+ * because the chrome is on every route.
+ *
+ * Measured on the real content, 13 trips: **11.7 KiB of markup, 36 rows**, which
+ * takes a content page from 7.7 to 10.0 KiB brotli. That is affordable against
+ * the 100 KiB ceiling above and it is **linear in the content** — sixty trips is
+ * roughly a hundred rows and 32 KiB of markup, and nothing in the design notices.
+ *
+ * So the ceiling is here rather than in a comment asking someone to keep an eye
+ * on it. The escape route is priced with it: past this size the index becomes a
+ * committed JSON file the panel fetches on first focus. That costs a request, a
+ * failure mode and a file to keep in step with the content — which is exactly
+ * why it is not the design today, and exactly what the extra weight would buy.
+ *
+ * The check reads a *document* and not the component, because what matters is the
+ * bytes a reader downloads, and a route that stopped rendering the search at all
+ * would pass a component test and fail this one.
+ */
+const SEARCH_INDEX_BUDGET_BYTES = 24 * KB;
+
+describe("the search index stays small enough to live in the document", () => {
+  it("is present, and no larger than its budget", () => {
+    /**
+     * `/fr/a-propos` rather than `/fr`: the home page's HTML is dominated by the
+     * basemap's 182 KiB of paths, so an index that doubled would still be noise
+     * there. On a content page the index is a visible fraction of the document,
+     * which is the number worth watching.
+     */
+    const html = documentHtml("/fr/a-propos");
+    const start = html.indexOf('<details class="site-search');
+    const end = html.indexOf("</details>", start);
+
+    // Guards the guard: a selector that stopped matching would measure 0 bytes
+    // and pass for ever.
+    expect(start, "the search is not in the document at all").toBeGreaterThan(-1);
+    expect(html.slice(start, end).match(/data-haystack=/g) ?? []).not.toHaveLength(0);
+
+    expect(end - start).toBeLessThan(SEARCH_INDEX_BUDGET_BYTES);
+  });
+
+  it("carries one row per destination, and no duplicates", () => {
+    const html = documentHtml("/fr/a-propos");
+    const ids = [...html.matchAll(/<li id="(q-[a-z]-[^"]+)"/g)].map((match) => match[1]);
+
+    // `aria`-less rows would still render; what must hold is that the ids the
+    // panel keys on are unique, since a duplicate id makes one row unreachable.
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.length).toBeGreaterThan(4);
+  });
+});
+
+/**
  * THE TIW-28 GUARD, and the reason it fingerprints bytes instead of counting
  * them.
  *

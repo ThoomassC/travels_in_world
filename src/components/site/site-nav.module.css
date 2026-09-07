@@ -126,17 +126,37 @@
    *
    * A disc hard against the window's edge reads as deliberate: it is a shape,
    * and its own curve is the margin. A wordmark hard against the edge reads as
-   * broken — measured on a production build, "Travels" started at x = 0. The
-   * padding is `--space-5`, the same gutter `.inner` gives the measure, so the
-   * mark's left edge and the language menu's right edge sit at the same distance
-   * from the window.
+   * broken — measured on a production build, "Travels" started at x = 0.
+   *
+   * **It aligns with the MEASURE and not with the window**, at the owner's
+   * request to move it right, and the expression is what makes that a rule rather
+   * than a nudge. `.inner` centres a `--content-max-width` box and pads it by
+   * `--space-5`, so its content begins at `(100% - measure) / 2 + space-5`; the
+   * same arithmetic here puts the lock-up's left edge on the same vertical as the
+   * page's first column, and on the same vertical as the language menu's right
+   * edge at the other end. Measured at 1280 px: 88 px, where the flag sits 88 px
+   * from the right.
+   *
+   * `max()` is the narrow case, not a flourish: below the measure the first term
+   * goes negative, and without the floor the mark would slide under the window's
+   * left edge. There it falls back to the plain gutter, which is what `.inner`
+   * does too.
+   *
+   * The zone stays OUTSIDE `.inner` even though they now agree on where the mark
+   * starts. Folding it in would put the lock-up in the same flex row as the nav
+   * and the language menu, and the nav is centred on the *window* — the note on
+   * `.inner` records that a `margin-inline: auto` there cost 400 px of drift once.
+   * Two boxes in one grid cell keeps the two alignments independent.
    *
    * `align-self: center` and no longer `start`: the reason for `start` was that
    * the medallion was taller than the bar and had to hang DOWNWARD only. Nothing
    * overflows the bar any more, so centring is what puts the lock-up on the bar's
    * own axis instead of against its top edge.
    */
-  padding-inline-start: var(--space-5);
+  padding-inline-start: max(
+    var(--space-5),
+    calc((100% - var(--content-max-width)) / 2 + var(--space-5))
+  );
 }
 
 .inner {
@@ -339,10 +359,28 @@
  * `position: relative` so the panel can hang from it; the panel is the only thing
  * on this bar that leaves the bar, and `.bar` already never clips.
  */
-.language {
+/**
+ * **The right-hand end of the bar**, holding the search and the language menu.
+ *
+ * One grid item for the two, because `.inner`'s middle column is what puts the
+ * nav on the page's centre line and a fourth child would have moved it. Measured
+ * before this box existed: an unnamed grid item takes the next free cell, the
+ * first column is empty by design, and the search's panel opened under the
+ * lock-up.
+ *
+ * `justify-self: end` puts the pair against the measure's right edge, where the
+ * language menu already was; the search simply arrives to its left.
+ */
+.chromeEnd {
   grid-area: language;
-  position: relative;
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.language {
+  position: relative;
 }
 
 /**
