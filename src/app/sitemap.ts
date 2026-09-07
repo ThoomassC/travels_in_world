@@ -31,14 +31,28 @@ import { absoluteUrl } from "./site-url";
  */
 
 /**
- * A page's absolute URL in every active locale, with the `hreflang` alternates
- * that a multilingual sitemap needs — and without them while there is one locale.
+ * A page's absolute URL in every active locale, each carrying the `hreflang`
+ * alternates that a multilingual sitemap needs.
  *
- * The alternates are emitted only from the second locale on. With one active
- * locale the block would be `<xhtml:link hreflang="fr" href="…"/>` next to the very
- * `<loc>` it points at, which says nothing and adds a line per URL. The shape is
- * already right for the day `en` is activated: `routing.locales` grows and this
- * function starts emitting pairs, with no diff here.
+ * **One `<url>` entry per locale, each listing all three plus `x-default`**, and
+ * that repetition is the format rather than an oversight: the sitemap protocol
+ * asks every localised version to be listed as its own `<loc>` and to name the
+ * whole set beside it, so a crawler reaching any one of them learns about the
+ * others. Naming only the default would leave `/en/...` looking like a page
+ * competing with `/fr/...` for the same subject.
+ *
+ * This function used to skip the alternates entirely while `fr` was the only
+ * active locale — a block reading `<xhtml:link hreflang="fr" href="…"/>` beside
+ * the very `<loc>` it points at says nothing and costs a line per URL. That
+ * branch is gone rather than kept as dead code: three locales are declared, and
+ * `src/i18n/routing.ts` is what decides it.
+ *
+ * `x-default` names the default locale's URL, for the same reason
+ * `src/app/share.ts` does in the document head — `/` redirects to `/fr` and there
+ * is no `Accept-Language` negotiation, so that IS the address for a reader we
+ * have no better answer for. The two files build the same set, one absolute and
+ * one relative; `tests/build/durable-urls.test.ts` holds the sitemap's `<loc>`
+ * list and the prerendered pages to each other in both directions.
  */
 function localisedEntry(
   path: string,
@@ -48,15 +62,15 @@ function localisedEntry(
     routing.locales.map((locale) => [locale, absoluteUrl(localePathname({ href: path, locale }))])
   );
 
-  const alternates =
-    routing.locales.length > 1
-      ? { languages: Object.fromEntries(byLocale) as Record<string, string> }
-      : undefined;
+  const languages: Record<string, string> = {
+    ...Object.fromEntries(byLocale),
+    "x-default": absoluteUrl(localePathname({ href: path, locale: routing.defaultLocale })),
+  };
 
   return [...byLocale.values()].map((url) => ({
     url,
     ...(lastModified === undefined ? {} : { lastModified }),
-    ...(alternates === undefined ? {} : { alternates }),
+    alternates: { languages },
   }));
 }
 

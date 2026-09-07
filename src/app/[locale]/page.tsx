@@ -13,6 +13,8 @@ import {
 } from "@/components/map";
 import { FreshTripBanner } from "@/components/trips/fresh-trip-banner";
 import { collatorFor, countryNameOf } from "@/components/trips/format";
+import { ProjectPurpose } from "@/components/site/project-purpose";
+import { PAGE_MARK } from "@/components/site/site-nav";
 import { LatestTrips } from "@/components/trips/latest-trips";
 import { TripCard } from "@/components/trips/trip-card";
 import { listTripSummaries } from "@/content/trips";
@@ -230,13 +232,41 @@ export default async function HomePage({ params }: HomePageProps) {
       next Tab continues from the top of the page and the reader has skipped
       nothing. The `id` comes from `./main-content` because the link lives in the
       layout and the `<main>` lives here, one per document.
-    */
-    <main id={MAIN_CONTENT_ID} tabIndex={-1}>
-      <section className={styles.hero}>
-        <h1 className={styles.title}>{t("title")}</h1>
-        <p className={styles.intro}>{t("intro")}</p>
 
-        {/*
+      `data-page` is how the header knows which entry to underline (TIW-38). It is
+      read by `site-nav.module.css` through `body:has(main[data-page="carte"])`,
+      backwards, in CSS — which is what lets a nav rendered by the LAYOUT mark the
+      current page without a client component, a prop threaded through every route
+      or a request read. It carries nothing to assistive technology; `SiteNav`'s
+      header says why `aria-current="page"` is still absent and what names this
+      page instead.
+    */
+    <main id={MAIN_CONTENT_ID} tabIndex={-1} data-page={PAGE_MARK.map}>
+      {/*
+        **The title is announced and never drawn** (TIW-38, at the owner's
+        request), and the introduction is gone entirely.
+
+        The `<h1>` is HIDDEN and not deleted, and that is not the same decision
+        twice. A document with no `<h1>` has no heading outline — every other page
+        of this site has one, `tests/e2e` checks the outline of the four screens,
+        and a search result would lose the only thing naming this page. Hiding it
+        costs the composition nothing and keeps all three.
+
+        The introduction had no such job, so it is removed rather than hidden: a
+        paragraph only a screen reader receives is a paragraph nobody decided to
+        write for a screen reader. The message key went with it.
+
+        **And the `<section>` that used to wrap these is gone too**, which is what
+        actually lets the map fill the screen. It was a grid row of zero height —
+        its only remaining child is absolutely positioned — but a row of zero
+        height still takes a `row-gap`, so the map started 24 px lower than the
+        arithmetic below expected and its last degrees of latitude fell under the
+        fold. A wrapper that contains nothing laid out is a wrapper that only
+        costs.
+      */}
+      <h1 className={styles.visuallyHidden}>{t("title")}</h1>
+
+      {/*
           The banner (TIW-19), and it is here — above the map, below the
           introduction — for the acceptance criterion's reason: a returning
           reader must see what is new *before* deciding where to look. It is
@@ -248,15 +278,24 @@ export default async function HomePage({ params }: HomePageProps) {
           and not an optional, so the empty state is this branch and cannot be a
           component quietly returning `null`.
         */}
-        {fresh === undefined ? null : <FreshTripBanner trip={fresh} locale={locale} />}
+      {fresh === undefined ? null : <FreshTripBanner trip={fresh} locale={locale} />}
 
-        {/*
-          No wrapper any more: the height cap that used to live in this page's
-          `.mapFrame` moved into the map's own stylesheet with TIW-14. The map now
-          owns a panel and three controls as well as a drawing, so its box is its
-          own business — and this page no longer computes a ratio for a stylesheet
-          it does not own.
-        */}
+      {/*
+        **The map, on the wide track** (TIW-38). It is a direct child of `<main>`
+        so `[data-bleed]` can reach it: `grid-column` is a property of a grid
+        ITEM, so a map nested one level deeper would have been laid out by the
+        section and never by the page.
+
+        That is also why `VisitedCountries` below is a sibling now rather than the
+        map's neighbour inside a wrapper — the reading order the criterion asks for
+        ("sous la carte") is unchanged, and each of the three blocks now sits on
+        the track it belongs to.
+
+        A wrapper and not the attribute on the `<figure>` itself: `WorldMap` owns
+        its own root element and takes no `className`, and widening its props so a
+        page can dress it is the coupling ADR 0003 keeps out of that layer.
+      */}
+      <div data-bleed>
         <WorldMap
           countries={world.countries}
           visited={toldCountries}
@@ -265,8 +304,16 @@ export default async function HomePage({ params }: HomePageProps) {
           world={{ width: world.width, height: world.height }}
           tripCards={tripCards}
         />
+      </div>
 
-        {/*
+      {/*
+          No wrapper any more: the height cap that used to live in this page's
+          `.mapFrame` moved into the map's own stylesheet with TIW-14. The map now
+          owns a panel and three controls as well as a drawing, so its box is its
+          own business — and this page no longer computes a ratio for a stylesheet
+          it does not own.
+        */}
+      {/*
           The map's textual equivalent (TIW-15), and it sits *outside* the map's
           own box on purpose. The map caps itself at `45vh × aspect` — about
           691 px on a 1152 px desktop — so a list rendered inside it would be a
@@ -290,18 +337,25 @@ export default async function HomePage({ params }: HomePageProps) {
           country reads the same here and on `/fr/voyages`, and this page stays
           the one place that holds both façades.
         */}
-        <VisitedCountries
-          trips={trips}
-          labels={{
-            countryName: (code) => countryNameOf(locale, code),
-            compare: collatorFor(locale).compare,
-          }}
-          tripHref={(slug) => localePathname({ href: tripPath(slug), locale })}
-          allTripsHref={localePathname({ href: tripsPath(), locale })}
-        />
-      </section>
+      <VisitedCountries
+        trips={trips}
+        labels={{
+          countryName: (code) => countryNameOf(locale, code),
+          compare: collatorFor(locale).compare,
+        }}
+        tripHref={(slug) => localePathname({ href: tripPath(slug), locale })}
+        allTripsHref={localePathname({ href: tripsPath(), locale })}
+      />
 
       <LatestTrips trips={trips} locale={locale} freshSlug={fresh?.slug} />
+
+      {/*
+        Last on the page (TIW-38), which is the whole of its placement argument:
+        a reader meets the map, then the trips, and only then the person who
+        writes them. Putting it above the trips would make the home page an
+        introduction to someone rather than a way into a journal.
+      */}
+      <ProjectPurpose />
     </main>
   );
 }

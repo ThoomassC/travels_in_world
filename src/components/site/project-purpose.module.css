@@ -1,0 +1,97 @@
+/* =============================================================================
+   "Ce que ce carnet cherche à faire" — the block that closes the home page.
+
+   Only tokens from `src/styles/tokens.css`. No colour is declared here, which is
+   what keeps the dark theme working without this file knowing it exists.
+   ============================================================================ */
+
+/**
+ * Text on the left, portrait on the right — and it collapses to one column
+ * before the text gets too narrow to read rather than at a device width.
+ *
+ * `auto` on the second track and not a fraction: the circle has a fixed size, so
+ * a fractional track would make it grow with the page and turn a portrait into a
+ * poster. The text takes everything that is left, and `minmax(0, 1fr)` lets it
+ * actually shrink — a bare `1fr` has an `auto` minimum, so a long word would push
+ * the circle off the page.
+ */
+.purpose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-7);
+  padding-block-start: var(--section-space);
+  /* The only rule above it, and it is what says "a different kind of thing starts
+     here" after a list of trips. `--rule` is the shared sheet's token for exactly
+     this: a separator, not a component boundary. */
+  border-block-start: 1px solid var(--rule);
+}
+
+/**
+ * 44rem is where the measure runs out, not where a phone starts: below it the
+ * text column would be under ~34 characters beside a 12.5 rem circle, which is a
+ * newspaper column, not a paragraph.
+ */
+@media (max-width: 44rem) {
+  .purpose {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: var(--space-5);
+    text-align: center;
+  }
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.heading {
+  font-size: var(--text-xl);
+}
+
+.body {
+  color: var(--text-body);
+  /* A measure, not a width. Past ~70 characters a line loses its reader between
+     the end of one and the start of the next; `--measure` is the shared sheet's
+     value for that, and this is the first thing in the project to use it. */
+  max-width: var(--measure);
+}
+
+.portrait {
+  margin: 0;
+}
+
+/**
+ * The circle.
+ *
+ * `--radius-pill` rather than `50%`: the shared sheet's four radii are the whole
+ * shape language, and 999px on a square is a circle. `object-fit: cover` because
+ * the file is already square — the rule is the backstop for the day someone
+ * replaces it with a rectangle, so the frame stays round instead of the face
+ * stretching.
+ *
+ * The size is off the spacing scale on purpose, and it is one of the three
+ * exceptions the scale allows: a portrait is a picture, not a gap. 12.5rem = 200
+ * px at the root size, and the files are 480 px so it stays sharp at 2x.
+ *
+ * `--elevation-1` is the first use of the shared sheet's elevation scale in this
+ * project, and it earns itself here: the circle sits on the page's own ground
+ * with no border of its own, so without a shadow it reads as a hole rather than
+ * as an object on the paper.
+ */
+.photo {
+  display: block;
+  inline-size: 12.5rem;
+  block-size: 12.5rem;
+  /* Overrides the `img { height: auto }` of the global base: the circle is a
+     fixed square, not a box deriving its height from the file's ratio. */
+  max-inline-size: none;
+  border-radius: var(--radius-pill);
+  object-fit: cover;
+  box-shadow: var(--elevation-1);
+  /* The photograph is opaque, so this only shows while it loads — but it shows in
+     the right shape, which is what stops the block flashing a square. */
+  background: var(--panel-surface);
+}

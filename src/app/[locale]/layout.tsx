@@ -4,10 +4,10 @@ import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { JournalNotice } from "@/components/site/journal-notice";
+import { PaperGrain } from "@/components/site/paper-grain";
 import { SiteNav } from "@/components/site/site-nav";
 import { listTripSummaries } from "@/content/trips";
 import { holdsNoStory } from "@/domain/trip";
-import { localePathname } from "@/i18n/pathname";
 import { routing } from "@/i18n/routing";
 import "@/styles/tokens.css";
 import { shareMetadata } from "../share";
@@ -67,7 +67,7 @@ export async function generateMetadata({
     metadataBase: SITE_URL,
     ...shareMetadata({
       locale,
-      path: localePathname({ href: "/", locale }),
+      href: "/",
       title: siteName,
       description: t("description"),
       siteName,
@@ -126,6 +126,14 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
   return (
     <html lang={locale}>
       <body>
+        {/*
+          The grain (TIW-38). First in the document and `position: fixed` behind
+          everything, so it is one paint under the whole site rather than a
+          background each block has to remember. It is `aria-hidden` decoration
+          with nothing focusable in it, so it does not disturb the tab order the
+          note below describes — the skip link is still the first focusable thing.
+        */}
+        <PaperGrain />
         {/*
           The skip link, and it is the first focusable thing in the document
           because that is the entirety of what it does.

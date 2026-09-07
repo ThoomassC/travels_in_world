@@ -290,7 +290,7 @@ export async function generateMetadata({ params }: TripPageProps): Promise<Metad
      */
     return shareMetadata({
       locale,
-      path: localePathname({ href: tripPath(state.slug), locale }),
+      href: tripPath(state.slug),
       title: gone("metaTitle"),
       description: gone("metaDescription"),
       siteName: site("title"),
@@ -311,7 +311,7 @@ export async function generateMetadata({ params }: TripPageProps): Promise<Metad
      * string today, and that is the point of stating it: the day the two can
      * differ, this line is what keeps one address canonical instead of two.
      */
-    path: localePathname({ href: tripPath(trip.slug), locale }),
+    href: tripPath(trip.slug),
     title: trip.title,
     description: t("metaDescription", {
       title: trip.title,

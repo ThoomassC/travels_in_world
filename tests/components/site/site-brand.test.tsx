@@ -152,15 +152,25 @@ describe("the header carries both the brand and the nav", () => {
   it("offers exactly one way home per role it plays", () => {
     renderBrand(<SiteNav locale={defaultLocale} />);
 
-    // Two links to `/fr` — the logo and "Carte" — and that is deliberate rather
-    // than a duplicate: they have different accessible names and answer different
-    // questions ("take me home" / "show me the map"). Pinned so that removing
-    // either becomes a decision instead of an accident.
+    /**
+     * Three links to `/fr` — the logo, "Carte", and "Français" in the language
+     * menu — and that is deliberate rather than a duplicate: each has a different
+     * accessible name and answers a different question ("take me home" / "show me
+     * the map" / "read this site in French"). Pinned so that removing any of them
+     * becomes a decision instead of an accident.
+     *
+     * It was two until TIW-38 gave the header a real language menu. The third is
+     * the one that is arguably a duplicate and is not: `localePathname` can only
+     * build the locale's HOME page, because this component is rendered by the
+     * layout and does not know the current path — `SiteNav`'s comment on the menu
+     * states that limitation rather than hiding it, and this count is where it
+     * shows.
+     */
     const home = screen
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href") === `/${defaultLocale}`);
 
-    expect(home).toHaveLength(2);
+    expect(home).toHaveLength(3);
   });
 
   it("carries the colophon on every page, because the layout renders this nav", () => {

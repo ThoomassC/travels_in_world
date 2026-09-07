@@ -197,36 +197,16 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
   expect(journey[0]?.text).toBe(frMessages.trips.skipToContent);
 
   /**
-   * 2a. TIW-14's three zoom controls come BEFORE the markers, and that ordering
-   * is a deliberate decision rather than an accident of the DOM: with sixty
+   * 2a. **There are no controls in the journey any anymore** (TIW-38). The three
+   * zoom buttons used to come BEFORE the markers, deliberately: with sixty
    * published trips, controls placed after the marker list would be sixty tab
-   * stops away, so a reader on a keyboard would have to walk the whole map to
-   * reach the button that makes the map smaller. They are rendered first and
-   * positioned over the map's corner by CSS.
+   * stops away. They are gone, so the assertion that survives is that none came
+   * back unannounced — a control reappearing after the markers would be the exact
+   * regression that ordering existed to prevent, and nothing else in this suite
+   * looks at the sequence.
    */
   const controlStops = journey.filter((stop) => stop.isControl);
-  expect(controlStops).toHaveLength(3);
-  /**
-   * `endsWith` and not equality: a control's text node is its visible glyph
-   * followed by its visually hidden name — "+Zoomer sur la carte" — which is the
-   * shape the markers use too (a dot, then real text). The glyph is deliberately
-   * not asserted here; it is a rendering choice, and the name is the contract.
-   */
-  expect(controlStops.map((stop) => stop.text.endsWith(frMessages.map.zoomIn))).toEqual([
-    true,
-    false,
-    false,
-  ]);
-  expect(controlStops.map((stop) => stop.text.endsWith(frMessages.map.zoomOut))).toEqual([
-    false,
-    true,
-    false,
-  ]);
-  expect(controlStops.map((stop) => stop.text.endsWith(frMessages.map.zoomReset))).toEqual([
-    false,
-    false,
-    true,
-  ]);
+  expect(controlStops).toHaveLength(0);
 
   // 2b. Then the map's five markers, one per trip the journal holds — the untold
   // one included, since it is a real link like the others (TIW-18).

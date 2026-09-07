@@ -86,6 +86,28 @@
 }
 
 .image {
+  /**
+   * **The browser's own image drag is switched off, and it is a swipe bug rather
+   * than a preference.**
+   *
+   * An `<img>` is draggable by default. Press on this photograph and move, and
+   * Chrome starts a native drag-and-drop: it fires `dragstart`, then
+   * `pointercancel`, and the swipe handler in `./photo-lightbox.tsx` never sees
+   * the gesture it was waiting for — the reader gets a ghost thumbnail stuck to
+   * the cursor instead of the next photo.
+   *
+   * It went unnoticed because it only bites where the pointer lands **on the
+   * photograph**: while the image was letterboxed inside its frame, a drag begun
+   * near the edge started on the frame's own background and worked. Measured on
+   * this branch, in Chromium, with the events logged: `dragstart:IMG` followed by
+   * `pointercancel:IMG`, and the counter still reading "Photo 1 sur 3".
+   *
+   * `user-drag` and not `draggable={false}` in the markup: the same rule has to
+   * hold for the `<picture>`'s sources, and this is a presentational refusal
+   * rather than a fact about the element.
+   */
+  -webkit-user-drag: none;
+  user-select: none;
   /* `contain`, never `cover`: this is the one place the whole photograph must be
      visible, crop included — the reader opened it to see it. */
   object-fit: contain;

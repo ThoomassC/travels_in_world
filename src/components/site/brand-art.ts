@@ -28,7 +28,7 @@
  * ever an ink/accent edge: the comet is a single connected mass of `--logo-ink`,
  * the trajectory is a dotted rule of `--logo-accent`, and the two are separated
  * by ~7 units of bare background. Each reads against the page
- * (ink 10.28:1 light / 12.01:1 dark, accent 6.60:1 / 8.30:1), never against the
+ * (ink 8.97:1 light / 10.28:1 dark, accent 5.76:1 / 7.10:1), never against the
  * other. Merge them and the mark becomes one flat silhouette.
  *
  * The constraint got *tighter* with the shared palette, not looser: the two

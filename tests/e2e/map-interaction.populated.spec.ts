@@ -56,8 +56,17 @@ const viewBox = async (page: Page): Promise<readonly number[]> => {
 
 const frameWidth = async (page: Page): Promise<number> => (await viewBox(page))[2] ?? Number.NaN;
 
-const control = (page: Page, name: string): Locator =>
-  page.locator(MAP).getByRole("button", { name });
+/**
+ * `Ctrl` + wheel over a point of the drawing — the only zoom left since TIW-38
+ * removed the three buttons. `fx`/`fy` place the pointer, because the zoom is
+ * towards the cursor and several cases depend on where it was.
+ */
+async function wheelZoom(page: Page, notches: number, fx = 0.5, fy = 0.5): Promise<void> {
+  await pointAt(page, fx, fy);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, notches);
+  await page.keyboard.up("Control");
+}
 
 /**
  * The pointer surface. NOT the `<svg>`, which carries `pointer-events: none` by
@@ -433,24 +442,24 @@ test.describe("the tooltip", () => {
 });
 
 test.describe("zoom and pan", () => {
-  test("the buttons zoom, the reset goes back, and the frame never leaves the world", async ({
-    page,
-  }) => {
+  test("the wheel zooms, and the frame never leaves the world", async ({ page }) => {
+    /**
+     * Was "the buttons zoom, the reset goes back, …" until TIW-38 removed the
+     * three controls. The reset went with them and there is no assertion standing
+     * in for it: nothing restores the initial frame any more, and pretending
+     * otherwise here would be the test lying about the product.
+     */
     await page.goto("/fr");
     const initial = await viewBox(page);
 
-    await control(page, frMessages.map.zoomIn).click();
-    expect(await frameWidth(page)).toBeLessThan(initial[2] ?? 0);
+    await wheelZoom(page, -240);
+    await expect.poll(async () => frameWidth(page)).toBeLessThan(initial[2] ?? 0);
 
-    await control(page, frMessages.map.zoomOut).click();
-    await control(page, frMessages.map.zoomOut).click();
+    await wheelZoom(page, 480);
     const wide = await viewBox(page);
     expect(wide[0] ?? -1).toBeGreaterThanOrEqual(0);
     expect((wide[0] ?? 0) + (wide[2] ?? 0)).toBeLessThanOrEqual(960.05);
     expect((wide[1] ?? 0) + (wide[3] ?? 0)).toBeLessThanOrEqual(500.05);
-
-    await control(page, frMessages.map.zoomReset).click();
-    expect(await viewBox(page)).toEqual(initial);
   });
 
   test("a marker stays on the country it names at every zoom level", async ({ page }) => {
@@ -503,14 +512,11 @@ test.describe("zoom and pan", () => {
         };
       });
 
-    for (const step of [
-      null,
-      frMessages.map.zoomIn,
-      frMessages.map.zoomIn,
-      frMessages.map.zoomOut,
-    ]) {
-      if (step !== null) {
-        await control(page, step).click();
+    // Four levels, driven by the wheel since TIW-38: the initial frame, two
+    // notches in, then one back out.
+    for (const notches of [0, -240, -240, 240]) {
+      if (notches !== 0) {
+        await wheelZoom(page, notches);
       }
       const measured = await drift();
       expect(measured).not.toBeNull();
@@ -520,6 +526,177 @@ test.describe("zoom and pan", () => {
       expect(measured?.ratio ?? 0).toBeCloseTo(measured?.frameRatio ?? -1, 1);
     }
   });
+
+  /**
+   * The same property as the test above, at the widths where it actually breaks.
+   *
+   * **Why the test above never saw it.** Both Playwright configs declare a single
+   * project, `devices["Desktop Chrome"]` — 1280 x 720. At that size the height
+   * `.canvas` asks for (`100dvh` less the chrome and the two block paddings) is
+   * short enough that the width the ratio derives from it fits in the viewport,
+   * so `max-inline-size: 100%` never clips anything and `aspect-ratio` is honoured.
+   * Narrow the viewport and that stops being true — and the CSS then asks for
+   * three incompatible things at once:
+   *
+   *     aspect-ratio: var(--frame-w) / var(--frame-h);
+   *     block-size: calc(100dvh - ...);   inline-size: auto;   max-inline-size: 100%;
+   *
+   * When `max-inline-size` clips the `auto` width, the browser **drops
+   * `aspect-ratio`** rather than reducing the height with it. The box keeps the
+   * full `dvh` height with a clipped width, the `<svg>` — which has no
+   * `preserveAspectRatio` attribute, so `xMidYMid meet` — draws its frame
+   * centred inside that box with empty bands above and below, and the markers,
+   * being HTML positioned in percentages of the **box** (`.mark`, this file's
+   * `--mark-*`/`--frame-*` arithmetic), follow the box rather than the drawing.
+   * Every one of them slides off the country it names.
+   *
+   * The invariant is written three times in the repository — `docs/adr/0003`, the
+   * header of `frameAround` in `src/components/map/frame.ts`, and the `.canvas`
+   * rule itself — and none of the three was executable at a phone's width until
+   * this test. `page.setViewportSize` is enough: no second Playwright project,
+   * so the rest of the suite keeps running once against one build.
+   */
+  const NARROW_VIEWPORTS = [
+    // The phone the ticket's manual checks use, and the size the `touch` block
+    // at the bottom of this file already runs at.
+    { label: "390 x 844", width: 390, height: 844 },
+    // The floor this file already keeps for the tooltip's overflow, at the same
+    // height, so a failure here means the width and not a second variable.
+    { label: "320 x 844", width: 320, height: 844 },
+  ] as const;
+
+  for (const viewport of NARROW_VIEWPORTS) {
+    test(`the canvas keeps the frame's exact ratio at ${viewport.label}, so no marker leaves the drawing`, async ({
+      page,
+    }) => {
+      // The viewport before the navigation: `block-size` is a `dvh` calculation,
+      // so the box is a function of the window and resizing after the paint would
+      // measure a relayout rather than the rendering a reader gets.
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto("/fr");
+      await expect(page.locator(`${MAP} svg`)).toBeVisible();
+
+      const measured = await page.evaluate(() => {
+        const svg = document.querySelector("figure svg");
+        const canvas = svg?.parentElement;
+        if (!(svg instanceof SVGSVGElement) || canvas === null || canvas === undefined) {
+          return null;
+        }
+
+        /**
+         * Same reading as the test above — `--frame-*` on the canvas, `--mark-*`
+         * on each marker's own `<li>`, because custom properties inherit DOWN and
+         * reading both from one element gives `Number("")` and a fiction.
+         */
+        const frame = (name: string) =>
+          Number(getComputedStyle(canvas).getPropertyValue(name).trim());
+        const box = canvas.getBoundingClientRect();
+
+        /**
+         * Where the drawing really is, asked of the browser rather than
+         * re-implemented here: `getScreenCTM()` maps user units to client pixels
+         * through whatever the `viewBox` mapping decided, letterboxing included.
+         * Transforming the frame's two corners with it gives the rectangle the
+         * `<svg>` actually paints — which is the box itself when the ratios
+         * agree, and a band-inset rectangle when they do not.
+         */
+        const ctm = svg.getScreenCTM();
+        if (ctm === null) {
+          return null;
+        }
+        const toScreen = (x: number, y: number) => new DOMPoint(x, y).matrixTransform(ctm);
+        const topLeft = toScreen(frame("--frame-x"), frame("--frame-y"));
+        const bottomRight = toScreen(
+          frame("--frame-x") + frame("--frame-w"),
+          frame("--frame-y") + frame("--frame-h")
+        );
+
+        const marks = [...document.querySelectorAll<HTMLElement>("a[data-trip]")]
+          .map((link) => {
+            const item = link.closest("li") ?? link;
+            const markBox = item.getBoundingClientRect();
+            const style = getComputedStyle(item);
+            const mark = (name: string) => Number(style.getPropertyValue(name).trim());
+            const centreX = markBox.left + markBox.width / 2;
+            const centreY = markBox.top + markBox.height / 2;
+            const target = toScreen(mark("--mark-x"), mark("--mark-y"));
+
+            return {
+              slug: link.dataset.trip ?? "?",
+              x: Math.abs(centreX - target.x),
+              y: Math.abs(centreY - target.y),
+              // Zero while the marker's centre is on the painted rectangle; the
+              // number of pixels it stands off it otherwise.
+              outsideBy: Math.max(
+                0,
+                topLeft.x - centreX,
+                centreX - bottomRight.x,
+                topLeft.y - centreY,
+                centreY - bottomRight.y
+              ),
+            };
+          })
+          /**
+           * Worst first, and it is the failure *message* this is for rather than
+           * the verdict — all five are asserted either way. In DOM order the list
+           * starts with the most recent trip (`--mark-order` paints them
+           * inverted), which is an accident of z-index: the first run of this test
+           * reported a marker 12 px off while another was 162 px off the drawing,
+           * and a reader has to be handed the number that shows the size of the
+           * defect, not the first one the document happened to carry.
+           */
+          .sort((a, b) => Math.hypot(b.x, b.y) - Math.hypot(a.x, a.y));
+
+        return {
+          ratio: box.width / box.height,
+          frameRatio: frame("--frame-w") / frame("--frame-h"),
+          box: { width: box.width, height: box.height },
+          drawn: { width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y },
+          marks,
+        };
+      });
+
+      expect(measured).not.toBeNull();
+      // Five markers since TIW-18, the untold trip's included — the same count
+      // the tooltip's overflow test walks, and the guard that an empty list is
+      // not what makes the loop below pass.
+      expect(measured?.marks ?? []).toHaveLength(5);
+
+      /**
+       * Carried into every message below, because the number that explains the
+       * failure is not the number that is asserted: a marker 162 px off its
+       * country says nothing on its own, and `canvas 326x684 for a drawing of
+       * 326x170` says the whole of it in one line.
+       */
+      const shape =
+        `canvas ${measured?.box.width.toFixed(1)} x ${measured?.box.height.toFixed(1)} ` +
+        `(ratio ${measured?.ratio.toFixed(3)}) for a frame of ratio ${measured?.frameRatio.toFixed(3)}, ` +
+        `so the SVG paints ${measured?.drawn.width.toFixed(1)} x ${measured?.drawn.height.toFixed(1)}`;
+
+      for (const mark of measured?.marks ?? []) {
+        // The consequence a reader sees, asserted first: a marker outside the
+        // painted rectangle names a country that is not under it at all.
+        expect(
+          mark.outsideBy,
+          `marker ${mark.slug} sits ${mark.outsideBy.toFixed(1)} px outside the rectangle the SVG paints — ${shape}`
+        ).toBeLessThanOrEqual(1);
+        // Then the distance to its own country, with the neighbour test's twelve
+        // pixels: the marker's own centring plus one-decimal rounding.
+        expect(
+          mark.x,
+          `marker ${mark.slug} is ${mark.x.toFixed(1)} px off its country on the x axis — ${shape}`
+        ).toBeLessThan(12);
+        expect(
+          mark.y,
+          `marker ${mark.slug} is ${mark.y.toFixed(1)} px off its country on the y axis — ${shape}`
+        ).toBeLessThan(12);
+      }
+
+      // And the cause, in the shape the test above asserts it: the box IS the
+      // frame's ratio, so `preserveAspectRatio` has nothing to letterbox.
+      expect(measured?.ratio ?? 0, shape).toBeCloseTo(measured?.frameRatio ?? -1, 1);
+    });
+  }
 
   test("the wheel alone scrolls the page and says which combination zooms", async ({ page }) => {
     /**
@@ -567,10 +744,17 @@ test.describe("zoom and pan", () => {
       )
     ).toEqual([false]);
 
-    // And the message appeared, then went away on its own.
-    const hint = page.getByText(frMessages.map.wheelHint);
-    await expect(hint).toBeVisible();
-    await expect(hint).toHaveCount(0, { timeout: 6000 });
+    /**
+     * There used to be a third assertion here: a message appeared saying to hold
+     * Ctrl, and went away on its own. TIW-38 removed the hint at the owner's
+     * request, so what is left to guard is the behaviour rather than its
+     * explanation — the wheel must still refuse to zoom and must still leave the
+     * scroll to the browser, which is what the two assertions above check.
+     *
+     * The loss is real and is recorded rather than papered over: a sighted mouse
+     * reader now has nothing telling them the modifier exists. The three named
+     * buttons are the discoverable path.
+     */
   });
 
   test("Ctrl and the wheel do zoom, towards the pointer", async ({ page }) => {
@@ -641,8 +825,8 @@ test.describe("zoom and pan", () => {
     await page.goto("/fr");
     // Zoom in first: at the initial crop there is somewhere to pan to, but the
     // clamp is easier to reach and to assert from a tighter frame.
-    await control(page, frMessages.map.zoomIn).click();
-    await control(page, frMessages.map.zoomIn).click();
+    await wheelZoom(page, -240);
+    await wheelZoom(page, -240);
     const before = await viewBox(page);
 
     const box = await canvas(page).boundingBox();
@@ -675,7 +859,7 @@ test.describe("the state a shared address restores", () => {
      */
     await page.goto("/fr");
 
-    await control(page, frMessages.map.zoomIn).click();
+    await wheelZoom(page, -240);
     await marker(page, OSAKA.title, OSAKA.place).click();
 
     const shared = page.url();

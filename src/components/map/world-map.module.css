@@ -38,8 +38,13 @@
    * NOT `overflow: hidden` on the canvas, which is the obvious fix and the wrong
    * one: it would clip both the interaction target and the focus ring of every
    * edge marker.
+   *
+   * `--space-6` (32 px) since TIW-38, where 8 px was enough before: the figure no
+   * longer paints outside its own box (see `overflow-clip-margin` below), so the
+   * whole 26 px a marker needs has to fit inside the padding rather than half of
+   * it hanging out.
    */
-  padding-inline: var(--space-2);
+  padding-inline: var(--space-6);
 
   /**
    * The map's height cap, moved here from the home page's `.mapFrame` by TIW-14.
@@ -61,8 +66,6 @@
    * declaration is invalid, and the map is simply full width again.
    */
   inline-size: 100%;
-  max-inline-size: min(100%, calc(45vh * var(--world-aspect)));
-  margin-inline: auto;
 
   /**
    * The tooltip's containment, and the one thing this ticket had to clip.
@@ -76,8 +79,20 @@
    * `overflow-x: clip` and not `hidden`: `clip` creates no scroll container, so
    * `overflow-y` stays genuinely `visible` (with `hidden` or `auto` the other
    * axis is forced to `auto`) and a bubble drawn ABOVE the map is not cut off.
-   * `overflow-clip-margin` then buys back the bleed the markers need — half a
-   * 44 px target plus its 4 px focus ring is 26 px, so 2 rem is comfortable.
+   *
+   * **`overflow-clip-margin` was 2 rem and is now 0, and TIW-38 is why.** The
+   * margin bought back the bleed a marker needs — half a 44 px target plus its
+   * 4 px focus ring is 26 px — by letting the figure paint *outside* its own box.
+   * That was free while the figure sat inside a measured column: outside the box
+   * was still inside the page. On the full-bleed track the box IS the viewport,
+   * so the same 2 rem paints past the glass and gives the document a horizontal
+   * scrollbar — WCAG 1.4.10, caught by
+   * `tests/e2e/map-interaction.populated.spec.ts` at 320 px before this line was
+   * written, which is exactly what that test is for.
+   *
+   * The bleed is bought back by the `padding-inline` above instead, which pushes
+   * the drawing inwards rather than the paint outwards. Same room for the marker,
+   * inside the page rather than beyond it.
    *
    * Accepted cost, stated because it is real: the bubble of a marker sitting at
    * the very edge of the frame is clipped on its outer side. The text is not
@@ -85,7 +100,7 @@
    * status bar both still give in full.
    */
   overflow-x: clip;
-  overflow-clip-margin: 2rem;
+  overflow-clip-margin: 0;
 }
 
 /**
@@ -115,7 +130,62 @@
    * for.
    */
   aspect-ratio: var(--frame-w) / var(--frame-h);
-  width: 100%;
+
+  /**
+   * **The whole map on the first screen, without a scroll** (TIW-38) — and the
+   * ratio above still exact while doing it, which the first cut of this rule did
+   * not manage.
+   *
+   * WHAT THIS REPLACED, AND WHY IT WAS A SILENT BREAK. The rule used to drive the
+   * height and let the width follow, guarded on the other axis by
+   * `max-inline-size: 100%`:
+   *
+   *     block-size: calc(100dvh - ...);
+   *     inline-size: auto;
+   *     max-inline-size: 100%;
+   *
+   * That is three constraints for two axes, and CSS resolves the conflict by
+   * **dropping `aspect-ratio`**: when an auto inline size is clipped by a max, the
+   * preferred aspect ratio no longer applies, and the box keeps its full driven
+   * height at a width the ratio never asked for. Measured at 390 x 844, where the
+   * ratio wants 1313 px of width and the viewport leaves 326: the box resolved to
+   * 326 x 684 instead of 326 x 170, the `<svg>` — which carries no
+   * `preserveAspectRatio`, so `xMidYMid meet` — painted its 326 x 170 frame
+   * centred inside it, and ~257 px of nothing sat above and below the drawing.
+   *
+   * The empty band was the visible half. The expensive half is that `.marks` is
+   * `inset: 0` on THIS box, so every marker resolves its percentages against the
+   * letterboxed height and lands off the country it names: measured, one marker
+   * 162 px above the drawing and one 74 px below it. That is the exact trap the
+   * comment above, `frame.ts` and ADR 0003 all name — and the old rule walked into
+   * it while its own comment said the map would simply "letterbox instead".
+   *
+   * WHAT DRIVES WHAT NOW. The **width** is driven and the height follows from the
+   * ratio, which is the one arrangement where no third constraint exists to drop:
+   * `min()` picks whichever of the two limits binds, and both terms are widths, so
+   * the ratio is never in competition with anything. The second term is the same
+   * first-screen budget as before — the viewport's own height, less the sticky bar
+   * and less the two block paddings `main` puts around its rows, each a declared
+   * token — converted to the width that budget buys at the current ratio. Below
+   * that width the map is as tall as the first screen allows; above it, the
+   * viewport is what binds and the page never scrolls sideways (WCAG 1.4.10).
+   *
+   * `dvh` and not `vh`: on a phone `vh` is the tallest the viewport ever gets, so
+   * the map would be cropped by exactly the height of the browser's own chrome for
+   * as long as it is shown — which is the whole time a reader is scrolling.
+   *
+   * The guard is `tests/e2e/map-interaction.populated.spec.ts`, which measures the
+   * box's ratio against `--frame-w / --frame-h` at a phone's width. It could not
+   * have caught the old rule: the Playwright project runs at 1280 x 720, where the
+   * derived width fits and nothing is ever clipped.
+   */
+  inline-size: min(
+    100%,
+    calc(
+      (100dvh - var(--chrome-height) - var(--section-space) * 2) * var(--frame-w) / var(--frame-h)
+    )
+  );
+  margin-inline: auto;
 }
 
 /**
@@ -154,12 +224,20 @@
   /* Overrides the `img, svg { height: auto }` of the global base: the drawing
      has to fill the ratio-locked box, not re-derive a height from its own. */
   height: 100%;
-  background: var(--surface);
-  /* Same reason as the coastline below: `--border-subtle` measures 1.33:1
-     against the page background, so the map had no perceivable edge at all.
-     `--control-border` is the token documented `>= 3:1`. */
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-md);
+  /**
+   * **No plate and no frame since TIW-38: the sea IS the page.**
+   *
+   * The drawing used to sit on a `--surface` card with a `>= 3:1` border, because
+   * it was one block among others on a measured column. On the wide track there
+   * is nothing to separate it from — a border would be a line drawn across the
+   * viewport for no reader — and the page's own ground, grain included, is what
+   * the continents float on. That is the composition `nicoailleurs.com` uses and
+   * the reason the map reads as the page rather than as a widget on it.
+   *
+   * The consequence is measured rather than assumed: land is now the pale token
+   * and the sea the darker one, which restores the polarity TIW-37 had inverted.
+   */
+  background: transparent;
   /* The other half of "not actionable must not look like a button": with the
      shapes unable to answer a pointer at all, no country can be hovered,
      dragged or clicked — there is no rule left to forget. */
@@ -171,25 +249,30 @@
  * block or the next: a tint means "there is a trip here", it is information, and
  * an affordance would promise an interaction that does not exist until TIW-14.
  *
- * **The coastline carries the map, not the fill.** Measured: land composed over
- * sea is 1.10:1 in the light theme and 1.10:1 in the dark one — the continents
- * are, as fills, invisible. So the only thing that draws the world is this
- * stroke, which makes it a graphical object required to understand the content
- * (WCAG 1.4.11, 3:1). `--border-subtle` scored 1.33:1 and its own declaration in
- * the shared sheet says `décoratif seul`; `--control-border` is the token the
- * palette documents as `>= 3:1` and measures 4.64:1 against land and 5.13:1
- * against sea in the light theme, 6.02:1 and 6.64:1 in the dark one.
+ * **The coastline carries the map, not the fill.** Measured: land against sea is
+ * 1.23:1 in the light theme and 1.21:1 in the dark one — the continents are, as
+ * fills, invisible. So the only thing that draws the world is this stroke, which
+ * makes it a graphical object required to understand the content (WCAG 1.4.11,
+ * 3:1). `--border-subtle` scored 1.17:1 and its own declaration in the shared
+ * sheet says `décoratif seul`; `--control-border` is the token the palette
+ * documents as `>= 3:1` and measures 5.11:1 against land and 4.16:1 against sea
+ * in the light theme, 6.64:1 and 5.49:1 in the dark one.
  *
- * **The land is `--panel-surface`, and its polarity flipped with the palette.**
- * It used to be a project-local `--surface-muted`, a white veil that made the
- * continents a shade *lighter* than the sea; the shared sheet has no such token,
- * and its panel role sits a shade *darker* than a surface in the light theme, so
- * land now reads slightly darker than water there — the more conventional of the
- * two readings, and the dark theme is unchanged. What did not change is the
- * argument: at 1.10:1 either way, the fill was never what drew the world.
+ * **Land is `--surface` and the sea is the page**, since TIW-38 removed the
+ * plate. Two consequences worth having in one place. The continents are back to
+ * being *lighter* than the water in the light theme — the polarity TIW-37 had
+ * inverted when it swapped a project-local `--surface-muted` for the shared
+ * panel role, and the reason that swap is gone. And the sea now carries the
+ * paper grain while the land does not: land is an opaque fill painted over it,
+ * so the two are genuinely different substrates and the contract measures them
+ * as two rather than as one stack.
+ *
+ * The fill separation improved as a side effect — 1.10 before, 1.23:1 now —
+ * and it changes nothing: at that distance the fill was never what drew the
+ * world, which is the whole reason this stroke exists.
  */
 .land path {
-  fill: var(--panel-surface);
+  fill: var(--surface);
   stroke: var(--control-border);
 }
 
@@ -199,9 +282,9 @@
  *
  * The fill alone cannot do it: composed over neutral land, `--accent-quiet`
  * measures 1.14:1 in the light theme, and no alpha fixes it — measured, α=0.5
- * reaches 1.99:1 and α=0.8 only 3.19:1, by which point the map is a flat wash.
- * So the contrast is carried by the outline, in `--text-accent`: 6.43:1 against
- * neutral land in the light theme and 7.79:1 in the dark one, well past the 3:1
+ * reaches 2.08:1 and α=0.8 only 3.45:1, by which point the map is a flat wash.
+ * So the contrast is carried by the outline, in `--text-accent`: 7.08:1 against
+ * neutral land in the light theme and 8.59:1 in the dark one, well past the 3:1
  * of 1.4.11.
  *
  * And the outline is also **thicker**, which is the part that matters for 1.4.1
@@ -220,20 +303,32 @@
  * **A country every one of whose trips is untold** (TIW-18) — the third tint, and
  * the one the acceptance criterion asks to be "un état visuel distinct".
  *
- * **Distinct by the stroke's PATTERN, not by its hue**, and that is the whole
- * design. The visited state already spends both of the channels a fill and a
- * colour can offer — `--accent-quiet` over neutral land measures 1.14:1, which is
- * why the contrast is carried by a `--text-accent` outline and the
- * non-colour cue by its 2 px weight (see the note above). A third state cannot be
- * a third hue: it would be a colour-only distinction from the second, failing WCAG
- * 1.4.1 for exactly the reader the thick outline was chosen for.
+ * **Distinct by its HUE since TIW-38, and this paragraph used to argue the exact
+ * opposite.** It is rewritten rather than deleted, because the reasoning it
+ * replaced was right and what changed is a decision, not a fact.
  *
- * So the stroke is **dashed**, at the same colour and the same weight as a visited
- * country's. Solid means "there is something to read", dashed means "not yet
- * written" — a shape difference that survives greyscale, both themes, and a reader
- * who separates no hues at all. The fill is halved from `--accent-quiet` towards
- * the neutral surface so the shape reads as lighter at a glance, which is
- * reinforcement and never the channel.
+ * Until TIW-38 the third state was the visited stroke made *dashed*: same colour,
+ * same weight, a shape difference that survives greyscale and a reader who
+ * separates no hues at all. The argument against a third hue was that it would be
+ * a colour-only distinction from the second — which is true, and is what this
+ * state now is: a copper fill and a copper outline where the visited state is
+ * teal, after `nicoailleurs.com`, at the owner's explicit direction and against
+ * the recommendation recorded on the ticket.
+ *
+ * **What carries 1.4.1 now, and it is not this file.** `VisitedCountries`, beside
+ * the drawing, writes « récit à venir » in full on the country's own row, and the
+ * accessible name of every untold marker ends in the same words. That list is
+ * itself a *visual* means, so the page still conveys the state without colour —
+ * but the drawing on its own no longer does. The consequence is a hard
+ * constraint rather than a note: **`VisitedCountries` may not be removed, hidden,
+ * or moved behind an interaction.** It stopped being the map's courtesy
+ * equivalent and became the channel the criterion rests on.
+ *
+ * The measured half is unchanged and is what makes the two hues legible at all:
+ * a fill cannot carry this — `--accent-quiet` over land is 1.14:1 — so the
+ * outlines do, at 7.08:1 for the teal and 7.65:1 for the copper against land,
+ * both far past the 3:1 of 1.4.11. The copper is the shared sheet's decor ink,
+ * which a country tint is; the teal keeps the markers, which are controls.
  *
  * And the distinction is carried in **text** as well, which is what actually
  * satisfies 1.4.1: `VisitedCountries` beside the drawing says « récit à venir » on
@@ -248,11 +343,9 @@
  * *width* is still pinned, below, along with the other two layers.
  */
 .untold path {
-  fill: color-mix(in srgb, var(--accent-quiet) 50%, transparent);
-  stroke: var(--text-accent);
+  fill: color-mix(in srgb, var(--accent-secondary) 18%, transparent);
+  stroke: var(--accent-secondary);
   stroke-width: 2;
-  stroke-dasharray: 6 4;
-  stroke-linecap: round;
 }
 
 .land path,
@@ -572,9 +665,30 @@
   border: 0;
 }
 
+/**
+ * **Announced, never drawn** (TIW-38, at the owner's request).
+ *
+ * It is hidden and NOT deleted, and the difference is the whole point: a
+ * `<figcaption>` is the `<figure>`'s accessible *name* (HTML-AAM), so removing it
+ * would leave the map as an unnamed figure — and the counts it carries ("5
+ * voyages, 5 pays") are the only place a reader who does not see the drawing
+ * learns what was drawn.
+ *
+ * The hiding is the pattern this file records at length for `.visuallyHidden`
+ * below: a 1 px box with `clip-path`, never `display: none` nor
+ * `visibility: hidden`, both of which would take it out of the accessibility
+ * tree and so out of the name.
+ */
 .caption {
-  color: var(--text-muted);
-  font-size: var(--text-sm);
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /**

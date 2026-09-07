@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { PAGE_MARK } from "@/components/site/site-nav";
 import { TripCatalogue } from "@/components/trips/trip-catalogue";
 import { listTripSummaries } from "@/content/trips";
 import { freshestTrip } from "@/domain/freshness";
@@ -82,7 +83,7 @@ export async function generateMetadata({
    */
   return shareMetadata({
     locale,
-    path: localePathname({ href: tripsPath(), locale }),
+    href: tripsPath(),
     title: t("metaTitle"),
     description: t("metaDescription"),
     siteName: site("title"),
@@ -118,8 +119,12 @@ export default async function AllTripsPage({ params }: { params: Promise<LocaleP
       `tabIndex={-1}` as the home page, from the same constant. See
       `../layout.tsx` for why the attribute is needed and why the `id` cannot
       live in the layout.
+
+      `data-page` marks this page for the header's current-entry underline — the
+      same mechanism, and the same limits, as the home page's; the long note is
+      there and in `SiteNav`'s header.
     */
-    <main id={MAIN_CONTENT_ID} tabIndex={-1}>
+    <main id={MAIN_CONTENT_ID} tabIndex={-1} data-page={PAGE_MARK.trips}>
       <header className={styles.header}>
         <h1 className={styles.title}>{t("allHeading")}</h1>
         {/*

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { localePathname } from "@/i18n/pathname";
+import { PAGE_MARK } from "@/components/site/site-nav";
 import { aboutPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import { shareMetadata } from "../../share";
@@ -71,7 +71,7 @@ export async function generateMetadata({
    */
   return shareMetadata({
     locale,
-    path: localePathname({ href: aboutPath(), locale }),
+    href: aboutPath(),
     title: t("metaTitle"),
     description: t("metaDescription"),
     siteName: site("title"),
@@ -104,8 +104,12 @@ export default async function AboutPage({ params }: { params: Promise<LocalePara
       `tabIndex={-1}` as every other page, from the same constant. See
       `../layout.tsx` for why the attribute is needed and why the `id` cannot live
       in the layout.
+
+      `data-page` marks this page for the header's current-entry underline — the
+      same mechanism, and the same limits, as the two pages above; the long note is
+      on the home page's `<main>` and in `SiteNav`'s header.
     */
-    <main id={MAIN_CONTENT_ID} tabIndex={-1}>
+    <main id={MAIN_CONTENT_ID} tabIndex={-1} data-page={PAGE_MARK.about}>
       <header className={styles.header}>
         <h1 className={styles.title}>{t("heading")}</h1>
         <p className={styles.intro}>{t("intro")}</p>

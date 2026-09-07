@@ -17,28 +17,105 @@
  * same reason as `.link` in `./site-nav.module.css` and `.skip` in the layout's
  * module — three targets in the chrome, one number.
  *
- * The negative inline-start margin cancels this element's own padding so the
- * mark's left edge lands on `main`'s measure rather than 8 px inside it: the
- * padding exists for the hover pill, not for the layout.
+ * No inline padding and no negative margin to cancel one: the mark's left edge is
+ * placed by `.brandZone` in `./site-nav.module.css`, which is the file that knows
+ * where the window's edge is. An earlier version of this comment described a
+ * margin that was not in the rule below.
  */
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   min-block-size: 2.75rem;
-  margin-inline-start: calc(var(--space-2) * -1);
-  padding-inline: var(--space-2);
-  border-radius: var(--radius-pill);
-  color: var(--logo-ink);
-  /* No underline: this is a logo, and the mark plus the pill below carry the
-     affordance. The same argument `./site-nav.module.css` makes for the two nav
+  color: var(--text-on-accent);
+  /* No underline: this is a logo, and the mark plus the medallion carry the
+     affordance. The same argument `./site-nav.module.css` makes for the three nav
      entries — a link that is the site's identity is chrome, not prose. */
   text-decoration: none;
-  transition: background-color 120ms ease;
+
+  /**
+   * **The lock-up now sits on the accent bar, so its two tokens are re-pointed
+   * here rather than forked.** `src/styles/tokens.css` declares `--logo-ink` and
+   * `--logo-accent` precisely so a page can re-point them locally without a
+   * second copy of the component, and this is that case: the defaults follow
+   * `--text-strong` and `--text-accent`, both of which are near-invisible on a
+   * teal fill.
+   *
+   * Both become `--text-on-accent`, and the constraint `brand-art.ts` documents
+   * dissolves rather than being broken: the comet and its trajectory may not
+   * share an edge because ink against accent measures 1.56:1, and here they are
+   * the *same* colour on a single ground, so there is no ink/accent edge left to
+   * fail. The ~7 units of clearance in the geometry stay what separates the two
+   * shapes, which is what they were always for.
+   */
+  --logo-ink: var(--text-on-accent);
+  --logo-accent: var(--text-on-accent);
 }
 
-.brand:hover {
-  background: var(--accent-quiet);
+/**
+ * **The medallion** (TIW-38), after `nicoailleurs.com`: a disc of the bar's own
+ * colour, larger than the bar, hanging past its lower edge onto the page.
+ *
+ * It carries the mark ALONE. The reference's name is two short script words and
+ * fits inside its disc; "travels_in_world" does not, at any size a header can
+ * afford — so the wordmark stays beside the disc, on the bar, and the badge keeps
+ * the silhouette that makes the composition recognisable.
+ *
+ * **`--accent-active`, because it is the bar's colour and the bar changed.**
+ * `site-nav.module.css` records why the bar moved off `--accent`; the disc has to
+ * follow it or it stops being a badge cut out of the bar and becomes a lighter
+ * circle sitting on one. The mark inside is `--text-on-accent`, so it reads at
+ * 7.51:1 in light and 6.52:1 in dark — better than the 5.44:1 it had on the old
+ * fill, which is a side effect of the bar's change rather than a goal of it.
+ *
+ * **6.5 rem, up from 4.5, at the owner's request — and the hang follows from the
+ * arithmetic rather than from a preference.** `margin-block-end` is what makes it
+ * hang and it is negative by design: `6.5rem - 2.5rem` leaves exactly
+ * `--chrome-height` of flow, so the bar keeps the 4 rem height the home page's
+ * map subtracts, and the remaining 2.5 rem of disc falls onto the page. That
+ * 2.5 rem lands inside `main`'s own `--section-space` top padding (3 rem at its
+ * smallest), so the disc covers no content on any of the four screens — it hangs
+ * over margin. `.bar` must therefore never clip; the rule is in its own file.
+ *
+ * `flex: none` because the disc is a fixed square: without it, the flex line
+ * squeezes it into an ellipse at the width where the wordmark stops fitting.
+ */
+.medallion {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 6.5rem;
+  block-size: 6.5rem;
+  margin-block-end: -2.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent-active);
+}
+
+/**
+ * **Below the width where the bar stacks, the disc stops hanging and shrinks.**
+ *
+ * Two defects it closes, both of which the 6.5 rem disc would otherwise create at
+ * the narrow layout and neither of which existed at 4.5 rem:
+ *
+ * - **it would cover the navigation.** Stacked, the nav is the row directly under
+ *   the lock-up, and 2.5 rem of disc out of flow lands on top of it. Out of flow
+ *   means the row does not move aside; it means the links are under a solid disc.
+ * - **it would overflow at 320 px.** 6.5 rem of disc plus the gap plus a wordmark
+ *   that must not wrap comes to more than the 272 px `.inner` leaves at the
+ *   narrowest layout this sheet supports, and a bar that scrolls sideways is
+ *   WCAG 1.4.10 — the exact defect `main`'s grid was rewritten to close.
+ *
+ * 58rem is the breakpoint `./site-nav.module.css` stacks at, written a second
+ * time because a media query cannot read one from another file. The two must
+ * agree; if they drift, the disc hangs over a stacked nav, which is visible
+ * immediately and on the first screen.
+ */
+@media (max-width: 58rem) {
+  .medallion {
+    inline-size: 4.5rem;
+    block-size: 4.5rem;
+    margin-block-end: 0;
+  }
 }
 
 /**
@@ -54,12 +131,24 @@
  * 32-unit box, so at 2 rem each dot is 3 px with 3 px of air. Take the mark much
  * below that and the dots stop reading as dots — which is the whole reason the
  * favicon (`src/app/icon.svg`) drops the trajectory and keeps the comet alone.
+ *
+ * 3.25 rem is the same half-of-the-disc proportion the 4.5 rem medallion had at
+ * 2.25 rem: the badge grew, and a mark that had stayed put would have read as a
+ * small drawing lost in a large plate rather than as a bigger badge.
  */
 .mark {
-  height: 2rem;
+  height: 3.25rem;
   width: auto;
   /* Nothing in this SVG is interactive, and the anchor above owns the pointer. */
   pointer-events: none;
+}
+
+/* The disc goes back to 4.5 rem when the bar stacks — see `.medallion` — so the
+   mark goes back to the height that kept its proportion inside it. */
+@media (max-width: 58rem) {
+  .mark {
+    height: 2.25rem;
+  }
 }
 
 .comet {

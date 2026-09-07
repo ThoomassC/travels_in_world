@@ -5,12 +5,7 @@ import frMessages from "@/i18n/messages/fr.json";
 import { defaultLocale } from "@/i18n/routing";
 import { WorldMap, type MapCountry } from "@/components/map/world-map";
 import type { TripMark } from "@/components/map/marks";
-import {
-  MAX_ZOOM_WIDTH_FRACTION,
-  TRIP_PARAM,
-  VIEW_PARAM,
-  ZOOM_STEP,
-} from "@/components/map/viewport";
+import { TRIP_PARAM, VIEW_PARAM } from "@/components/map/viewport";
 
 /**
  * The interaction layer, rendered through `WorldMap` exactly as the page renders
@@ -128,8 +123,6 @@ const canvasOf = (container: HTMLElement): HTMLElement => {
   }
   return canvas;
 };
-
-const frameWidthOf = (container: HTMLElement): number => Number(viewBoxOf(container).split(" ")[2]);
 
 const search = () => new URLSearchParams(window.location.search);
 
@@ -418,81 +411,14 @@ describe("a drag is not a tap", () => {
   });
 });
 
-describe("the zoom controls", () => {
-  const zoomIn = () => screen.getByRole("button", { name: frMessages.map.zoomIn });
-  const zoomOut = () => screen.getByRole("button", { name: frMessages.map.zoomOut });
-  const reset = () => screen.getByRole("button", { name: frMessages.map.zoomReset });
-
-  it("offers three named controls, and they are real buttons", () => {
-    renderMap();
-
-    for (const control of [zoomIn(), zoomOut(), reset()]) {
-      expect(control.tagName).toBe("BUTTON");
-      expect(control).toHaveAttribute("type", "button");
-    }
-  });
-
-  it("narrows the frame by the step on the way in", () => {
-    const { container } = renderMap();
-    const before = frameWidthOf(container);
-
-    fireEvent.click(zoomIn());
-
-    expect(frameWidthOf(container)).toBeCloseTo(before / ZOOM_STEP, 0);
-  });
-
-  it("keeps the canvas ratio and the viewBox in step at every level", () => {
-    // The invariant that decides whether the markers stay on their countries:
-    // any disagreement letterboxes the SVG and slides all of them.
-    const { container } = renderMap();
-
-    for (const press of [zoomIn(), zoomIn(), zoomOut(), zoomIn()]) {
-      fireEvent.click(press);
-      const [x, y, width, height] = viewBoxOf(container).split(" ");
-      const canvas = canvasOf(container);
-      expect(canvas.style.getPropertyValue("--frame-x")).toBe(x);
-      expect(canvas.style.getPropertyValue("--frame-y")).toBe(y);
-      expect(canvas.style.getPropertyValue("--frame-w")).toBe(width);
-      expect(canvas.style.getPropertyValue("--frame-h")).toBe(height);
-    }
-  });
-
-  it("stops at the legibility floor, however many times it is pressed", () => {
-    const { container } = renderMap();
-
-    for (let press = 0; press < 30; press += 1) {
-      fireEvent.click(zoomIn());
-    }
-
-    expect(frameWidthOf(container)).toBeCloseTo(WORLD.width * MAX_ZOOM_WIDTH_FRACTION, 1);
-  });
-
-  it("stops at the world, however many times it is pressed", () => {
-    const { container } = renderMap();
-
-    for (let press = 0; press < 30; press += 1) {
-      fireEvent.click(zoomOut());
-    }
-
-    const [x, y, width, height] = viewBoxOf(container).split(" ").map(Number);
-    expect(Number(x)).toBeGreaterThanOrEqual(0);
-    expect(Number(y)).toBeGreaterThanOrEqual(0);
-    expect(Number(x) + Number(width)).toBeLessThanOrEqual(WORLD.width + 0.05);
-    expect(Number(y) + Number(height)).toBeLessThanOrEqual(WORLD.height + 0.05);
-  });
-
-  it("puts the frame back where the build left it", () => {
-    const { container } = renderMap();
-    const initial = viewBoxOf(container);
-
-    fireEvent.click(zoomIn());
-    fireEvent.click(zoomIn());
-    expect(viewBoxOf(container)).not.toBe(initial);
-
-    fireEvent.click(reset());
-    expect(viewBoxOf(container)).toBe(initial);
-  });
-});
+/*
+ * `describe("the zoom controls")` lived here — six cases on the three buttons —
+ * and went with them in TIW-38. Nothing of the ZOOM's logic is lost: the step,
+ * the legibility floor, the world clamp and the ratio/viewBox agreement are
+ * properties of `zoomViewport`/`clampViewport`, and `./viewport.test.ts` covers
+ * them as pure functions across 42 cases. What is gone is the button plumbing,
+ * which is gone from the product too.
+ */
 
 describe("the state in the address bar", () => {
   it("says nothing until the reader has moved something", () => {
@@ -513,16 +439,14 @@ describe("the state in the address bar", () => {
     expect(search().get(TRIP_PARAM)).toBeNull();
   });
 
-  it("carries the frame once it has changed, and drops it on reset", () => {
-    renderMap();
-
-    fireEvent.click(screen.getByRole("button", { name: frMessages.map.zoomIn }));
-    const parked = search().get(VIEW_PARAM);
-    expect(parked?.split(",")).toHaveLength(3);
-
-    fireEvent.click(screen.getByRole("button", { name: frMessages.map.zoomReset }));
-    expect(search().get(VIEW_PARAM)).toBeNull();
-  });
+  /*
+   * "carries the frame once it has changed, and drops it on reset" was here. Both
+   * halves needed a button: one to change the frame, one to put it back. The
+   * writing half is still covered end to end — `tests/e2e/map-interaction.spec.ts`
+   * drives it with `Ctrl` + wheel in a real browser, which is the only place a
+   * wheel listener registered with `passive: false` can be exercised at all — and
+   * the reset half no longer exists.
+   */
 
   it("restores the frame a shared address names", () => {
     /**
@@ -615,18 +539,11 @@ describe("the state in the address bar", () => {
 });
 
 describe("a map with nothing on it", () => {
-  it("draws the world, offers the controls, and opens no panel", () => {
-    // The production state today: `content/trips` is empty until TIW-24. The
-    // interaction layer must be harmless there rather than absent.
-    const { container } = renderMap([]);
-
-    expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length * 2);
-    expect(screen.queryByRole("list")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: frMessages.map.zoomIn })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: frMessages.map.zoomIn }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
+  /*
+   * A case that pressed the zoom button to prove the layer had mounted lived
+   * here. `[data-interactive]` says the same thing without a control, and the
+   * cases above already assert it.
+   */
 
   it("leaves a marker's link alone when the page passed no cards at all", () => {
     /**

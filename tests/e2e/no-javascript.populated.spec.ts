@@ -182,7 +182,16 @@ test("the controls the script-less run refuses are really there with the script"
 }) => {
   await page.goto("/fr");
 
-  await expect(drawing(page).getByRole("button", { name: frMessages.map.zoomIn })).toBeVisible();
+  /**
+   * The zoom buttons were the control this case pointed at, and TIW-38 removed
+   * them. What still has to be true is the thing the flag is load-bearing for:
+   * with the script, the page really does gain interactive chrome, so its absence
+   * in the script-less run means something. The panel's close button is that
+   * chrome now — it needs a marker activated to exist, which is why this reaches
+   * for one first.
+   */
+  await page.locator("a[data-trip]").first().click();
+  await expect(page.getByRole("button", { name: frMessages.map.panelClose })).toBeVisible();
   expect(
     await page.locator("button").count(),
     "Aucun bouton sur /fr avec JavaScript : l'absence de bouton dans le parcours sans script ne prouve alors plus rien."

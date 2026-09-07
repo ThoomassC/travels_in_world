@@ -60,30 +60,37 @@ export function SiteBrand({ locale }: { readonly locale: Locale }): ReactElement
         `focusable="false"` is not redundant with `aria-hidden` — old Trident and
         Edge put SVG elements in the tab order regardless. It costs 18 bytes.
       */}
-      <svg
-        className={styles.mark}
-        viewBox={BRAND_LOCKUP_VIEWBOX}
-        aria-hidden="true"
-        focusable="false"
-      >
-        {/*
+      {/*
+        The medallion (TIW-38) — a plain wrapper, because a disc is a box and an
+        `<svg>` cannot be both the drawing and the round plate under it without
+        the mark stretching to the plate's square.
+      */}
+      <span className={styles.medallion}>
+        <svg
+          className={styles.mark}
+          viewBox={BRAND_LOCKUP_VIEWBOX}
+          aria-hidden="true"
+          focusable="false"
+        >
+          {/*
           The trajectory first, so the comet paints over it if a future placement
           ever brings them within a hair of each other. They are ~7 units apart
           today; `./brand-art.ts` records why that clearance is the load-bearing
           number of this mark.
         */}
-        <path
-          className={styles.track}
-          d={BRAND_LOCKUP_TRACK_PATH}
-          fill="none"
-          strokeWidth={BRAND_LOCKUP_TRACK_WIDTH}
-          strokeLinecap="round"
-          strokeDasharray={BRAND_LOCKUP_TRACK_DASH}
-        />
-        <g transform={BRAND_LOCKUP_COMET_TRANSFORM}>
-          <path className={styles.comet} d={BRAND_COMET_PATH} />
-        </g>
-      </svg>
+          <path
+            className={styles.track}
+            d={BRAND_LOCKUP_TRACK_PATH}
+            fill="none"
+            strokeWidth={BRAND_LOCKUP_TRACK_WIDTH}
+            strokeLinecap="round"
+            strokeDasharray={BRAND_LOCKUP_TRACK_DASH}
+          />
+          <g transform={BRAND_LOCKUP_COMET_TRANSFORM}>
+            <path className={styles.comet} d={BRAND_COMET_PATH} />
+          </g>
+        </svg>
+      </span>
 
       {/*
         `lang="en"` on the name, in a `lang="fr"` document. The brand is three

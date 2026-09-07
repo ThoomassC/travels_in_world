@@ -145,10 +145,6 @@ export type MapViewportZone = {
  * other chunk changed by a byte.
  */
 export type MapViewportLabels = {
-  readonly zoomIn: string;
-  readonly zoomOut: string;
-  readonly zoomReset: string;
-  readonly wheelHint: string;
   readonly panelClose: string;
 };
 
@@ -185,7 +181,6 @@ type Selection = {
 };
 
 /** How long the "use Ctrl and the wheel" message stays on screen. */
-const HINT_MS = 2600;
 
 /** How far a finger must pull a sheet down before it closes, in CSS pixels. */
 const SHEET_CLOSE_PX = 72;
@@ -279,7 +274,6 @@ export function MapViewport({
    * script keeps — carries no control that could not work.
    */
   const [ready, setReady] = useState(false);
-  const [hint, setHint] = useState(false);
   /** Escape hides the hover/focus tooltips; WCAG 1.4.13 asks for the mechanism. */
   const [tipsHidden, setTipsHidden] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -296,7 +290,6 @@ export function MapViewport({
   const sheetRef = useRef<{ y: number } | null>(null);
   /** True once a pointer travelled far enough that its release is not a tap. */
   const swallowClickRef = useRef(false);
-  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * Whether the next URL write is a history entry of its own.
    *
@@ -565,25 +558,6 @@ export function MapViewport({
     };
   }, [close, selection]);
 
-  const showHint = useCallback(() => {
-    setHint(true);
-    if (hintTimerRef.current !== null) {
-      clearTimeout(hintTimerRef.current);
-    }
-    hintTimerRef.current = setTimeout(() => {
-      setHint(false);
-    }, HINT_MS);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (hintTimerRef.current !== null) {
-        clearTimeout(hintTimerRef.current);
-      }
-    },
-    []
-  );
-
   /**
    * The wheel and the two-finger gestures, as **native** listeners with
    * `passive: false`.
@@ -607,7 +581,6 @@ export function MapViewport({
        * pinch, which every browser reports as a Ctrl-wheel.
        */
       if (!event.ctrlKey && !event.metaKey) {
-        showHint();
         return;
       }
       event.preventDefault();
@@ -682,14 +655,7 @@ export function MapViewport({
       canvas.removeEventListener("touchend", onTouchEnd);
       canvas.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [bounds, showHint]);
-
-  const zoomBy = useCallback(
-    (factor: number) => {
-      setView((current) => zoomViewport(current, factor, CENTRE, bounds));
-    },
-    [bounds]
-  );
+  }, [bounds]);
 
   /** Mouse and pen drags pan the map. Touch is handled by the two-finger rule. */
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -823,57 +789,20 @@ export function MapViewport({
   return (
     <div className={styles.stage} data-tips-hidden={tipsHidden ? "" : undefined}>
       {/*
-        Rendered only once mounted: a zoom button in the server's HTML would be a
-        control that does nothing for a reader without this script.
+        **The three zoom controls are gone** (TIW-38, at the owner's request), and
+        this note is what is left of them because the loss is not nothing.
 
-        **Before the canvas in the DOM, and absolutely positioned over its
-        top-right corner.** The order is a keyboard decision, not a visual one:
-        with sixty published trips, controls placed after the marker list would sit
-        sixty tab stops away, so a reader on a keyboard would have to walk the
-        whole map to reach the button that makes the map smaller. `position:
-        absolute` and `z-index` put them back where the eye expects them, and
-        `tests/e2e/map-equivalent.populated.spec.ts` pins the resulting tab order
-        as the sequence a reader really receives.
+        They were the only KEYBOARD path to the zoom: the wheel needs `Ctrl`, the
+        pinch needs two fingers, and neither is reachable from a keyboard. So the
+        zoom is now a pointer-only enhancement. That is defensible here and only
+        here — the `<svg>` is `aria-hidden` (ADR 0003), every marker is a real link
+        in the list beside it, and `VisitedCountries` states in text everything the
+        drawing shows — so nothing a reader must reach is behind the zoom. It would
+        NOT be defensible on a map that carried information of its own.
+
+        What went with them: `labels.zoomIn/Out/Reset`, their message keys, and the
+        e2e cases that walked them. `git log` holds the markup.
       */}
-      {ready ? (
-        <div className={styles.controls}>
-          <button
-            type="button"
-            className={styles.control}
-            onClick={() => {
-              zoomBy(ZOOM_STEP);
-            }}
-          >
-            <span aria-hidden="true">+</span>
-            {/*
-              Real text, visually hidden — never an `aria-label`. Same reason as
-              the markers': an attribute is a string a translator never sees in
-              context and no tool finds in the DOM.
-            */}
-            <span className={styles.visuallyHidden}>{labels.zoomIn}</span>
-          </button>
-          <button
-            type="button"
-            className={styles.control}
-            onClick={() => {
-              zoomBy(1 / ZOOM_STEP);
-            }}
-          >
-            <span aria-hidden="true">−</span>
-            <span className={styles.visuallyHidden}>{labels.zoomOut}</span>
-          </button>
-          <button
-            type="button"
-            className={styles.control}
-            onClick={() => {
-              setView(initialView);
-            }}
-          >
-            <span aria-hidden="true">↺</span>
-            <span className={styles.visuallyHidden}>{labels.zoomReset}</span>
-          </button>
-        </div>
-      ) : null}
 
       {/*
         `jsx-a11y/click-events-have-key-events` and
@@ -941,11 +870,18 @@ export function MapViewport({
         hear it announced for nothing. The keyboard path to the same result is the
         three buttons above, which are named.
       */}
-      {ready && hint ? (
-        <p className={styles.hint} aria-hidden="true">
-          {labels.wheelHint}
-        </p>
-      ) : null}
+      {/*
+        **The wheel hint is gone** (TIW-38, at the owner's request), and with it
+        its state, its expiry timer and its message key — a component that keeps
+        the machinery of something it does not render is a component nobody can
+        read. `git log` is where it lives now.
+
+        Nothing accessible is lost: it was `aria-hidden`, so it never existed for
+        a screen reader. What IS lost is the discoverability of `Ctrl` + wheel for
+        a sighted mouse reader — the wheel still refuses to zoom without the
+        modifier, and now says nothing about why. The named buttons above remain
+        the discoverable path, which is what the note on the wheel already said.
+      */}
 
       {/*
         **The panel is portalled to `document.body`, and there are three reasons

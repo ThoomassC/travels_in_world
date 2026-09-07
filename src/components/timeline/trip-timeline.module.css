@@ -52,8 +52,8 @@
   bottom: 0;
   width: 2px;
   transform: translateX(-50%);
-  /* `--control-border` (4.77:1 light, 6.42:1 dark) and not `--border-subtle`,
-     which measures 1.33:1 and whose own declaration in the shared sheet says
+  /* `--control-border` (4.16:1 light, 5.49:1 dark) and not `--border-subtle`,
+     which measures 1.17:1 and whose own declaration in the shared sheet says
      `décoratif seul`. This rail is not decorative: it is the only thing that
      says the blocks are one continuous itinerary and not nine separate cards,
      which a low-vision reader loses first. It is also the token the marker

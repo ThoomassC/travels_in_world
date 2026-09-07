@@ -474,10 +474,6 @@ export function WorldMap({
           overlay={overlay}
           zones={panelZones}
           labels={{
-            zoomIn: t("zoomIn"),
-            zoomOut: t("zoomOut"),
-            zoomReset: t("zoomReset"),
-            wheelHint: t("wheelHint"),
             panelClose: t("panelClose"),
           }}
         >

@@ -41,6 +41,14 @@
      which bounds a column of running text; this bounds the whole layout. */
   --content-max-width: 72rem;
 
+  /**
+   * The height of the sticky header bar (TIW-38). It lives here and not in
+   * `site-nav.module.css` because two files need it and they must not disagree:
+   * the bar sets its own height from it, and the home page's map subtracts it to
+   * work out how much viewport is left to fill.
+   */
+  --chrome-height: 4rem;
+
   /* --- Logo tokens. Aliases now, not values.
 
      They used to be three hexadecimals repeated across all three theme blocks,
@@ -102,11 +110,67 @@ svg {
   height: auto;
 }
 
+/**
+ * **A grid with a full-bleed track, since TIW-38, and not a centred box.**
+ *
+ * The home page's map has to paint edge to edge while everything beside it stays
+ * on the measure. The two usual ways of doing that from the child were both
+ * refused here, for reasons this project has already paid for once:
+ * `inline-size: 100vw` with a negative margin counts the scrollbar, so it puts a
+ * horizontal scrollbar on the page at every width — WCAG 1.4.10, the exact defect
+ * `world-map.module.css` added `padding-inline` to close; and a wrapper with
+ * `overflow-x` would clip the map's own marker bleed.
+ *
+ * So the measure is a *column* rather than a `max-width`, and a child asks for
+ * the wide track by name. Nothing computes a viewport width, so nothing can
+ * disagree with the scrollbar.
+ *
+ * `min(…, 100% - …)` and not `minmax()` on the middle track: below the measure
+ * the two gutters must still exist, and `minmax` would let the content column
+ * take the whole line and put the map's edge against the glass.
+ */
 main {
-  max-width: var(--content-max-width);
-  margin-inline: auto;
-  padding: var(--section-space) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
+  display: grid;
+  grid-template-columns:
+    [full-start] minmax(var(--space-5), 1fr)
+    [content-start] min(var(--content-max-width), 100% - var(--space-5) * 2) [content-end]
+    minmax(var(--space-5), 1fr) [full-end];
+  padding-block: var(--section-space);
+  /**
+   * **`row-gap`, never `gap`, and this line was a real defect for one commit.**
+   *
+   * `main` was a flex column, where `gap` is the space between rows and nothing
+   * else. In a grid it is both axes: the three columns above then got 24 px of
+   * gutter between each pair, so the tracks summed to 48 px more than the
+   * viewport and every page scrolled sideways — WCAG 1.4.10. Measured at exactly
+   * 48 px of overflow at 320 px by
+   * `tests/e2e/map-interaction.populated.spec.ts`, which is the test that exists
+   * for precisely this and which caught it before a browser did.
+   *
+   * The columns must never have a gap: the outer two ARE the gutters, and a
+   * gutter with a gutter beside it is just a narrower page.
+   */
+  row-gap: var(--space-5);
+}
+
+/* Everything sits on the measure unless it asks otherwise. Stated once here so a
+   page never has to remember it. */
+main > * {
+  grid-column: content;
+}
+
+/**
+ * The wide track, claimed by name.
+ *
+ * An attribute and not a class: a class in this sheet would be a global class,
+ * and every other selector in this project's styling is a CSS Module — one
+ * global class is how a second one gets added. `[data-bleed]` also matches the
+ * `[data-interactive]` / `[data-story]` vocabulary the map already uses.
+ *
+ * Declared here rather than in the home page's module because the track it names
+ * is declared here, and a selector whose meaning lives in another file is how a
+ * layout stops being readable.
+ */
+main > [data-bleed] {
+  grid-column: full;
 }

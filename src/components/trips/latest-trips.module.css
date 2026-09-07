@@ -37,7 +37,7 @@
   gap: var(--space-3);
   padding: var(--space-5);
   background: var(--surface);
-  /* `--control-border`, not `--border-subtle` (1.33:1, `décoratif seul` by its
+  /* `--control-border`, not `--border-subtle` (1.17:1, `décoratif seul` by its
      own declaration): this box is the only thing on the page saying the catalogue
      is empty on purpose, so its edge has to be perceivable. */
   border: 1px solid var(--control-border);
