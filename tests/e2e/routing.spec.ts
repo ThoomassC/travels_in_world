@@ -15,14 +15,22 @@ test("the bare root redirects to the default locale", async ({ page }) => {
  * The home page's first screen, asserted against the state production is really
  * in: `content/trips` is empty, so this is what a reader sees today.
  */
-test("the French home page carries the sentence, the map and an honest empty block", async ({
+test("the French home page carries its heading, the map and an honest empty block", async ({
   page,
 }) => {
   await page.goto("/fr");
 
-  await expect(page.getByRole("heading", { level: 1, name: frMessages.home.title })).toBeVisible();
-  await expect(page.getByText(frMessages.home.intro)).toBeVisible();
-  // The map is a `<figure>` carrying a counted caption — see TIW-13.
+  /**
+   * `toBeAttached` and not `toBeVisible`, since TIW-38 took the heading and the
+   * introduction out of the picture at the owner's request. The `<h1>` is still
+   * in the document and still in the accessibility tree — it is the page's only
+   * name, for a screen reader and for a search result — and it is what this line
+   * guards. The introduction is gone outright, so there is nothing left to assert
+   * about it.
+   */
+  await expect(page.getByRole("heading", { level: 1, name: frMessages.home.title })).toBeAttached();
+  // The map is a `<figure>` carrying a counted caption — see TIW-13. The caption
+  // is hidden since TIW-38; the figure and its accessible name are not.
   await expect(page.getByRole("figure")).toBeVisible();
 
   // No trip published: the waiting message, and NOT a "Derniers voyages" heading
@@ -142,10 +150,12 @@ test("an unknown path under the active locale renders the localised 404", async 
     page.getByRole("heading", { level: 1, name: frMessages.notFound.title })
   ).toBeVisible();
   // The 404 must announce its own language, like any other page. There is a
-  // single global `not-found.tsx` and it hardcodes the default locale, so this
-  // will keep saying "fr" for every locale — a known limitation, spelled out in
-  // the README and guarded by the "exactly one active locale" unit test, which
-  // goes red the day a second locale is declared.
+  // single global `not-found.tsx` and it resolves the default locale, so it says
+  // "fr" under every prefix — `/en/no-such-page` included, now that `en` and `es`
+  // are active. That is an accepted limitation and not a bug to file: the fix is
+  // a `[locale]/[...rest]` catch-all, which costs a dynamic `ƒ` route and
+  // therefore invariant 1. Written down in `src/i18n/routing.ts`, in the README
+  // ("Rendu statique") and in the "declares the three active locales" unit test.
   await expect(page.locator("html[lang]")).toHaveAttribute("lang", "fr");
 });
 

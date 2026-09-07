@@ -5,7 +5,6 @@
   },
   "home": {
     "title": "Travels in World",
-    "intro": "Un carnet de voyages : une carte du monde semée de balises, et un récit par voyage — les étapes, les dates, les photos. Ouvrez une balise sur la carte, ou parcourez la liste complète.",
     "freshLabel": "Nouveau récit",
     "freshPublished": "Publié le <on>{date}</on>.",
     "latestHeading": "Derniers voyages",
@@ -39,7 +38,13 @@
     "continentAsia": "Asie",
     "continentEurope": "Europe",
     "continentOceania": "Océanie",
-    "continentUnplaced": "Ailleurs"
+    "continentUnplaced": "Ailleurs",
+    "languageLabel": "Langue du site",
+    "languageMenu": "Choisir la langue",
+    "languageFr": "Français",
+    "languageEn": "English",
+    "languageEs": "Español",
+    "languageNote": "Les récits de voyage restent en français."
   },
   "map": {
     "summary": "Carte du monde : {trips, plural, =0 {aucun voyage publié} one {# voyage} other {# voyages}}, {countries, plural, =0 {aucun pays} one {# pays} other {# pays}}",
@@ -54,10 +59,6 @@
     "markLabel": "{title}, {place}",
     "markLabelNew": "{title}, {place} — nouveau récit",
     "markLabelToCome": "{title}, {place} — récit à venir",
-    "zoomIn": "Zoomer sur la carte",
-    "zoomOut": "Dézoomer la carte",
-    "zoomReset": "Revoir tout le cadrage d’origine",
-    "wheelHint": "Ctrl + molette pour zoomer, ou les boutons + et − de la carte.",
     "panelHeading": "{count, plural, one {Le voyage à cet endroit} other {Les # voyages à cet endroit}}",
     "panelClose": "Fermer le panneau du voyage"
   },
@@ -144,5 +145,11 @@
   "brand": {
     "name": "Travels in World",
     "homeDestination": ", retour à l’accueil"
+  },
+  "purpose": {
+    "heading": "Ce que cherche ce carnet",
+    "body": "Je voyage, et j’écris ce que j’en retiens : les étapes dans l’ordre où elles ont eu lieu, les dates, les photos, et ce qu’un lieu m’a fait. Pas un guide, pas un classement — un carnet, tenu pour qu’un voyage se relise entier plutôt que par fragments.",
+    "method": "C’est aussi un projet mené comme un vrai projet : des décisions écrites et datées, des tests qui gardent ce qui casse en silence, et une carte dessinée au moment de la construction plutôt que chargée dans le navigateur. Le code est ouvert, et le raisonnement est rangé à côté de lui.",
+    "portraitAlt": "Thomas Caron, souriant, en chemise bleu marine sur fond clair."
   }
 }

@@ -15,12 +15,17 @@
  * `slug` used inside the content directory: this string is what a visitor reads
  * and what search engines index, and the site is French.
  *
- * The day a second locale is activated, this becomes a `pathnames` entry in
- * `src/i18n/routing.ts` so the segment itself can be translated. It is not one
- * today because declaring `pathnames` changes the type of `Link` and
- * `getPathname` across the whole project, for a benefit that only exists once
- * `en` is real — and `tests/smoke.test.tsx` holds the alarm that goes red on
- * that day.
+ * **The second and third locales arrived in TIW-38 and this segment stayed
+ * French, deliberately.** This note used to say the day `en` was activated the
+ * segment would become a `pathnames` entry; the day came, and the trade did not
+ * change: declaring `pathnames` changes the type of `Link` and `getPathname`
+ * across the whole project and invalidates the fork in `src/i18n/pathname.ts`,
+ * which is what keeps next-intl's client `Link` off every route.
+ *
+ * What that costs, stated rather than discovered: `/en/voyages/crete` reads
+ * `voyages`, not `trips`. It is one French word in an address whose story is in
+ * French anyway. Re-open it the day the stories themselves are translated —
+ * that, and not the number of locales, is the signal.
  */
 export const TRIP_SEGMENT = "voyages";
 

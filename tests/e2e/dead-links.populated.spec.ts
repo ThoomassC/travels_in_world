@@ -48,9 +48,9 @@ const START = "/fr";
 
 /**
  * A hard stop on the crawl, so a cycle or an unexpected route explosion fails as
- * a number rather than as a timeout. The fixture holds five trips, so the real
- * count is nine documents (`/fr`, `/fr/voyages`, `/fr/a-propos`, four trip pages,
- * and whatever those link to among the same set).
+ * a number rather than as a timeout. The fixture holds five trips, four of which
+ * have a récit, so the real count is seven documents per locale — and the
+ * language menu links the three locales to each other, which makes twenty-one.
  */
 const MAX_PAGES = 40;
 
@@ -195,13 +195,35 @@ test("no rendered link on any page leads to an address that does not exist", asy
   /**
    * The crawl reached the whole site, which is the guard on the guard: a run that
    * followed nothing would report success for having checked one page. Seven
-   * documents on this fixture — three index pages plus the four trips that have a
-   * récit, and **not** `maroc-2023`, which has none.
+   * documents per locale on this fixture — three index pages plus the four trips
+   * that have a récit, and **not** `maroc-2023`, which has none.
    *
-   * Written out rather than counted, so the day a route arrives somebody has to
-   * decide whether a reader should reach it from `/fr` at all.
+   * **Twenty-one and not seven, since TIW-38.** The language menu is three plain
+   * `<a href>` with an `hreflang`, rendered on every page and working with no
+   * JavaScript, so a crawl that starts at `/fr` reaches `/en` and `/es` on its
+   * first hop and then the whole of both. That is the point of the menu: the two
+   * other locales are part of the reachable site, not a client-side rewrite of
+   * the current URL. It also means this file now checks every fragment of every
+   * translated page, which is where a mistranslated anchor would hide.
+   *
+   * Written out rather than counted, so the day a route or a locale arrives
+   * somebody has to decide whether a reader should reach it from `/fr` at all.
    */
   expect([...crawled].sort()).toEqual([
+    "/en",
+    "/en/a-propos",
+    "/en/voyages",
+    "/en/voyages/islande-2022",
+    "/en/voyages/japon-2024",
+    "/en/voyages/japon-2025",
+    "/en/voyages/perou-bolivie-2023",
+    "/es",
+    "/es/a-propos",
+    "/es/voyages",
+    "/es/voyages/islande-2022",
+    "/es/voyages/japon-2024",
+    "/es/voyages/japon-2025",
+    "/es/voyages/perou-bolivie-2023",
     "/fr",
     "/fr/a-propos",
     "/fr/voyages",
