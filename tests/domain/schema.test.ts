@@ -895,6 +895,80 @@ describe("TripSchema — story", () => {
  * whose absence has no unambiguous meaning is to refuse the file and name it —
  * the same call `alt` and `blurDataUrl` already carry.
  */
+describe("TripSchema — the floor under every date", () => {
+  /**
+   * **Found by nine real files, not by imagination.** TIW-24 scaffolded Thomas's
+   * nine trips with `0001-01-01` in every date field — deliberately absurd, so
+   * that no reader could take a placeholder for data. `npm run validate:content`
+   * accepted all nine without a word: `0001-01-01` is a real day of the proleptic
+   * Gregorian calendar, and writing the same absurd value everywhere satisfies
+   * every cross-field rule at once. Nothing in this schema asked whether a date
+   * could be TRUE, only whether it was consistent.
+   *
+   * So the only thing between a placeholder and a published page was a comment at
+   * the top of a YAML file — which is the exact shape of guard this repository
+   * has twice learned not to trust.
+   */
+  it("refuses a startDate before 1900", () => {
+    const outcome = attempt(TripSchema, minimalTripInput({ startDate: "0001-01-01" }));
+
+    expect(outcome.accepted).toBe(false);
+    expect(pathsUnder(outcome, "startDate").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * `publishedAt` has NO floor of its own, and this is the case that says why.
+   * It was written with one; removing the floor rule left this green, because
+   * `publishedAt >= startDate` already reports here. A check that cannot fail
+   * alone is worse than no check — it is trusted for something it does not do.
+   */
+  it("reaches publishedAt through startDate, without a rule of its own", () => {
+    const outcome = attempt(TripSchema, minimalTripInput({ publishedAt: "0001-01-01" }));
+
+    expect(outcome.accepted).toBe(false);
+    expect(pathsUnder(outcome, "publishedAt").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * **`endDate` is not checked, and this case is what stops someone "fixing" that.**
+   *
+   * `src/content/diagnose.ts` maps a schema issue to the sentence a reader gets
+   * BY PATH: every `custom` issue on `endDate` renders as "the trip ends before it
+   * starts". A floor rule added there arrives wearing that message — measured on
+   * the nine files: `endDate: le voyage se termine le 0001-01-01, avant son début
+   * le 0001-01-01`, false and unactionable. Nothing is lost, because the floor
+   * reaches `endDate` transitively, and this asserts that it does.
+   */
+  it("still refuses an impossible endDate, through startDate rather than directly", () => {
+    const outcome = attempt(
+      TripSchema,
+      minimalTripInput({ startDate: "0001-01-01", endDate: "0001-01-02" })
+    );
+
+    expect(outcome.accepted).toBe(false);
+    expect(pathsUnder(outcome, "endDate")).toEqual([]);
+    expect(pathsUnder(outcome, "startDate").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * A floor, never a range: it refuses the impossible and not the improbable.
+   * 1900 itself is accepted — the boundary belongs to the valid side, and a trip
+   * dated in the future is a booked departure, not an error.
+   */
+  it.each(["1900-01-01", "2099-06-01"])("does not blame %o", (startDate) => {
+    /**
+     * The assertion is on the FLOOR and not on the whole trip: moving only
+     * `startDate` leaves the fixture's steps where they were, and a step outside
+     * the trip's bounds is a different rule reporting on a different path. Asking
+     * `accepted === true` here would have made this case fail for a reason that
+     * has nothing to do with what it is testing — it did, before this note.
+     */
+    const outcome = attempt(TripSchema, minimalTripInput({ startDate }));
+
+    expect(pathsUnder(outcome, "startDate")).toEqual([]);
+  });
+});
+
 describe("TripSchema — publishedAt", () => {
   it("refuses a trip that does not say when it was published", () => {
     const { publishedAt: _omitted, ...withoutIt } = minimalTripInput();
