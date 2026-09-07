@@ -2,6 +2,7 @@ import { Fragment, type CSSProperties, type ReactElement, type ReactNode } from 
 import { useTranslations } from "next-intl";
 import { frameAround, type WorldBox } from "./frame";
 import { MapViewport, type MapViewportZone } from "./map-viewport";
+import { ZOOM_VALUE_TOKEN } from "./viewport";
 import { placeMarks, spreadCoincident, type TripMark } from "./marks";
 import { worldPointOf, zonesOf } from "./zones";
 import styles from "./world-map.module.css";
@@ -475,6 +476,17 @@ export function WorldMap({
           zones={panelZones}
           labels={{
             panelClose: t("panelClose"),
+            zoomLabel: t("zoomLabel"),
+            /*
+              Resolved with the ICU argument's own name as its value, so what
+              crosses the boundary is the translated sentence with a hole in it —
+              `ZOOM_VALUE_TOKEN` says why the number cannot be filled
+              in here, and why the constant lives in `viewport.ts` rather than
+              beside the component that consumes it. The value changes on every notch; the
+              wording, the word order and the space before the `%` do not, and
+              those are the parts a translator owns.
+            */
+            zoomValue: t("zoomValue", { percent: ZOOM_VALUE_TOKEN }),
           }}
         >
           {/*

@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type MouseEvent as ReactMouseEvent,
@@ -16,9 +17,12 @@ import {
 import { createPortal } from "react-dom";
 import type { Frame, WorldBox } from "./frame";
 import {
+  CENTRE,
   TRIP_PARAM,
   VIEW_PARAM,
+  ZOOM_SCALE_STEPS,
   ZOOM_STEP,
+  ZOOM_VALUE_TOKEN,
   boundsOf,
   clampViewport,
   exceedsDragThreshold,
@@ -26,6 +30,9 @@ import {
   pinchFactor,
   readMapState,
   writeMapState,
+  zoomNotchOf,
+  zoomPercentOf,
+  zoomToNotch,
   zoomViewport,
   type Viewport,
 } from "./viewport";
@@ -50,7 +57,8 @@ import styles from "./world-map.module.css";
  * both are on elements this component renders itself:
  *
  * 1. the `viewBox` of the one `<svg>` tag — four numbers;
- * 2. four custom properties on the canvas — `--frame-x/y/w/h`.
+ * 2. four custom properties on the stage — `--frame-x/y/w/h`, which the canvas
+ *    and every marker inherit.
  *
  * The second is what moves sixty markers without touching one of them. The
  * markers are server-rendered `<a>` elements carrying their position in **world**
@@ -67,8 +75,8 @@ import styles from "./world-map.module.css";
  * `children` (the paths), `overlay` (the marker list, with its real `<a href>`
  * and its accessible names), and each zone's `body` (the trip cards, with their
  * covers, dates and durations, formatted by `Intl` on the server). This component
- * renders the chrome — an `<svg>`, three buttons, a hint, a panel shell — and
- * nothing else. The ticket's "client component strictly limited to interaction"
+ * renders the chrome — an `<svg>`, a zoom slider, a panel shell — and nothing
+ * else. The ticket's "client component strictly limited to interaction"
  * is a structural property here rather than a promise.
  *
  * ## What the reader keeps when this file never loads
@@ -77,9 +85,9 @@ import styles from "./world-map.module.css";
  * `frameAround` chose, the markers are real links to the trips, and the list of
  * destinations below is untouched — the "no JavaScript" acceptance criterion was
  * already met by TIW-13 and TIW-15, and this ticket **adds a layer over a page
- * that works alone** rather than building a fallback for it. The three zoom
- * buttons and the panel are rendered only once `mounted` is true, so a reader
- * without this script is never shown a control that cannot work.
+ * that works alone** rather than building a fallback for it. The zoom slider and
+ * the panel are rendered only once `ready` is true, so a reader without this
+ * script is never shown a control that cannot work.
  *
  * ## What happens to a marker's link
  *
@@ -115,7 +123,7 @@ export type MapViewportZone = {
 };
 
 /**
- * The five strings this component's own chrome needs, resolved by the server.
+ * The strings this component's own chrome needs, resolved by the server.
  *
  * **This is a measured decision and not a style preference.** `useTranslations`
  * works perfectly well in a client component here — the layout's
@@ -146,10 +154,18 @@ export type MapViewportZone = {
  */
 export type MapViewportLabels = {
   readonly panelClose: string;
+  /** The zoom slider's accessible name. */
+  readonly zoomLabel: string;
+  /**
+   * The zoom slider's `aria-valuetext`, with `ZOOM_VALUE_TOKEN` where the live
+   * percentage goes. See that constant, in `./viewport.ts`, for why it is a
+   * template — and for why it cannot be declared in this file.
+   */
+  readonly zoomValue: string;
 };
 
 export type MapViewportProps = {
-  /** The frame the build chose, and the frame the reset button goes back to. */
+  /** The frame the build chose, and the widest the reader is shown by default. */
   readonly initialFrame: Frame;
   /** The projected world the frame is a window on — `{ 960, 500 }` in production. */
   readonly world: WorldBox;
@@ -169,7 +185,7 @@ export type MapViewportProps = {
  * be written without a cast that would silence every other typo in it. Same note
  * as `world-map.tsx` and `src/app/[locale]/page.tsx`.
  */
-type CanvasStyle = CSSProperties &
+type FrameStyle = CSSProperties &
   Record<"--frame-x" | "--frame-y" | "--frame-w" | "--frame-h", string>;
 
 type SheetStyle = CSSProperties & Record<"--sheet-shift", string>;
@@ -180,13 +196,8 @@ type Selection = {
   readonly zone: string;
 };
 
-/** How long the "use Ctrl and the wheel" message stays on screen. */
-
 /** How far a finger must pull a sheet down before it closes, in CSS pixels. */
 const SHEET_CLOSE_PX = 72;
-
-/** Where the buttons zoom from: the middle of what the reader is looking at. */
-const CENTRE = { x: 0.5, y: 0.5 };
 
 /**
  * The four numbers of the frame, rounded ONCE, as strings.
@@ -269,7 +280,7 @@ export function MapViewport({
   const [selection, setSelection] = useState<Selection | null>(null);
   /**
    * False until the effects have run, and the whole of the progressive
-   * enhancement. The zoom buttons and the panel are rendered only when it is
+   * enhancement. The zoom slider and the panel are rendered only when it is
    * true, so the server-rendered document — which is what a reader without this
    * script keeps — carries no control that could not work.
    */
@@ -767,6 +778,24 @@ export function MapViewport({
     setSheetShift(Math.max(0, event.clientY - start.y));
   };
 
+  /**
+   * The slider, in one line, and there is nothing else to it — which is the point.
+   *
+   * No state of its own: the `value` below is derived from `view` during the
+   * render, so the wheel, a pinch, a drag and a shared `?carte=` address all move
+   * the thumb without this handler knowing they exist. A `useState` mirroring the
+   * notch would be a second copy of the zoom, and the two would drift the first
+   * time anything but the slider changed it.
+   *
+   * `replaceState` is what the URL effect will do with it, like the wheel and
+   * unlike a selection: dragging a slider must not fill the history with a hundred
+   * entries. `pushHistoryRef` is left alone, so it stays false.
+   */
+  const onZoomChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const notch = Number(event.currentTarget.value);
+    setView((current) => zoomToNotch(current, notch, bounds));
+  };
+
   const onSheetPointerUp = () => {
     const shift = sheetShift;
     sheetRef.current = null;
@@ -778,31 +807,117 @@ export function MapViewport({
   };
 
   const frame = digitsOf(view);
-  const canvasStyle: CanvasStyle = {
+  /**
+   * The four numbers, written **on the stage** and inherited by everything under
+   * it — the canvas, the `<svg>`'s box and every marker.
+   *
+   * They moved up one element when the slider arrived, and the reason is layout
+   * rather than tidiness. The stage is what the slider is positioned against, so
+   * the stage has to be exactly the drawing's box — otherwise the control floats
+   * tens of pixels off the map's right edge at every width where the first-screen
+   * budget binds rather than the viewport. That box is derived from `--frame-w`
+   * and `--frame-h` in the stylesheet, and an element cannot read a custom
+   * property declared on its own child. Custom properties inherit downwards, so
+   * the canvas still resolves all four and `aspect-ratio` still locks to the very
+   * digits the `viewBox` carries.
+   */
+  const frameStyle: FrameStyle = {
     "--frame-x": frame.x,
     "--frame-y": frame.y,
     "--frame-w": frame.w,
     "--frame-h": frame.h,
   };
   const sheetStyle: SheetStyle = { "--sheet-shift": `${sheetShift}px` };
+  /** Both derived from the frame during the render — see `onZoomChange`. */
+  const zoomNotch = zoomNotchOf(view, bounds);
+  const zoomPercent = zoomPercentOf(view, bounds);
 
   return (
-    <div className={styles.stage} data-tips-hidden={tipsHidden ? "" : undefined}>
+    <div className={styles.stage} style={frameStyle} data-tips-hidden={tipsHidden ? "" : undefined}>
       {/*
-        **The three zoom controls are gone** (TIW-38, at the owner's request), and
-        this note is what is left of them because the loss is not nothing.
+        **The zoom slider, and with it the keyboard path back.**
 
-        They were the only KEYBOARD path to the zoom: the wheel needs `Ctrl`, the
-        pinch needs two fingers, and neither is reachable from a keyboard. So the
-        zoom is now a pointer-only enhancement. That is defensible here and only
-        here — the `<svg>` is `aria-hidden` (ADR 0003), every marker is a real link
-        in the list beside it, and `VisitedCountries` states in text everything the
-        drawing shows — so nothing a reader must reach is behind the zoom. It would
-        NOT be defensible on a map that carried information of its own.
+        TIW-38 removed the three zoom buttons at the owner's request, and the note
+        left in their place said the loss was not nothing: they were the only
+        KEYBOARD route to the zoom, because the wheel needs `Ctrl` and the pinch
+        needs two fingers, and the map's zoom became a pointer-only enhancement.
+        **That paragraph is no longer true, and this control is why.** A native
+        `<input type="range">` is keyboard-operable by construction — arrows for a
+        notch, Page Up/Down for ten, Home and End for the two ends — so the zoom is
+        reachable again without a mouse, a trackpad or a touchscreen.
 
-        What went with them: `labels.zoomIn/Out/Reset`, their message keys, and the
-        e2e cases that walked them. `git log` holds the markup.
+        Native, and not a `<div>` with pointer listeners, for four things nobody
+        has to write: that keyboard vocabulary, the `slider` role with its value in
+        the accessibility tree, a rendering in forced-colours mode, and a thumb the
+        platform already sizes for a finger.
+
+        **Vertical by `writing-mode`, on the right edge of the drawing** — the
+        stylesheet holds that half, including why the recipe is not the
+        `-webkit-appearance: slider-vertical` a search still suggests (removed from
+        Chromium in 132).
+
+        It is inside the `<figure>` deliberately: `tests/e2e/support/axe.ts`
+        confines the map's one tolerated `target-size` allowance to that element,
+        and a control dropped outside it would have widened the allowance to cover
+        the whole page — the same trap the panel's portal note records, taken from
+        the other side.
+
+        Behind `ready`, like everything else here: an inert slider in a document
+        with no script is a control that answers nothing.
       */}
+      {ready ? (
+        <div className={styles.zoomRail}>
+          {/*
+            The two signs, and they are signs rather than buttons on purpose.
+            The owner asked for a `+` at the top and a `−` at the bottom "to
+            indicate" — so they say which way the rail runs, and nothing else
+            does. Making them press would be two more tab stops and two more
+            44 px targets for a job the arrow keys already do on the control
+            between them, and it would put three ways to zoom on one rail.
+
+            `aria-hidden`, therefore: the slider next to them is already named,
+            already announces its value as a percentage, and already reports its
+            orientation. A reader who hears "plus, Zoom de la carte, moins" has
+            been told the same thing three times, twice by punctuation.
+
+            U+2212 MINUS SIGN and not a hyphen: at this size a hyphen is visibly
+            shorter than the bar of the `+` above it, and the pair reads as
+            mismatched rather than as a scale.
+          */}
+          <span className={styles.zoomSign} aria-hidden="true">
+            +
+          </span>
+          <input
+            type="range"
+            className={styles.zoom}
+            min={0}
+            max={ZOOM_SCALE_STEPS}
+            step={1}
+            value={zoomNotch}
+            aria-label={labels.zoomLabel}
+            /*
+            `aria-valuetext` because the raw value is a notch on a scale nobody
+            chose and nobody can picture. "Zoom 250 %" is the unit every image
+            viewer already uses; "37" is this file's implementation detail read
+            aloud. `zoomPercentOf` computes it from the frame's width, so it is the
+            zoom itself and not the thumb's position — the two agree, and the
+            percentage is the one of the pair a reader can act on.
+          */
+            aria-valuetext={labels.zoomValue.replace(ZOOM_VALUE_TOKEN, String(zoomPercent))}
+            /*
+            Not implied by the element: `role="slider"` is horizontal by default in
+            ARIA, and the vertical layout is a CSS fact the accessibility tree
+            cannot see. Stated so the announcement matches what is on screen and
+            what the arrow keys do.
+          */
+            aria-orientation="vertical"
+            onChange={onZoomChange}
+          />
+          <span className={styles.zoomSign} aria-hidden="true">
+            &#8722;
+          </span>
+        </div>
+      ) : null}
 
       {/*
         `jsx-a11y/click-events-have-key-events` and
@@ -829,15 +944,14 @@ export function MapViewport({
           ring that leads nowhere.
 
         The pointer handlers pan the map, which is a pointer-only gesture with a
-        named keyboard equivalent beside it: the three zoom buttons and, for
-        panning, the fact that the reader can zoom out and back in on another
-        point. A drag has no keyboard analogue to add here.
+        named keyboard equivalent beside it: the zoom slider above and, for
+        panning, the fact that the reader can zoom out on it and back in on
+        another point. A drag has no keyboard analogue to add here.
       */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- delegation surface over real links; see above. */}
       <div
         ref={canvasRef}
         className={styles.canvas}
-        style={canvasStyle}
         data-dragging={dragging ? "" : undefined}
         data-interactive={ready ? "" : undefined}
         onPointerDown={onPointerDown}
@@ -865,12 +979,6 @@ export function MapViewport({
       </div>
 
       {/*
-        The ephemeral message the wheel-alone gesture earns. Not a live region:
-        it answers a pointer gesture, and a reader who never turns a wheel would
-        hear it announced for nothing. The keyboard path to the same result is the
-        three buttons above, which are named.
-      */}
-      {/*
         **The wheel hint is gone** (TIW-38, at the owner's request), and with it
         its state, its expiry timer and its message key — a component that keeps
         the machinery of something it does not render is a component nobody can
@@ -879,8 +987,9 @@ export function MapViewport({
         Nothing accessible is lost: it was `aria-hidden`, so it never existed for
         a screen reader. What IS lost is the discoverability of `Ctrl` + wheel for
         a sighted mouse reader — the wheel still refuses to zoom without the
-        modifier, and now says nothing about why. The named buttons above remain
-        the discoverable path, which is what the note on the wheel already said.
+        modifier, and now says nothing about why. The named slider above is the
+        discoverable path, which is what the note on the wheel already said of the
+        buttons it replaced.
       */}
 
       {/*

@@ -76,6 +76,39 @@ export const MAX_ZOOM_WIDTH_FRACTION = 0.04;
 export const ZOOM_STEP = 1.5;
 
 /**
+ * How many notches the zoom slider offers between the whole world and the floor.
+ *
+ * The value is what an `<input type="range">` carries, so this is also the
+ * keyboard vocabulary the reader gets, and the three figures below are the whole
+ * of the choice:
+ *
+ * - **an arrow key moves one notch**, which on the logarithmic scale below is a
+ *   factor of `25 ^ (1/100)` — about 3 %. Fine enough to settle on a coastline.
+ * - **Page Up / Page Down move ten** in every engine (the UA step is
+ *   `(max - min) / 10`), so a factor of about 1.38 — near enough to
+ *   {@link ZOOM_STEP} that a reader who used the old buttons keeps their feel.
+ * - **Home and End are the two ends**, so no one has to cross the range one press
+ *   at a time.
+ *
+ * 100 and not 8 (the number of presses the three removed buttons took from the
+ * world to the floor): a slider that answered 8 positions would be a set of
+ * buttons wearing a track, and dragging it would jump. The continuity the owner
+ * asked for is this number being large.
+ */
+export const ZOOM_SCALE_STEPS = 100;
+
+/**
+ * Where the zoom is taken from when nothing points at a place: the middle of what
+ * the reader is looking at.
+ *
+ * Lives here rather than in the component because two callers need the same
+ * anchor and they must not disagree — the slider (which has no pointer to zoom
+ * towards) and the fallback of `anchorIn` in `./map-viewport.tsx` (which is what
+ * a box of zero size answers).
+ */
+export const CENTRE = { x: 0.5, y: 0.5 } as const;
+
+/**
  * How far a pointer may travel before an activation stops being a tap.
  *
  * This is the acceptance criterion "a drag ending on a marker does not open the
@@ -84,6 +117,42 @@ export const ZOOM_STEP = 1.5;
  * that a deliberate drag can never be mistaken for a click.
  */
 export const DRAG_THRESHOLD_PX = 8;
+
+/**
+ * The placeholder a server-resolved zoom sentence leaves for the live number.
+ *
+ * **Why a template with a hole in it rather than a translated string.** The
+ * slider's `aria-valuetext` has to name a percentage that changes on every notch,
+ * and the client component deliberately holds no translator: `useTranslations`
+ * there costs 1.9 KB and leaks a chunk onto a route with no map on it, which
+ * `MapViewportLabels` records as a measurement. Resolving one sentence per
+ * reachable percentage on the server is not an option either — there are some two
+ * thousand of them.
+ *
+ * So `world-map.tsx` resolves the sentence with this token where the number goes
+ * (`t("zoomValue", { percent: ZOOM_VALUE_TOKEN })`) and `map-viewport.tsx`
+ * substitutes. The translator keeps the whole sentence, word order and per-locale
+ * spacing before the `%` included, which is the part a `"Zoom " + n + " %"`
+ * concatenation would have thrown away.
+ *
+ * The token is the ICU argument's own name, so a catalogue that never resolved it
+ * and a catalogue resolved with this value are the same string — there is no
+ * second spelling to keep in step.
+ *
+ * **It lives HERE, in the pure module, and that is not filing.** It was declared
+ * in `map-viewport.tsx` first, and the page threw on every render:
+ *
+ *     INVALID_MESSAGE: The message `zoomValue` in namespace `map` didn't
+ *     resolve to a string. If you want to format rich text, use `t.rich`.
+ *
+ * A module carrying `'use client'` exports *client references* into a Server
+ * Component, not its values — a string constant included. So `world-map.tsx` was
+ * handing `t()` an opaque object, intl formatted it as a rich-text part, and the
+ * result was an array. The error names the message and not the import, which is
+ * the whole reason this paragraph is here rather than the lesson being learnt
+ * twice. `tests/components/map/world-map.test.tsx` pins the substitution.
+ */
+export const ZOOM_VALUE_TOKEN = "{percent}";
 
 /** The query parameter carrying the frame: `x,y,width`, one decimal each. */
 export const VIEW_PARAM = "carte";
@@ -159,6 +228,33 @@ export function boundsOf(frame: Frame, world: WorldBox): ViewportBounds {
   };
 }
 
+/** The two frame widths a reader can reach, and nothing in between. */
+type ZoomRange = {
+  /** Fully zoomed out: the whole world, or as much of it as the ratio allows. */
+  readonly widest: number;
+  /** Fully zoomed in: the legibility floor, unless the world is narrower still. */
+  readonly narrowest: number;
+};
+
+/**
+ * The two ends of the zoom, computed once and shared by everything that clamps or
+ * scales a width.
+ *
+ * **The zoom-out cap reads both sides of the world.** A frame narrower than the
+ * world reaches the world's *height* before its width, and a `width <= world.width`
+ * cap alone would answer a frame hanging past the bottom edge — grey space under
+ * the map, and a marker pushed off it.
+ *
+ * A world smaller than the zoom floor is not a state a page can reach, but the
+ * floor must not win over the world if it ever were: the cap is the outer one, so
+ * `narrowest` can never exceed `widest` and the range can never be inside out.
+ */
+function zoomRangeOf(bounds: ViewportBounds): ZoomRange {
+  const widest = Math.min(bounds.world.width, bounds.world.height * bounds.aspect);
+
+  return { widest, narrowest: Math.min(bounds.minWidth, widest) };
+}
+
 /**
  * The nearest renderable viewport inside the world, at the bounds' aspect ratio.
  *
@@ -170,19 +266,15 @@ export function boundsOf(frame: Frame, world: WorldBox): ViewportBounds {
  * locked to the bounds' ratio, so any other height letterboxes the drawing and
  * slides every marker off its country.
  *
- * **The zoom-out cap reads both sides of the world.** A frame narrower than the
- * world reaches the world's *height* before its width, and a `width <= world.width`
- * cap alone would answer a frame hanging past the bottom edge — grey space under
- * the map, and a marker pushed off it.
+ * The two widths it clamps between are {@link zoomRangeOf}'s, which is also what
+ * the slider's scale is laid out over: one definition, so a frame the reader can
+ * drag to is by construction a frame this function will keep.
  */
 export function clampViewport(view: Viewport, bounds: ViewportBounds): Viewport {
-  const { world, aspect, minWidth } = bounds;
+  const { world, aspect } = bounds;
+  const { widest, narrowest } = zoomRangeOf(bounds);
 
-  const maxWidth = Math.min(world.width, world.height * aspect);
-  // A world smaller than the zoom floor is not a state a page can reach, but the
-  // floor must not win over the world if it ever were: the cap is the outer one.
-  const floor = Math.min(minWidth, maxWidth);
-  const width = clamp(orElse(view.width, maxWidth), floor, maxWidth);
+  const width = clamp(orElse(view.width, widest), narrowest, widest);
   const height = width / aspect;
 
   return {
@@ -228,6 +320,111 @@ export function zoomViewport(
     },
     bounds
   );
+}
+
+/* --- The zoom slider's scale. ------------------------------------------------
+
+   Three functions and one shared decision: **the notch is logarithmic in the
+   frame's width, never linear.** On the production world the scale spans a factor
+   of 25 — 960 units down to 38.4 — and the arithmetic of the two layouts is not
+   close:
+
+     linear        9.2 units a notch, everywhere. That is 1 % of the frame at the
+                   bottom of the scale and 24 % of it at the top, so the map
+                   barely stirs for the first half of the travel and then jumps a
+                   quarter of its width per arrow key at the end. Notch 50 is
+                   499 units: still most of the world.
+     logarithmic   3.3 % a notch, everywhere. Notch 50 is 192 units — a continent
+                   — and the last notch is as fine as the first.
+
+   A constant *ratio* per notch is what "zoomer proprement" means for a control
+   that is dragged rather than pressed: the map has to move at the same apparent
+   speed wherever the thumb is.
+
+   The three are exact inverses of one another, which is the property the slider
+   depends on: the value is derived from the viewport on every render, so a notch
+   that did not read back as itself would make the thumb crawl or stick while a
+   reader dragged it. `tests/components/map/viewport.test.ts` walks all 101 in
+   both directions. ---------------------------------------------------------- */
+
+/** `log(narrowest / widest)`, the whole span of the scale. Negative, or 0. */
+const zoomSpanOf = (range: ZoomRange): number => Math.log(range.narrowest / range.widest);
+
+/**
+ * The frame width a notch stands for — 0 is the whole world, {@link
+ * ZOOM_SCALE_STEPS} is the legibility floor.
+ *
+ * Total, like everything else here: a notch that is not a number, or one off
+ * either end, answers the nearest end rather than a width no `viewBox` can carry.
+ */
+export function widthAtZoomNotch(notch: number, bounds: ViewportBounds): number {
+  const range = zoomRangeOf(bounds);
+  const fraction = clamp(orElse(notch, 0), 0, ZOOM_SCALE_STEPS) / ZOOM_SCALE_STEPS;
+
+  return range.widest * Math.exp(zoomSpanOf(range) * fraction);
+}
+
+/**
+ * Which notch a viewport is at — the other direction, and the one that makes the
+ * slider a *view* of the frame rather than a second copy of it.
+ *
+ * This is what keeps the control honest when the zoom came from somewhere else: a
+ * wheel notch, a pinch, a shared `?carte=` address and a drag all change `width`,
+ * and the thumb follows because it is computed from it. There is no slider state
+ * to fall out of step.
+ *
+ * Rounded to a whole notch, because that is what the `<input>` carries. The
+ * rounding is also what absorbs the last bit of floating-point error on the way
+ * back through {@link zoomToNotch}.
+ */
+export function zoomNotchOf(view: Viewport, bounds: ViewportBounds): number {
+  const range = zoomRangeOf(bounds);
+  const span = zoomSpanOf(range);
+
+  // A world no wider than the zoom floor has one reachable width, so every notch
+  // is the same frame; answering 0 puts the thumb at an end rather than at NaN.
+  if (span === 0) {
+    return 0;
+  }
+
+  const { width } = clampViewport(view, bounds);
+
+  return Math.round(clamp(Math.log(width / range.widest) / span, 0, 1) * ZOOM_SCALE_STEPS);
+}
+
+/**
+ * The viewport a notch asks for, **zoomed from the middle of what the reader is
+ * looking at** — exactly where the three removed buttons zoomed from.
+ *
+ * Through `zoomViewport` and not by writing the width directly, so the anchor
+ * arithmetic that keeps the centre still exists once. A slider that changed the
+ * width without holding a point would slide the map out from under the reader on
+ * every pixel of the drag, which is the failure that anchor was written for.
+ */
+export function zoomToNotch(view: Viewport, notch: number, bounds: ViewportBounds): Viewport {
+  const current = clampViewport(view, bounds);
+
+  return zoomViewport(current, current.width / widthAtZoomNotch(notch, bounds), CENTRE, bounds);
+}
+
+/**
+ * The zoom as a percentage a reader can hear — 100 % is the whole world, 2500 %
+ * is the floor on the production world.
+ *
+ * For `aria-valuetext`, and it is the reason that attribute is set at all: the
+ * notch is an implementation detail, and a screen reader announcing "37" for a
+ * map would be reading out the scale rather than the zoom. A percentage is the
+ * unit every image viewer and every browser already zooms in.
+ *
+ * A whole number, deliberately: the alternative carries a decimal separator,
+ * which is locale-specific, and this component has no translator (see
+ * `MapViewportLabels`).
+ */
+export function zoomPercentOf(view: Viewport, bounds: ViewportBounds): number {
+  const { widest } = zoomRangeOf(bounds);
+  const { width } = clampViewport(view, bounds);
+
+  return Math.round((widest / width) * 100);
 }
 
 /**

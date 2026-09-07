@@ -175,7 +175,15 @@ describe("WorldMap", () => {
 
     it("gives the container exactly the frame's aspect ratio", () => {
       const { container } = renderMap({ marks: [CENTRED_MARK] });
-      const canvas = mapSvg(container).parentElement;
+      /**
+       * The **stage**, one element above the canvas: TIW-39 moved the four
+       * `--frame-*` declarations there so the stage's own box could be derived
+       * from them and the zoom slider positioned against the drawing's real edge.
+       * They inherit down, so nothing changed for the canvas, the `<svg>` or a
+       * marker — but `.style` reads the inline attribute and not the cascade, so
+       * this is where they are now written.
+       */
+      const stage = mapSvg(container).parentElement?.parentElement;
 
       /**
        * Asserted as a *relation* to the `viewBox`, not as literals: these are the
@@ -191,10 +199,10 @@ describe("WorldMap", () => {
        * and not only at the frame the build chose.
        */
       const [x, y, width, height] = viewBoxOf(container).split(" ");
-      expect(canvas?.style.getPropertyValue("--frame-x")).toBe(x);
-      expect(canvas?.style.getPropertyValue("--frame-y")).toBe(y);
-      expect(canvas?.style.getPropertyValue("--frame-w")).toBe(width);
-      expect(canvas?.style.getPropertyValue("--frame-h")).toBe(height);
+      expect(stage?.style.getPropertyValue("--frame-x")).toBe(x);
+      expect(stage?.style.getPropertyValue("--frame-y")).toBe(y);
+      expect(stage?.style.getPropertyValue("--frame-w")).toBe(width);
+      expect(stage?.style.getPropertyValue("--frame-h")).toBe(height);
     });
 
     it("anchors the marker on its projected point, in world units", () => {
@@ -206,8 +214,9 @@ describe("WorldMap", () => {
        * **World units, not percentages** — the change TIW-14 made to this layer.
        * A percentage is a fraction of one particular frame, and the reader now
        * chooses the frame; the stylesheet re-derives the percentage from the four
-       * `--frame-*` values on the canvas, which is what moves sixty markers on a
-       * zoom without a byte of per-marker JavaScript.
+       * `--frame-*` values the stage declares and the canvas inherits, which is
+       * what moves sixty markers on a zoom without a byte of per-marker
+       * JavaScript.
        *
        * The mark sits at the centre of the world box, so it must come back out as
        * the centre of the frame: asserted as the arithmetic the CSS performs,
@@ -217,9 +226,9 @@ describe("WorldMap", () => {
       expect(item?.style.getPropertyValue("--mark-x")).toBe(String(CENTRED_MARK.point.x));
       expect(item?.style.getPropertyValue("--mark-y")).toBe(String(CENTRED_MARK.point.y));
 
-      const canvas = mapSvg(container).parentElement;
+      const stage = mapSvg(container).parentElement?.parentElement;
       const numberOf = (property: string) =>
-        Number(canvas?.style.getPropertyValue(property) ?? Number.NaN);
+        Number(stage?.style.getPropertyValue(property) ?? Number.NaN);
       const markOf = (property: string) => Number(item?.style.getPropertyValue(property) ?? "");
 
       expect(

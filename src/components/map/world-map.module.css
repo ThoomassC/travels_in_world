@@ -104,37 +104,31 @@
 }
 
 /**
- * The positioning context for everything the reader can act on: the canvas, the
- * three zoom controls and the ephemeral wheel hint. Rendered by the client
- * component, which is also the only thing that can put a control in it.
+ * The positioning context for everything the reader can act on: the drawing, its
+ * markers and the zoom slider. Rendered by the client component, which is also
+ * the only thing that can put a control in it.
+ *
+ * **This box is the drawing's box, and that is new.** The first-screen width
+ * calculation below used to live on `.canvas`; it moved up here when the slider
+ * arrived, and the move is what makes the control sit *on* the map's right edge
+ * rather than tens of pixels off it. At every width where the `dvh` term binds
+ * rather than `100%` — which is most desktop widths — the canvas is narrower than
+ * the figure, so a control positioned against a full-width stage would float in
+ * the margin beside the drawing. Measured at 1280 × 720 before the move: 70 px
+ * of daylight on each side.
+ *
+ * The custom properties the calculation reads are written on THIS element by the
+ * component for the same reason — an element cannot read a custom property
+ * declared on its own child. They inherit downwards, so `.canvas`, the `<svg>`
+ * and every marker still resolve the same four digits the `viewBox` carries.
  */
 .stage {
   position: relative;
-}
-
-/**
- * The positioning context shared by the drawing and the markers. Deliberately
- * NOT `overflow: hidden`: the markers are 44 px boxes centred on their point, so
- * a trip close to an edge of the frame would have half its interaction target
- * clipped away. The rounded corners are applied to the `<svg>` instead, which
- * clips its own drawing to its viewport anyway.
- */
-.canvas {
-  position: relative;
-  /**
-   * Exactly the `viewBox`'s ratio — and now literally the same four numbers,
-   * because the client component writes `--frame-w` and `--frame-h` from the
-   * very values it formats the `viewBox` from. Any other ratio letterboxes the
-   * SVG and every marker drifts off the country it names, which is the trap
-   * `frameAround` and `clampViewport` both keep their aspect arithmetic exact
-   * for.
-   */
-  aspect-ratio: var(--frame-w) / var(--frame-h);
 
   /**
    * **The whole map on the first screen, without a scroll** (TIW-38) — and the
-   * ratio above still exact while doing it, which the first cut of this rule did
-   * not manage.
+   * frame's ratio still exact while doing it, which the first cut of this rule
+   * did not manage.
    *
    * WHAT THIS REPLACED, AND WHY IT WAS A SILENT BREAK. The rule used to drive the
    * height and let the width follow, guarded on the other axis by
@@ -154,11 +148,12 @@
    * centred inside it, and ~257 px of nothing sat above and below the drawing.
    *
    * The empty band was the visible half. The expensive half is that `.marks` is
-   * `inset: 0` on THIS box, so every marker resolves its percentages against the
+   * `inset: 0` on the canvas, so every marker resolves its percentages against the
    * letterboxed height and lands off the country it names: measured, one marker
    * 162 px above the drawing and one 74 px below it. That is the exact trap the
-   * comment above, `frame.ts` and ADR 0003 all name — and the old rule walked into
-   * it while its own comment said the map would simply "letterbox instead".
+   * comment on `.canvas`, `frame.ts` and ADR 0003 all name — and the old rule
+   * walked into it while its own comment said the map would simply "letterbox
+   * instead".
    *
    * WHAT DRIVES WHAT NOW. The **width** is driven and the height follows from the
    * ratio, which is the one arrangement where no third constraint exists to drop:
@@ -175,7 +170,7 @@
    * as long as it is shown — which is the whole time a reader is scrolling.
    *
    * The guard is `tests/e2e/map-interaction.populated.spec.ts`, which measures the
-   * box's ratio against `--frame-w / --frame-h` at a phone's width. It could not
+   * canvas's ratio against `--frame-w / --frame-h` at a phone's width. It could not
    * have caught the old rule: the Playwright project runs at 1280 x 720, where the
    * derived width fits and nothing is ever clipped.
    */
@@ -186,6 +181,39 @@
     )
   );
   margin-inline: auto;
+}
+
+/**
+ * The positioning context shared by the drawing and the markers. Deliberately
+ * NOT `overflow: hidden`: the markers are 44 px boxes centred on their point, so
+ * a trip close to an edge of the frame would have half its interaction target
+ * clipped away. The rounded corners are applied to the `<svg>` instead, which
+ * clips its own drawing to its viewport anyway.
+ *
+ * It fills the stage exactly. The first-screen calculation that used to be here
+ * is one element up, where the slider can be positioned against it; the box a
+ * reader sees is unchanged to the pixel, and the two guards that measure it —
+ * the ratio cases in `tests/e2e/map-interaction.populated.spec.ts` — read this
+ * element and not the stage, deliberately, because this is the box `.marks` is
+ * `inset: 0` on.
+ */
+.canvas {
+  position: relative;
+  inline-size: 100%;
+  /**
+   * Exactly the `viewBox`'s ratio — and literally the same four numbers, because
+   * the client component writes `--frame-w` and `--frame-h` from the very values
+   * it formats the `viewBox` from, on the stage, whence they inherit here. Any
+   * other ratio letterboxes the SVG and every marker drifts off the country it
+   * names, which is the trap `frameAround` and `clampViewport` both keep their
+   * aspect arithmetic exact for.
+   *
+   * The height is therefore derived from a width the stage already resolved,
+   * which is the one arrangement where no third constraint exists for CSS to drop
+   * the ratio in favour of — the note on `.stage` records what happened when
+   * there were three.
+   */
+  aspect-ratio: var(--frame-w) / var(--frame-h);
 }
 
 /**
@@ -722,69 +750,265 @@
    ============================================================================ */
 
 /**
- * The zoom controls, over the top-right of the map. A sibling of `.canvas` and
- * not a child of it, deliberately: the canvas carries the pan and click
- * listeners, and a button inside it would start a drag on `pointerdown` and then
- * have to be excluded by name.
+ * The zoom slider, down the right edge of the drawing — and with it the keyboard
+ * path to the zoom that TIW-38 removed with the three buttons.
+ *
+ * A **sibling of `.canvas`** and not a child of it, for the reason the three
+ * buttons were: the canvas carries the pan and click listeners, so a control
+ * inside it would start a drag on `pointerdown` and then have to be excluded by
+ * name in the handler. Out of it, that class of bug cannot happen. It is still
+ * inside the `<figure>`, which is what `tests/e2e/support/axe.ts` confines the
+ * map's one `target-size` allowance to.
+ *
+ * `position: absolute`, so the control costs the drawing not one pixel: the map
+ * has just been sized to fit the first screen exactly and a control in the flow
+ * would push the bottom of it under the fold.
+ *
+ * PHYSICAL PROPERTIES, DELIBERATELY, AND THIS IS THE TRAP OF THE WHOLE RULE.
+ * Logical properties resolve against **the element's own** writing mode and
+ * direction — and both are overridden here. On this element `inset-block-start`
+ * would be the right-hand edge and `inline-size` would be the height, and
+ * `inset-inline-end` would flip to the left because of the `direction: rtl`
+ * below. Every declaration that positions or sizes this box is therefore written
+ * physically. It is the one rule in this file where that is the correct spelling
+ * rather than a lapse.
  */
-.controls {
+/**
+ * The rail: the `+`, the slider, the `−`, stacked and centred on the right edge
+ * of the drawing.
+ *
+ * **The positioning moved here from `.zoom` when the two signs arrived**, and it
+ * had to: with the input positioned absolutely, a sign placed above it would have
+ * been positioned against the stage instead and the three would have drifted
+ * apart the moment the slider's height changed. One positioned box holding three
+ * static children keeps them one object.
+ *
+ * **The plate moved from the input to this box**, at the owner's direction: the
+ * two signs were outside the pill, floating on the drawing above and below it,
+ * and they belong inside the control they describe. So the rail is now the plate
+ * — border, radius, surface, block padding — and the input inside it is a bare
+ * track that stretches to whatever height the two signs leave.
+ *
+ * `block-size` and not a content height: the input has to know how tall to be,
+ * and `flex: 1` can only give it the remainder of a box whose own height is
+ * settled. The 55 % is of the stage, which is what the input itself used before
+ * the signs arrived — it caps the rail so it never outgrows the drawing it sits
+ * on, and at a phone's width, where the map is about 133 px tall, the floor below
+ * is what applies instead.
+ */
+.zoomRail {
   position: absolute;
-  inset-block-start: var(--space-2);
-  inset-inline-end: var(--space-2);
+  top: 50%;
+  right: var(--space-2);
+  translate: 0 -50%;
   z-index: 3;
+
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-1);
-}
 
-.control {
-  display: grid;
-  place-items: center;
-  /* 2.75rem = 44 px at the root size, the same WCAG 2.5.8 minimum the markers
-     use, and in `rem` for the same reason: it grows with the reader's own size. */
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
+  inline-size: var(--target-min);
+  block-size: min(55%, 13rem);
+  min-block-size: 6.5rem;
+
+  padding-block: var(--space-2);
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text-strong);
-  /* A `<button>` inherits neither font: the UA stylesheet gives it its own. */
-  font-family: inherit;
-  font-size: var(--text-lg);
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 120ms ease;
-}
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
 
-.control:hover {
-  background: var(--accent-quiet);
+  /* Same reason as the input's own declaration below: the canvas beside it
+     declares `pan-y`, so a finger that started its drag on a sign rather than on
+     the thumb would scroll the page out from under the control. */
+  touch-action: none;
 }
 
 /**
- * The message the wheel earns when it is turned alone — the acceptance criterion
- * "on desktop the wheel alone does not zoom, and an ephemeral message says which
- * combination is expected".
+ * The two signs, which say which way the rail runs and nothing else.
  *
- * Over the bottom of the map rather than beside it, so the reader's eye is
- * already there, and `pointer-events: none` so it can never be the thing under
- * the cursor when the next notch arrives.
+ * `--text-accent` and not `--text-muted`: they sit on the map's own land and sea
+ * rather than on a panel, and the accent is the ink this palette documents as
+ * clearing the 4.5 of WCAG 1.4.3 against the ground. They are `aria-hidden` in the component, so this
+ * is a purely visual channel — which is exactly why it may not be the only one,
+ * and is not: the slider between them carries a name, an orientation and a
+ * spoken percentage.
+ *
+ * A fixed `line-height` and `text-align`, because the two glyphs have different
+ * ink heights: a `+` is centred on the maths axis and a `−` sits on it alone, so
+ * left to their own metrics they would not be the same distance from the track.
+ *
+ * `--text-base` and not `--text-md` since they moved inside the plate: at 19 px
+ * the two signs took 44 px of a 208 px rail between them, and the track they
+ * describe was the shortest thing on it.
  */
-.hint {
-  position: absolute;
-  inset-block-end: var(--space-3);
-  inset-inline-start: 50%;
-  translate: -50% 0;
-  z-index: 4;
-  max-inline-size: min(92%, 26rem);
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--text-body);
-  font-size: var(--text-sm);
+.zoomSign {
+  flex: none;
+  inline-size: 100%;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
   text-align: center;
-  pointer-events: none;
+  color: var(--text-accent);
+  user-select: none;
+}
+
+.zoom {
+  pointer-events: auto;
+
+  /**
+   * **Vertical the standard way, in 2026.** `writing-mode: vertical-rl` turns the
+   * slider's inline axis — the axis a range input runs along — vertical, and
+   * `direction: rtl` reverses it so the maximum is at the TOP, which is the only
+   * direction a zoom control can have.
+   *
+   * NOT `-webkit-appearance: slider-vertical`, which most of the web still
+   * suggests: it is non-standard, it never worked outside WebKit and Blink, and
+   * Chromium REMOVED it in 132 — a map shipped with it would silently be
+   * horizontal for most readers. The `writing-mode` recipe is what replaced it,
+   * and is supported in Chromium 126+, Firefox 129+ and Safari 15.4+.
+   */
+  writing-mode: vertical-rl;
+  direction: rtl;
+
+  /**
+   * 44 px across (WCAG 2.5.8, the same `--target-min` the markers use) and tall
+   * enough to aim inside, capped so it never outgrows the drawing it sits on: at
+   * a phone's width the map is about 133 px tall, which the floor plus the plate's
+   * own padding still fits inside.
+   *
+   * `height` and not `block-size`: see the note above.
+   */
+  width: var(--target-min);
+  /* The remainder of the rail, once the two signs have taken theirs. `height`
+     and not `block-size`: see the note above. */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 2.5rem;
+  margin: 0;
+
+  /**
+   * **The track is a background layer on the input** rather than a styled
+   * `::-webkit-slider-runnable-track`. The plate that used to live here is on
+   * `.zoomRail` above, so that the two signs sit inside it.
+   *
+   * The pseudo-element route needs the thumb re-centred by hand on the track's
+   * cross axis, with a different margin per engine and a third answer in vertical
+   * writing mode. A background layer has no cross axis to get wrong: it is a
+   * 6 px stripe, centred, over the content box, and the browser lays the thumb out
+   * on top of it wherever it likes. The two track pseudo-elements below are made
+   * transparent so nothing is painted twice.
+   *
+   * Both inks are measured against the rail's plate rather than against the map,
+   * which is why the plate exists at all: the sea is a grained page and the land a token,
+   * so an ink dropped straight on the drawing would have two backgrounds and no
+   * worst case. `tests/styles/colour-contract.test.ts` holds both pairs —
+   * `control-border/surface` for the track and the plate's own edge, and
+   * `accent/surface` for the thumb — each over 3:1 in both themes (WCAG 1.4.11:
+   * a track a reader cannot find is a control they cannot use).
+   */
+  border: 0;
+  /**
+   * No plate of its own any more, but it keeps the radius — and that is about the
+   * focus ring, not the fill. The library's recipe paints the ring on `outline`,
+   * which follows `border-radius`; with the plate moved to the rail the input
+   * briefly had none, and a focused zoom drew a hard rectangle inside a rounded
+   * plate. The ring is the one thing on this control a keyboard reader navigates
+   * by, and a ring that disagrees with the shape under it reads as a rendering
+   * fault.
+   */
+  border-radius: var(--radius-pill);
+  background-color: transparent;
+  background-image: linear-gradient(var(--control-border), var(--control-border));
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 6px 100%;
+
+  appearance: none;
+  cursor: pointer;
+  /**
+   * The canvas beside it declares `pan-y`, so a finger dragging the thumb
+   * downwards would otherwise scroll the page out from under itself. `none` hands
+   * the whole gesture to the control — which is the one place on this map where a
+   * one-finger drag is meant for the map rather than for the document.
+   */
+  touch-action: none;
+}
+
+/* No `:focus-visible` rule here, and that is deliberate: `@thomascaron/ui`
+   provides the recipe globally, and `src/styles/tokens.css` records why
+   redeclaring it on one site restores a bug the library fixed. */
+
+.zoom::-webkit-slider-runnable-track {
+  background: transparent;
+  border: 0;
+}
+
+.zoom::-moz-range-track {
+  background: transparent;
+  border: 0;
+}
+
+/**
+ * The thumb. A `--surface` ring around it so the accent never touches the track
+ * directly: two saturated shapes meeting at an edge read as one blob at a
+ * glance, and the ring is what keeps the position legible while the reader drags.
+ */
+.zoom::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid var(--surface);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.zoom::-moz-range-thumb {
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid var(--surface);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* The same affordance the removed buttons had, moved onto the one part of this
+   control that a pointer grabs. `--accent-hover` is further from `--surface` than
+   `--accent` in BOTH themes — darker in the light one, lighter in the dark one —
+   so the hover state cannot be the weaker of the two. */
+.zoom:hover::-webkit-slider-thumb {
+  background: var(--accent-hover);
+}
+
+.zoom:hover::-moz-range-thumb {
+  background: var(--accent-hover);
+}
+
+/**
+ * Forced colours: the tokens are dropped and the system's own pair is used.
+ *
+ * A styled control loses its author backgrounds in this mode, so without this
+ * block the track would be a 6 px stripe of nothing and the thumb an invisible
+ * circle — the failure mode a native `<input>` is supposed to make impossible.
+ * `CanvasText` for the track and the plate's edge, `Highlight` for the thumb: the
+ * same pairing the platform's own sliders use, so the control looks like every
+ * other one on the reader's screen.
+ */
+@media (forced-colors: active) {
+  .zoom {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background-color: Canvas;
+    background-image: linear-gradient(CanvasText, CanvasText);
+  }
+
+  .zoom::-webkit-slider-thumb {
+    border-color: Canvas;
+    background: Highlight;
+  }
+
+  .zoom::-moz-range-thumb {
+    border-color: Canvas;
+    background: Highlight;
+  }
 }
 
 /**
@@ -891,7 +1115,8 @@
   margin-inline-start: auto;
   display: grid;
   place-items: center;
-  /* The criterion's "at least 44 px", and the same square as the zoom controls. */
+  /* The criterion's "at least 44 px", the same `--target-min` the zoom
+     slider and the markers use. */
   inline-size: 2.75rem;
   block-size: 2.75rem;
   border: 0;

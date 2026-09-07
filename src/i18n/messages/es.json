@@ -60,7 +60,9 @@
     "markLabelNew": "{title}, {place} — nuevo relato",
     "markLabelToCome": "{title}, {place} — relato pendiente",
     "panelHeading": "{count, plural, one {El viaje en este lugar} other {Los # viajes en este lugar}}",
-    "panelClose": "Cerrar el panel del viaje"
+    "panelClose": "Cerrar el panel del viaje",
+    "zoomLabel": "Zoom del mapa",
+    "zoomValue": "Zoom del {percent} %"
   },
   "trip": {
     "metaDescription": "{title} — {duration}, {cities}.",

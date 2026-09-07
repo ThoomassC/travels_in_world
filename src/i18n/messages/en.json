@@ -60,7 +60,9 @@
     "markLabelNew": "{title}, {place} — new story",
     "markLabelToCome": "{title}, {place} — story to come",
     "panelHeading": "{count, plural, one {The trip here} other {The # trips here}}",
-    "panelClose": "Close the trip panel"
+    "panelClose": "Close the trip panel",
+    "zoomLabel": "Map zoom",
+    "zoomValue": "Zoom {percent}%"
   },
   "trip": {
     "metaDescription": "{title} — {duration}, {cities}.",

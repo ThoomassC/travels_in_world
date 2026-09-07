@@ -5,7 +5,7 @@ import frMessages from "@/i18n/messages/fr.json";
 import { defaultLocale } from "@/i18n/routing";
 import { WorldMap, type MapCountry } from "@/components/map/world-map";
 import type { TripMark } from "@/components/map/marks";
-import { TRIP_PARAM, VIEW_PARAM } from "@/components/map/viewport";
+import { TRIP_PARAM, VIEW_PARAM, ZOOM_SCALE_STEPS } from "@/components/map/viewport";
 
 /**
  * The interaction layer, rendered through `WorldMap` exactly as the page renders
@@ -124,7 +124,37 @@ const canvasOf = (container: HTMLElement): HTMLElement => {
   return canvas;
 };
 
+/**
+ * The element the four `--frame-*` properties are declared on, one above the
+ * canvas since TIW-39.
+ *
+ * They moved so the stage's own box could be derived from them — that box is what
+ * the zoom slider is positioned against, and a control positioned against a
+ * full-width stage floats beside the drawing rather than on it. Custom properties
+ * inherit downwards, so the canvas, the `<svg>` and every marker still resolve the
+ * same digits; `.style` reads the inline attribute rather than the cascade, which
+ * is why the assertions below reach one element further up.
+ */
+const stageOf = (container: HTMLElement): HTMLElement => {
+  const stage = canvasOf(container).parentElement;
+  if (stage === null) {
+    throw new Error("The canvas has no stage around it.");
+  }
+  return stage;
+};
+
 const search = () => new URLSearchParams(window.location.search);
+
+/** The four numbers of the rendered `viewBox`, as numbers. */
+const frameOf = (container: HTMLElement) => {
+  const [x = Number.NaN, y = Number.NaN, width = Number.NaN, height = Number.NaN] = viewBoxOf(
+    container
+  )
+    .split(" ")
+    .map(Number);
+
+  return { x, y, width, height };
+};
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/fr");
@@ -163,12 +193,12 @@ describe("what the server rendered is still what is drawn", () => {
     const { container } = renderMap();
 
     const [x, y, width, height] = viewBoxOf(container).split(" ");
-    const canvas = canvasOf(container);
+    const stage = stageOf(container);
 
-    expect(canvas.style.getPropertyValue("--frame-x")).toBe(x);
-    expect(canvas.style.getPropertyValue("--frame-y")).toBe(y);
-    expect(canvas.style.getPropertyValue("--frame-w")).toBe(width);
-    expect(canvas.style.getPropertyValue("--frame-h")).toBe(height);
+    expect(stage.style.getPropertyValue("--frame-x")).toBe(x);
+    expect(stage.style.getPropertyValue("--frame-y")).toBe(y);
+    expect(stage.style.getPropertyValue("--frame-w")).toBe(width);
+    expect(stage.style.getPropertyValue("--frame-h")).toBe(height);
   });
 
   it("marks itself interactive only once mounted", () => {
@@ -413,12 +443,173 @@ describe("a drag is not a tap", () => {
 
 /*
  * `describe("the zoom controls")` lived here — six cases on the three buttons —
- * and went with them in TIW-38. Nothing of the ZOOM's logic is lost: the step,
- * the legibility floor, the world clamp and the ratio/viewBox agreement are
- * properties of `zoomViewport`/`clampViewport`, and `./viewport.test.ts` covers
- * them as pure functions across 42 cases. What is gone is the button plumbing,
- * which is gone from the product too.
+ * and went with them in TIW-38. The block below is not their restoration: the
+ * ZOOM's own arithmetic (the scale, the legibility floor, the world clamp, the
+ * centre anchor, the value ↔ width round trip) is a property of `./viewport.ts`
+ * and `./viewport.test.ts` walks it across 51 cases without a DOM. What is here
+ * is only what needs one — the wiring, the gate and the accessible name.
  */
+describe("the zoom slider", () => {
+  const sliderOf = (name = frMessages.map.zoomLabel): HTMLInputElement => {
+    const slider = screen.getByRole("slider", { name });
+    if (!(slider instanceof HTMLInputElement)) {
+      throw new Error("The zoom control is not an <input>.");
+    }
+    return slider;
+  };
+
+  it("is a native range input, named, vertical and inside the figure", () => {
+    /**
+     * Four claims in one case because they are one decision: a native
+     * `<input type="range">` is what buys the keyboard, the `slider` role and the
+     * platform's own rendering, and losing any of the four means it has been
+     * replaced by a `<div>`. `aria-orientation` is stated because the ARIA
+     * default for the role is horizontal and the vertical layout is a CSS fact
+     * the accessibility tree cannot see.
+     *
+     * "Inside the figure" is not tidiness: `tests/e2e/support/axe.ts` confines
+     * the map's one tolerated `target-size` violation to that element, so a
+     * control outside it would silently widen the allowance to the whole page.
+     */
+    const { container } = renderMap();
+    const slider = sliderOf();
+
+    expect(slider.type).toBe("range");
+    expect(slider).toHaveAttribute("aria-orientation", "vertical");
+    expect(slider.max).toBe(String(ZOOM_SCALE_STEPS));
+    expect(slider.step).toBe("1");
+    expect(container.querySelector("figure")?.contains(slider)).toBe(true);
+  });
+
+  it("is not rendered until the layer has mounted", () => {
+    /**
+     * The same gate the panel is behind, and the reason it matters more here: a
+     * range input in a document with no script is focusable, draggable and does
+     * nothing at all — the one thing `no-javascript.populated.spec.ts` exists to
+     * refuse. jsdom mounts effects synchronously, so this asserts the condition
+     * rather than the pre-mount frame; the byte-level proof is in
+     * `map-interaction.spec.ts`, which greps the served HTML.
+     */
+    renderMap();
+
+    expect(sliderOf()).toBeInTheDocument();
+    expect(canvasOf(document.body)).toHaveAttribute("data-interactive");
+  });
+
+  it("zooms the map in when it is moved up the scale, from the centre", () => {
+    const { container } = renderMap();
+    const before = frameOf(container);
+
+    fireEvent.change(sliderOf(), { target: { value: "60" } });
+
+    const after = frameOf(container);
+    expect(after.width).toBeLessThan(before.width);
+
+    /**
+     * The centre of what the reader was looking at has not moved: a slider with
+     * no pointer to aim at must not slide the map sideways as it zooms.
+     *
+     * **The tolerance is the frame's own rounding, and it is stated rather than
+     * borrowed from `toBeCloseTo`.** `digitsOf` rounds every frame to one
+     * decimal, so `x` and `width` each land on a 0.1 grid and a centre — half of
+     * a rounded number added to another — lands on a 0.05 one. This assertion
+     * first read `toBeCloseTo(…, 1)`, whose window is a half-open `< 0.05`, and it
+     * failed on a drift of exactly 0.05: the arithmetic was right and the
+     * boundary was off by one representable step. Widening it to precision 0
+     * would have hidden a real half-unit slide, so the quantum is named instead.
+     *
+     * `EPSILON` on top of it is not slack, it is binary: the drift is exactly
+     * 0.05 in decimal and 0.05000000000001137 once `x + width / 2` has been
+     * through two additions of numbers that have no exact double. Comparing a
+     * decimal quantum against a computed double without allowing for that is how
+     * a correct implementation fails a correct test.
+     */
+    const ROUNDING_QUANTUM = 0.05;
+    const EPSILON = 1e-9;
+    expect(Math.abs(after.x + after.width / 2 - (before.x + before.width / 2))).toBeLessThanOrEqual(
+      ROUNDING_QUANTUM
+    );
+    expect(
+      Math.abs(after.y + after.height / 2 - (before.y + before.height / 2))
+    ).toBeLessThanOrEqual(ROUNDING_QUANTUM + EPSILON);
+  });
+
+  it("goes back out again, so the control is not one-way", () => {
+    const { container } = renderMap();
+
+    fireEvent.change(sliderOf(), { target: { value: "70" } });
+    const zoomedIn = Number(viewBoxOf(container).split(" ")[2]);
+
+    fireEvent.change(sliderOf(), { target: { value: "10" } });
+    const zoomedOut = Number(viewBoxOf(container).split(" ")[2]);
+
+    expect(zoomedOut).toBeGreaterThan(zoomedIn);
+  });
+
+  it("follows a zoom it did not make, because it holds no state of its own", () => {
+    /**
+     * The bidirectional half of the ticket, and the property that makes this a
+     * *view* of the frame rather than a second copy of it: the value is derived
+     * during the render, so a frame restored from a shared address moves the
+     * thumb with nothing to synchronise. The wheel and the pinch cannot be
+     * dispatched under jsdom (they need `passive: false` on a real surface); a
+     * URL-restored frame goes through the very same state.
+     */
+    const { unmount } = renderMap();
+    const atTheBuildsFrame = Number(sliderOf().value);
+    unmount();
+
+    window.history.replaceState(null, "", `/fr?${VIEW_PARAM}=400,200,120`);
+    const { container } = renderMap();
+
+    // A 120-unit frame is far tighter than the crop the build chose, so the thumb
+    // has to be further up the scale — and it has to agree with the drawing.
+    expect(Number(sliderOf().value)).toBeGreaterThan(atTheBuildsFrame);
+    expect(frameOf(container).width).toBeCloseTo(120, 6);
+  });
+
+  it("announces the zoom as a percentage, never as a bare notch", () => {
+    /**
+     * `aria-valuetext` is the whole of what a screen reader says here, and "37"
+     * would be this file's own scale read aloud. The sentence comes from the
+     * catalogue with a token where the number goes — see `ZOOM_VALUE_TOKEN` — so
+     * this also proves the substitution happened: a template that reached the
+     * accessibility tree with its brace still in it is the failure that shape
+     * risks, and it would pass every other assertion in this file.
+     */
+    renderMap();
+
+    fireEvent.change(sliderOf(), { target: { value: "0" } });
+    expect(sliderOf()).toHaveAttribute(
+      "aria-valuetext",
+      frMessages.map.zoomValue.replace("{percent}", "100")
+    );
+
+    fireEvent.change(sliderOf(), { target: { value: "100" } });
+    const announced = sliderOf().getAttribute("aria-valuetext") ?? "";
+    expect(announced).not.toContain("{");
+    expect(announced).toMatch(/\d/);
+    expect(Number(announced.replace(/\D+/g, ""))).toBeGreaterThan(100);
+  });
+
+  it("writes the frame into the address bar without filling the history", () => {
+    /**
+     * A drag is a hundred `change` events. Each one must replace the address and
+     * none may push a history entry, or Back becomes a hundred presses back to
+     * the page the reader came from — the same rule the wheel obeys, and the
+     * opposite of the one a selection obeys.
+     */
+    const depth = window.history.length;
+
+    renderMap();
+    for (const value of ["20", "30", "40", "50"]) {
+      fireEvent.change(sliderOf(), { target: { value } });
+    }
+
+    expect(search().get(VIEW_PARAM)?.split(",")).toHaveLength(3);
+    expect(window.history.length).toBe(depth);
+  });
+});
 
 describe("the state in the address bar", () => {
   it("says nothing until the reader has moved something", () => {
