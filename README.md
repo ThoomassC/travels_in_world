@@ -194,8 +194,11 @@ conséquences assumées :
 corrige pas : mesuré, une URL sans route correspondante part au 404 global et n'atteint
 jamais la limite du segment. Le contournement par catch-all `[locale]/[...rest]` corrige la
 langue mais introduit une route dynamique `ƒ` et rend `<html id="__next_error__">` — refusé.
-L'alarme est le test unitaire « declares exactly one active locale » : il passe au rouge dès
-qu'une seconde locale est déclarée, et son commentaire liste ce qu'il faut traiter d'abord.
+Ce compromis a été **assumé en TIW-38**, quand `en` et `es` sont devenus actifs : le 404 répond
+en français sous les trois préfixes, et le catch-all qui le corrigerait coûte une route `ƒ`,
+donc l'invariant du prérendu. L'alarme d'alors — le test « declares exactly one active locale »
+— a fait son travail et a été remplacée par deux gardes plus utiles dans `tests/smoke.test.tsx` :
+chaque locale déclarée a son catalogue, et chaque catalogue porte tout le jeu de clés.
 
 **Adresses durables et aperçus de partage.** Le slug d'un voyage publié est **définitif**.
 Le renommer est autorisé et coûte une entrée dans `src/i18n/slug-history.ts`, pour toujours :
@@ -355,8 +358,8 @@ l'image de partage **doit** rester en 1200 × 630, sans quoi `og:image:width` /
 Deux contraintes de dessin sont mesurées et ne se contournent pas. **Encre contre accent ne
 vaut que 1,56:1 en clair et 1,45:1 en sombre** : aucune forme ne peut donc reposer sur cette
 frontière, et c'est pourquoi la comète et la trajectoire sont deux objets séparés par du fond
-nu — chacun se lit contre la page (encre 10,28:1 clair et 12,01:1 sombre, accent 6,60:1 et
-8,30:1) et jamais contre l'autre. Ces quatre chiffres sont recalculés par
+nu — chacun se lit contre la page (encre 8,97:1 clair et 10,28:1 sombre, accent 5,76:1 et
+7,10:1) et jamais contre l'autre. Ces quatre chiffres sont recalculés par
 `tests/styles/colour-contract.test.ts` ; la palette partagée de TIW-37 a **resserré** la
 contrainte plutôt que de la desserrer (1,99 → 1,56 en clair), parce que l'accent y est un
 seul teal dans les deux thèmes au lieu d'un teal sombre et d'un cyan clair.
@@ -407,7 +410,7 @@ Trois choses à savoir avant d'y toucher, chacune détaillée dans
 
 Les couleurs viennent toutes de `tokens.css`, mais pas de n'importe lesquelles : le trait de
 côte et la bordure de la carte sont en `--control-border` (le jeton documenté `>= 3:1`) parce
-que `--border-subtle` mesure 1,33:1 et que la forme du monde est l'objet graphique
+que `--border-subtle` mesure 1,17:1 et que la forme du monde est l'objet graphique
 nécessaire à la compréhension ; la distinction visité / non visité est portée par un contour
 en `--text-accent` **et par son épaisseur**, parce qu'aucune valeur de remplissage ne dépasse
 3:1 en thème clair et qu'un canal non coloré est nécessaire.

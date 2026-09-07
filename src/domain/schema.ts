@@ -330,8 +330,10 @@ type TripIssues = z.core.$RefinementCtx<TripFields>;
  *
  * **Why a floor exists at all**, and it was found the hard way: TIW-24 scaffolded
  * nine real trips with `0001-01-01` written in every date field, deliberately
- * absurd so nobody could mistake it for data. `npm run validate:content` passed
- * them, all nine, without a word — because `0001-01-01` IS a real day of the
+ * absurd so nobody could mistake it for data — and they are still outside the
+ * repository, waiting for their dates, which is exactly the outcome this rule now
+ * enforces. `npm run validate:content` passed them, all nine, without a word,
+ * before it existed — because `0001-01-01` IS a real day of the
  * proleptic Gregorian calendar, and because writing the same absurd value
  * everywhere satisfies every cross-field rule at once: the end is not before the
  * start, the story is not published before the departure, every step falls
@@ -366,9 +368,10 @@ function checkTrip(trip: TripFields, ctx: TripIssues): void {
    * `src/content/diagnose.ts` turns a schema issue into the sentence a reader
    * gets, and it maps by PATH: any `custom` issue on `endDate` is rendered as
    * "the trip ends before it starts". A second rule on that path therefore
-   * arrives wearing the first one's message — measured, on these nine files:
-   * `endDate: le voyage se termine le 0001-01-01, avant son début le
-   * 0001-01-01`, which is both false and impossible to act on.
+   * arrives wearing the first one's message — measured, on a scaffold whose two
+   * dates are both `0001-01-01`: `endDate: le voyage se termine le 0001-01-01,
+   * avant son début le 0001-01-01`, which is both false and impossible to act
+   * on.
    *
    * Nothing is lost by omitting it. `endDate` is already refused when it falls
    * before `startDate`, so `startDate >= 1900` and `endDate >= startDate`
@@ -382,7 +385,7 @@ function checkTrip(trip: TripFields, ctx: TripIssues): void {
     ctx.addIssue({
       code: "custom",
       path: ["startDate"],
-      message: `startDate is ${trip.startDate}, before ${EARLIEST_PLAUSIBLE_DAY} — that is a placeholder or a typo, not a date. Nine trips were scaffolded with 0001-01-01 and validated clean before this rule existed.`,
+      message: `startDate is ${trip.startDate}, before ${EARLIEST_PLAUSIBLE_DAY} — that is a placeholder or a typo, not a date. Put the real departure day in, or leave the folder out of the repository until you have it.`,
     });
   }
 
