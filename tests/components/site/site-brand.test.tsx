@@ -17,7 +17,7 @@ import { defaultLocale } from "@/i18n/routing";
  * component's whole accessible name is made of two of those keys.
  *
  * What no assertion below is about: pixels. jsdom computes no layout, so the
- * clearance between the trajectory and the comet, the 32 px mark and the 44 px
+ * clearance between the trajectory and the aeroplane, the 32 px mark and the 44 px
  * target are checked by rendering in a real browser and by reading
  * `./brand-art.test.ts`, never here. Saying so is the point — a test that looked
  * like it covered the drawing would be worse than no test.

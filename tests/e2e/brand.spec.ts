@@ -63,12 +63,24 @@ test("the favicon is a document the browser can actually draw", async ({ page })
 });
 
 /**
- * Rasterise the favicon at 16 px — tab-bar size — and read the pixel at the
- * centre of the comet's head, which is solid ink in both themes.
+ * Rasterise the favicon at 16 px — tab-bar size — and read a pixel inside the
+ * aeroplane's wing root, which is solid ink in both themes.
  *
- * Not tainted, so `getImageData` is allowed: the SVG is same-origin. The sample
- * point comes from the geometry — the head disc is centred at (29.5, 18) in a
- * 48-unit box, so (0.61, 0.375) of the way across at any size.
+ * Not tainted, so `getImageData` is allowed: the SVG is same-origin.
+ *
+ * **The sample point is measured, not derived, and that is the change this mark
+ * forced.** The welded comet had a head disc with a known centre, so the point
+ * could be read off the geometry. A banked aeroplane has no such landmark, and it
+ * is a thin cruciform: rasterised at 16 px it inks 14.6 per cent of the box, and
+ * only 22 of its 256 pixels reach alpha 200. The point below is the fullest of
+ * those — pixel (7, 8), alpha 255 — found by rasterising the path and taking the
+ * solid pixel nearest the centre of mass of the solid ones.
+ *
+ * Kept as fractions rather than as (7, 8) so the test still says what it means at
+ * a size other than 16, and chosen so that `Math.round` lands on that pixel:
+ * 0.45 x 16 rounds to 7, 0.51 x 16 rounds to 8. Move the mark and this pair moves
+ * with it — the failure is loud, which is why the guard below throws its own
+ * message instead of asserting on a colour.
  */
 async function inkLuminanceAt16px(page: import("@playwright/test").Page): Promise<number> {
   return page.evaluate(async () => {
@@ -83,8 +95,8 @@ async function inkLuminanceAt16px(page: import("@playwright/test").Page): Promis
     if (context === null) throw new Error("no 2d context");
     context.drawImage(image, 0, 0, 16, 16);
 
-    const x = Math.round(0.61 * 16);
-    const y = Math.round(0.375 * 16);
+    const x = Math.round(0.45 * 16);
+    const y = Math.round(0.51 * 16);
     const [r, g, b, alpha] = context.getImageData(x, y, 1, 1).data;
     if (alpha === undefined || alpha < 200) {
       throw new Error(`the sample point is not inside the mark (alpha ${String(alpha)})`);

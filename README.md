@@ -331,9 +331,22 @@ composant. **Depuis TIW-37 ce fichier ne porte plus la palette** : il importe ce
 README n'est pas un garde. Le garde, désormais, est
 `tests/styles/colour-contract.test.ts`.
 
-**La marque est provisoire, et remplaçable sans toucher au code.** Le logotype est une
-comète en `--logo-ink` — une seule masse connexe — accompagnée d'une trajectoire en
-pointillé en `--logo-accent`, et du nom composé dans la pile de polices du site. C'est une
+**La marque est remplaçable sans toucher au code.** Le logotype est un **avion vu de dessus,
+incliné à 21°, nez en haut à gauche** en `--logo-ink` — une seule masse connexe, sans vide interne — posé en tête
+d'une trajectoire en pointillé en `--logo-accent`, et suivi du nom composé dans la pile de
+polices du site. L'inclinaison est la décision de dessin : un avion droit est le pictogramme
+que toutes les signalétiques d'aéroport impriment déjà, il nomme la catégorie et pas ce
+carnet ; incliné, la même silhouette devient un vol. Il remplace une comète que la plupart
+des lecteurs prenaient pour une plume.
+
+Deux corrections à ce paragraphe, laissées visibles parce qu'elles disent quelque chose sur la
+méthode. Il annonçait **30°** : c'est l'angle demandé au générateur, pas celui du résultat — la
+coupe de départ n'était pas droite, et l'ajustement d'un axe de symétrie sur les vingt sommets
+donne 21,0° avec un résidu de 0,0012. Il annonçait aussi que l'avion « vient se poser au bout de
+la route pointillée » : son nez pointe en fait vers la **gauche**, alors que le filet monte de
+gauche à droite. **L'avion remonte sa route à contresens.** Un miroir horizontal du tracé le
+corrigerait, au prix d'une régénération des deux PNG ; ce n'est pas fait parce que le dessin
+lui-même est en cours de réexamen. `src/components/site/brand-art.ts` porte les deux mesures. C'est une
 marque **typographique**, assumée comme telle : il n'y a ni police propre, ni dessin de
 lettres. Cinq fichiers, et une seule source de vérité :
 
@@ -357,15 +370,20 @@ l'image de partage **doit** rester en 1200 × 630, sans quoi `og:image:width` /
 
 Deux contraintes de dessin sont mesurées et ne se contournent pas. **Encre contre accent ne
 vaut que 1,56:1 en clair et 1,45:1 en sombre** : aucune forme ne peut donc reposer sur cette
-frontière, et c'est pourquoi la comète et la trajectoire sont deux objets séparés par du fond
-nu — chacun se lit contre la page (encre 8,97:1 clair et 10,28:1 sombre, accent 5,76:1 et
+frontière, et c'est pourquoi l'avion et la trajectoire sont deux objets séparés par 6,68 unités
+de fond nu — chacun se lit contre la page (encre 8,97:1 clair et 10,28:1 sombre, accent 5,76:1 et
 7,10:1) et jamais contre l'autre. Ces quatre chiffres sont recalculés par
 `tests/styles/colour-contract.test.ts` ; la palette partagée de TIW-37 a **resserré** la
 contrainte plutôt que de la desserrer (1,99 → 1,56 en clair), parce que l'accent y est un
 seul teal dans les deux thèmes au lieu d'un teal sombre et d'un cyan clair.
 
 **Le favicon abandonne la trajectoire** : à 16 px ses points et leurs vides passent sous le
-pixel, alors que la masse de la comète tient. Le relevé de 10,31 au pire sur les huit gris
+pixel, alors que la masse de l'avion tient. **Ce qu'elle tient moins bien que la précédente,
+et c'est le coût assumé du dessin** : rastérisé à 16 px, l'avion encre 14,6 % de la boîte
+contre 28,8 % pour la comète qu'il remplace, et 22 de ses 256 pixels atteignent alpha 200
+là où la comète en avait 64. Un avion incliné est un fin cruciforme et aucun dessin d'avion
+n'est dense ; les marges L3 R3,5 rachètent ce qui pouvait l'être — aux marges de la comète,
+la même forme n'encrait que 10,7 %. Le relevé de 10,31 au pire sur les huit gris
 de barres d'onglets de Chrome, Firefox et Safari **n'a pas été refait pour la nouvelle
 encre** et n'est donc plus valable : la liste de ces huit gris n'est consignée nulle part
 dans le dépôt, seul son résultat l'est (`docs/adr/0013`). Ce qui est mesuré, c'est le sens de

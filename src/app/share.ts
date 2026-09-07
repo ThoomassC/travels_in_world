@@ -171,7 +171,7 @@ export function shareMetadata(page: SharePage): Metadata {
    * its own to show falls back to saying which site it belongs to.
    *
    * The alt text is the site name, not a description of the drawing: the image
-   * *is* the site name set in type, so "a comet on a trajectory" would describe
+   * *is* the site name set in type, so "an aeroplane on a trajectory" would describe
    * the decoration and drop the information. It comes from `page.siteName`, which
    * is already a message from the catalogue — no reader-facing literal here.
    */

@@ -42,7 +42,7 @@
    * teal fill.
    *
    * Both become `--text-on-accent`, and the constraint `brand-art.ts` documents
-   * dissolves rather than being broken: the comet and its trajectory may not
+   * dissolves rather than being broken: the aeroplane and its trajectory may not
    * share an edge because ink against accent measures 1.56:1, and here they are
    * the *same* colour on a single ground, so there is no ink/accent edge left to
    * fail. The ~7 units of clearance in the geometry stay what separates the two
@@ -130,7 +130,7 @@
  * 2 rem is a floor as much as a size: the trajectory is a row of 3-unit dots in a
  * 32-unit box, so at 2 rem each dot is 3 px with 3 px of air. Take the mark much
  * below that and the dots stop reading as dots — which is the whole reason the
- * favicon (`src/app/icon.svg`) drops the trajectory and keeps the comet alone.
+ * favicon (`src/app/icon.svg`) drops the trajectory and keeps the aeroplane alone.
  *
  * 3.25 rem is the same half-of-the-disc proportion the 4.5 rem medallion had at
  * 2.25 rem: the badge grew, and a mark that had stayed put would have read as a
@@ -151,7 +151,7 @@
   }
 }
 
-.comet {
+.plane {
   fill: var(--logo-ink);
 }
 
@@ -167,7 +167,7 @@
  * to it, whatever the reader's chosen scheme.
  */
 @media (forced-colors: active) {
-  .comet {
+  .plane {
     fill: LinkText;
   }
 

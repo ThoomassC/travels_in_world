@@ -2,7 +2,7 @@
   <style>
     <![CDATA[
     /*
-      THE FAVICON — the "welded comet" cut, hand-written on purpose.
+      THE FAVICON — the banked-aeroplane cut, hand-written on purpose.
 
       READ THIS BEFORE EDITING: everything documented here lives in a CSS comment and
       not in an XML one, and that is not a preference. An XML comment may not contain
@@ -39,7 +39,7 @@
       fetches a favicon as its own document: it can be neither a React component nor a
       shared constant. So the path data exists twice, and the copy going stale is
       exactly the break nothing would report. The drift test reads this file off the
-      disk and compares the `d` attribute with BRAND_COMET_PATH, character for
+      disk and compares the `d` attribute with BRAND_PLANE_PATH, character for
       character.
 
       WHY THE TRAJECTORY IS ABSENT HERE, which is the design decision rather than a
@@ -47,8 +47,14 @@
       this palette, so an accented detail *inside* the mark cannot be seen; keeping the
       trajectory would mean a detached dotted rule, and at 16 px its dots and the gaps
       between them are sub-pixel. The header lock-up carries the trajectory at a size
-      where its voids are real. Here the comet stands alone: ONE connected mass, no
+      where its voids are real. Here the aeroplane stands alone: ONE connected mass, no
       internal void, nothing whose reading depends on a one-pixel gap.
+
+      What that costs at this size, measured rather than asserted: this cut inks
+      14.6 per cent of the box against the 28.8 per cent of the welded comet it
+      replaces. A banked aeroplane is a thin cruciform and no drawing of one is
+      dense. It reads; it is lighter than what it replaced, and that is the trade
+      the shape was chosen with eyes open.
 
       Measured against the eight tab-bar greys of Chrome, Firefox and Safari, light and
       dark: 10.31:1 at worst, 15.55:1 at best. All AA.
@@ -83,10 +89,10 @@
       }
     }
 
-    .comet {
+    .plane {
       fill: var(--logo-ink);
     }
     ]]>
   </style>
-  <path class="comet" d="M5 43 Q16.26 32.41 34.67 28.83 A12 12 0 1 0 18.57 13.05 Q8.21 24.52 5 43 Z" />
+  <path class="plane" d="M 16.83 10.03 L 20.32 14.1 L 23.77 21.27 L 43.36 18.84 L 44.5 21.79 L 26.48 27.94 L 27.5 31.41 L 32.21 31.61 L 32.83 33.22 L 28.12 34.41 L 26.9 36.27 L 24.76 35.71 L 20.46 37.97 L 19.83 36.35 L 23.2 33.05 L 21.64 29.8 L 4.14 37.29 L 3 34.33 L 19.19 23.02 L 16.96 15.39 Z" />
 </svg>

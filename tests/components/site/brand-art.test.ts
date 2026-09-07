@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  BRAND_COMET_PATH,
-  BRAND_LOCKUP_COMET_TRANSFORM,
+  BRAND_PLANE_PATH,
+  BRAND_LOCKUP_PLANE_TRANSFORM,
   BRAND_LOCKUP_TRACK_PATH,
+  BRAND_LOCKUP_TRACK_WIDTH,
   BRAND_LOCKUP_VIEWBOX,
   BRAND_MARK_VIEWBOX,
 } from "@/components/site/brand-art";
@@ -110,21 +111,21 @@ describe("the favicon is a document a browser can parse", () => {
     expect(opens, "icon.svg should open exactly one CDATA section").toBe(1);
     expect(closes, "a CDATA terminator was written more than once — check the prose").toBe(1);
     expect(icon.indexOf("]]" + ">")).toBeGreaterThan(icon.indexOf("<![CDATA["));
-    // The `.comet` rule is the last thing inside the section: if the terminator
+    // The `.plane` rule is the last thing inside the section: if the terminator
     // moved above it, the fill declaration would be parsed as markup.
     expect(icon.indexOf("fill: var(--logo-ink)")).toBeLessThan(icon.indexOf("]]" + ">"));
   });
 });
 
-describe("the favicon draws the same comet as the header", () => {
-  it("carries exactly one path, and it is BRAND_COMET_PATH", () => {
+describe("the favicon draws the same aeroplane as the header", () => {
+  it("carries exactly one path, and it is BRAND_PLANE_PATH", () => {
     /**
-     * Exactly one, which is the "welded comet" cut itself: a single connected
+     * Exactly one, which is the banked-aeroplane cut itself: a single connected
      * mass. A second path would mean the favicon had grown a detached element —
      * the thing the 16 px raster cannot keep, and the reason the trajectory lives
      * in the lock-up only.
      */
-    expect(pathData(icon)).toEqual([BRAND_COMET_PATH]);
+    expect(pathData(icon)).toEqual([BRAND_PLANE_PATH]);
   });
 
   it("is drawn in the same box", () => {
@@ -178,37 +179,58 @@ describe("the lock-up reuses the mark instead of redrawing it", () => {
     /**
      * Two hand-placed copies of a logo are two logos, and the day one is nudged
      * the other stays put. The lock-up therefore carries no coordinates of its
-     * own for the comet — only a `translate`/`scale`.
+     * own for the aeroplane — only a `translate`/`scale`.
      */
-    expect(BRAND_LOCKUP_COMET_TRANSFORM).toMatch(
+    expect(BRAND_LOCKUP_PLANE_TRANSFORM).toMatch(
       /^translate\(-?[\d.]+ -?[\d.]+\) scale\([\d.]+\)$/
     );
   });
 
-  it("keeps the trajectory clear of the comet's ink", () => {
+  it("keeps the trajectory clear of the aeroplane's ink", () => {
     /**
      * The load-bearing number of this mark, checked arithmetically because no
-     * rendered test can see it: ink against accent measures 1.99:1 in light and
-     * 1.35:1 in dark, so the two must never share an edge.
+     * rendered test can see it: ink against accent measures 1.56:1 in light and
+     * 1.45:1 in dark, so the two must never share an edge.
      *
-     * The comet's lowest point in the lock-up box is its tail tip — the first
-     * coordinate of `BRAND_COMET_PATH`, put through the lock-up transform. The
-     * trajectory's own start is `BRAND_LOCKUP_TRACK_PATH`'s first coordinate.
+     * **This test used to read the FIRST coordinate of the mark and call it the
+     * lowest point**, which was true of the welded comet — its path opened on the
+     * tail tip — and is a coincidence of that drawing rather than a property of a
+     * mark. On the banked aeroplane the first coordinate is the nose, near the
+     * TOP of the box, so the old arithmetic would have reported a clearance of
+     * 25.5 instead of 6.68 and stayed green while the accent sat on the ink. It
+     * now takes the maximum ordinate of the whole path, which is what "lowest
+     * ink" means for any drawing.
+     *
+     * The trajectory's side is measured the same way round: the minimum ordinate
+     * of its path, less half the stroke, is where the accent's paint actually
+     * starts. Taking the minimum over the control points as well as the endpoints
+     * can only UNDER-state the curve's top edge — a quadratic stays inside the
+     * convex hull of its three points — so the clearance this computes is never
+     * more generous than the truth.
+     *
      * Below ~5 units of clearance in a 32-unit box the accent starts touching the
      * ink at header size, and the mark collapses into one flat silhouette.
      */
-    const [, scale] = /scale\(([\d.]+)\)/.exec(BRAND_LOCKUP_COMET_TRANSFORM) ?? [];
+    const [, scale] = /scale\(([\d.]+)\)/.exec(BRAND_LOCKUP_PLANE_TRANSFORM) ?? [];
     const [, , translateY] =
-      /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(BRAND_LOCKUP_COMET_TRANSFORM) ?? [];
-    const [, tipY] = /^M[\d.]+ ([\d.]+)/.exec(BRAND_COMET_PATH) ?? [];
-    const [, trackY] = /^M[\d.]+ ([\d.]+)/.exec(BRAND_LOCKUP_TRACK_PATH) ?? [];
+      /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(BRAND_LOCKUP_PLANE_TRANSFORM) ?? [];
 
-    const cometTip = Number(tipY) * Number(scale) + Number(translateY);
-    const clearance = Number(trackY) - cometTip;
+    /** Every second number of a path is an ordinate — these paths are all pairs. */
+    const ordinatesOf = (path: string): readonly number[] =>
+      [...path.matchAll(/-?\d+(?:\.\d+)?/g)]
+        .map((match) => Number(match[0]))
+        .filter((_, index) => index % 2 === 1);
 
-    expect(clearance).toBeGreaterThan(5);
+    const lowestInk =
+      Math.max(...ordinatesOf(BRAND_PLANE_PATH)) * Number(scale) + Number(translateY);
+    const trackTop =
+      Math.min(...ordinatesOf(BRAND_LOCKUP_TRACK_PATH)) - BRAND_LOCKUP_TRACK_WIDTH / 2;
+
+    expect(trackTop - lowestInk).toBeGreaterThan(5);
+
     // …and inside the box, so the clearance is not bought by pushing the
     // trajectory off the bottom edge where it would be clipped.
+    const [, trackY] = /^M[\d.]+ ([\d.]+)/.exec(BRAND_LOCKUP_TRACK_PATH) ?? [];
     const boxHeight = Number(BRAND_LOCKUP_VIEWBOX.split(" ")[3]);
     expect(Number(trackY)).toBeLessThan(boxHeight);
   });

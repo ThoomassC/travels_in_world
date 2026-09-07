@@ -3,17 +3,17 @@ import { useTranslations } from "next-intl";
 import { localePathname } from "@/i18n/pathname";
 import type { Locale } from "@/i18n/routing";
 import {
-  BRAND_LOCKUP_COMET_TRANSFORM,
+  BRAND_LOCKUP_PLANE_TRANSFORM,
   BRAND_LOCKUP_TRACK_DASH,
   BRAND_LOCKUP_TRACK_PATH,
   BRAND_LOCKUP_TRACK_WIDTH,
   BRAND_LOCKUP_VIEWBOX,
-  BRAND_COMET_PATH,
+  BRAND_PLANE_PATH,
 } from "./brand-art";
 import styles from "./site-brand.module.css";
 
 /**
- * The header lock-up: the comet, the trajectory, the name — and the link home.
+ * The header lock-up: the aeroplane, the trajectory, the name — and the link home.
  *
  * **No `'use client'`, and no JavaScript at all.** One `<a href>` wrapping an
  * inline `<svg>` and a `<span>`. The milestone's two client boundaries belong to
@@ -73,8 +73,8 @@ export function SiteBrand({ locale }: { readonly locale: Locale }): ReactElement
           focusable="false"
         >
           {/*
-          The trajectory first, so the comet paints over it if a future placement
-          ever brings them within a hair of each other. They are ~7 units apart
+          The trajectory first, so the aeroplane paints over it if a future placement
+          ever brings them within a hair of each other. They are 6.68 units apart
           today; `./brand-art.ts` records why that clearance is the load-bearing
           number of this mark.
         */}
@@ -86,8 +86,8 @@ export function SiteBrand({ locale }: { readonly locale: Locale }): ReactElement
             strokeLinecap="round"
             strokeDasharray={BRAND_LOCKUP_TRACK_DASH}
           />
-          <g transform={BRAND_LOCKUP_COMET_TRANSFORM}>
-            <path className={styles.comet} d={BRAND_COMET_PATH} />
+          <g transform={BRAND_LOCKUP_PLANE_TRANSFORM}>
+            <path className={styles.plane} d={BRAND_PLANE_PATH} />
           </g>
         </svg>
       </span>
