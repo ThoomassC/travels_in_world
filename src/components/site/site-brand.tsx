@@ -6,7 +6,7 @@ import { BRAND_PLANE_PATH, BRAND_PLANE_VIEWBOX } from "./brand-art";
 import styles from "./site-brand.module.css";
 
 /**
- * The header lock-up: the aeroplane on its medallion, the name — and the link home.
+ * The header lock-up: the aeroplane and the name on two lines — and the link home.
  *
  * **No `'use client'`, and no JavaScript at all.** One `<a href>` wrapping an
  * inline `<svg>` and a `<span>`. The milestone's two client boundaries belong to
@@ -64,46 +64,61 @@ export function SiteBrand({ locale }: { readonly locale: Locale }): ReactElement
         Edge put SVG elements in the tab order regardless. It costs 18 bytes.
       */}
       {/*
-        The medallion (TIW-38) — a plain wrapper, because a disc is a box and an
-        `<svg>` cannot be both the drawing and the round plate under it without
-        the mark stretching to the plate's square.
+        **THE LOCK-UP IS "DEUX TEMPS", CHOSEN BY THE OWNER ON 7 SEPTEMBER 2026**,
+        and the medallion is gone with the choice.
 
-        It is filled with `--accent-active`, the header bar's own colour, so on
-        the bar it is invisible and below the bar it is the bar continuing. That
-        is what makes the owner's ask — "que le fond du header s'adapte" — a
-        property of the markup rather than of the image: the mark is a
-        transparent cut, and what shows through it is the header.
+        The aeroplane, then the name on two lines: "Travels" at full size in the
+        display serif, "in World" small and letterspaced under it. The hierarchy
+        is made by size, case AND family at once, which is the reason it was
+        recommended and it is not an aesthetic one — it is the only one of the
+        eight proposals that survives greyscale, a bad projector and a reader who
+        separates no hues, because none of it rests on a fill, a rule or a plate
+        whose contrast has to be measured and held.
+
+        **The disc is deleted rather than kept empty.** It was a plate for a mark
+        that carried no name; a lock-up that spells the name needs no plate, and a
+        6.5 rem disc hanging under the bar beside a two-line wordmark is two
+        centres of gravity in one corner. What it cost is recorded rather than
+        lost: the disc was the header's own colour, so it was invisible on the bar
+        and read as the bar continuing below it. Nothing replaces that gesture;
+        the bar simply ends where it ends.
       */}
-      <span className={styles.medallion}>
-        {/*
-          The aeroplane, in its own box rather than in a square one: the drawing
-          is 0.72 : 1 and a square viewBox would have spent a fifth of the disc on
-          empty margin. `./brand-art.ts` says why the favicon does the opposite.
-
-          `fillRule="evenodd"` is load-bearing, not decoration: the second contour
-          of the path is the compass needle, and it is a hole. With the default
-          non-zero rule it fills solid and the mark loses its only detail.
-        */}
-        <svg
-          className={styles.mark}
-          viewBox={BRAND_PLANE_VIEWBOX}
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path className={styles.plane} d={BRAND_PLANE_PATH} fillRule="evenodd" />
-        </svg>
-      </span>
+      <svg
+        className={styles.mark}
+        viewBox={BRAND_PLANE_VIEWBOX}
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path className={styles.plane} d={BRAND_PLANE_PATH} fillRule="evenodd" />
+      </svg>
 
       {/*
-        `lang="en"` on the name, in a `lang="fr"` document. The brand is three
-        English words, and a French screen reader reading them with French
-        phonemes says something that is not the name of this site. The criterion
-        asks for a pronounceable accessible name — "travels in world", and
-        emphatically not the repository's `travels_in_world`, which a screen
-        reader spells out underscore by underscore.
+        **The name is real text in two elements, and it is still ONE name.**
+
+        `lang="en"` on the pair, in a `lang="fr"` document: the brand is three
+        English words and a French screen reader reading them with French phonemes
+        says something that is not the name of this site.
+
+        Two message keys and not one split at render, because a split would be a
+        rule about French that no translator can change — and the second line is
+        uppercased by CSS rather than typed in capitals, so what reaches the
+        accessibility tree is "in World" and not "IN WORLD", which some screen
+        readers spell out letter by letter.
+
+        **What this removed:** the separate wordmark that used to sit beside the
+        medallion. The lock-up spells the name itself now, and a mark plus a name
+        beside it would have printed "Travels in World" twice in the same corner.
       */}
       <span className={styles.word} lang="en">
-        {t("name")}
+        <span className={styles.wordLead}>{t("nameLead")}</span>
+        {/*
+          A space, deliberately, and it is not decoration. The accessible name of
+          this link is the concatenation of its descendants' text, and two
+          adjacent inline boxes can concatenate to "Travelsin World" — measured on
+          exactly this markup. `tests/e2e/brand.spec.ts` asserts the computed name
+          rather than trusting this.
+        */}{" "}
+        <span className={styles.wordTail}>{t("nameTail")}</span>
       </span>
 
       {/*

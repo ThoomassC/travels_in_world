@@ -85,13 +85,19 @@ function squareMark(): string {
 }
 
 /**
- * The share card: the aeroplane over the wordmark, on the plate.
+ * The share card: the **same lock-up as the header**, in large.
+ *
+ * The aeroplane on the left, "Travels" in the display serif and "in World" small
+ * and letterspaced beneath it — "Deux temps", the composition the owner chose on
+ * 7 September 2026. One lock-up on every surface, which is the whole argument for
+ * that proposal: the alternative was a stacked mark here and a horizontal one in
+ * the bar, and two arrangements of one drawing is two logos to keep in step.
  *
  * **The wordmark is real text rendered by the rasteriser, and that is a known
  * fragility rather than an oversight.** sharp resolves `font-family` against the
  * fonts installed on the machine that runs this command, so a card cut on a
- * different machine can come out in a different face. The alternative — shipping a
- * font file to convert to outlines — is a dependency and a licence question for
+ * different machine can come out in a different face. The alternative — shipping
+ * a font file to convert to outlines — is a dependency and a licence question for
  * one image. The mitigation is that the output is *committed*: whatever this
  * produced is what every reader gets, and the diff is where a wrong face is seen.
  *
@@ -100,17 +106,28 @@ function squareMark(): string {
  * be the only place in the brand where one survived.
  */
 function shareCard(): string {
-  const planeHeight = 220;
+  const planeHeight = 190;
   const planeWidth = planeHeight * 0.72;
+  const gap = 44;
+  // "Travels" at 96 px in the display serif is about 300 px wide; the block is
+  // centred on the card as a whole rather than each part on itself, which is what
+  // makes the aeroplane read as part of the word instead of beside it.
+  const wordWidth = 320;
+  const blockLeft = (SHARE_WIDTH - (planeWidth + gap + wordWidth)) / 2;
+  const wordLeft = blockLeft + planeWidth + gap;
+  const top = (SHARE_HEIGHT - planeHeight) / 2;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${SHARE_WIDTH}" height="${SHARE_HEIGHT}" viewBox="0 0 ${SHARE_WIDTH} ${SHARE_HEIGHT}">
   <rect width="${SHARE_WIDTH}" height="${SHARE_HEIGHT}" fill="${PLATE}"/>
-  <g transform="translate(${(SHARE_WIDTH - planeWidth) / 2} 110) scale(${planeHeight / 100})">
+  <g transform="translate(${blockLeft.toFixed(1)} ${top.toFixed(1)}) scale(${planeHeight / 100})">
     <path fill="${INK}" fill-rule="evenodd" d="${BRAND_PLANE_PATH}"/>
   </g>
-  <text x="${SHARE_WIDTH / 2}" y="470" fill="${INK}" text-anchor="middle"
+  <text x="${wordLeft.toFixed(1)}" y="${(top + 112).toFixed(1)}" fill="${INK}"
+        font-family="Iowan Old Style, Palatino, Georgia, serif"
+        font-size="104" font-weight="600">Travels</text>
+  <text x="${wordLeft.toFixed(1)}" y="${(top + 168).toFixed(1)}" fill="${INK}"
         font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
-        font-size="84" font-weight="700">Travels in World</text>
+        font-size="34" font-weight="600" letter-spacing="9.5">IN WORLD</text>
 </svg>`;
 }
 

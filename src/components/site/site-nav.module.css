@@ -118,9 +118,25 @@
 .brandZone {
   grid-area: 1 / 1;
   justify-self: start;
-  align-self: start;
+  align-self: center;
   z-index: 1;
   display: flex;
+  /**
+   * **The lock-up needs a gutter now, where the medallion did not.**
+   *
+   * A disc hard against the window's edge reads as deliberate: it is a shape,
+   * and its own curve is the margin. A wordmark hard against the edge reads as
+   * broken — measured on a production build, "Travels" started at x = 0. The
+   * padding is `--space-5`, the same gutter `.inner` gives the measure, so the
+   * mark's left edge and the language menu's right edge sit at the same distance
+   * from the window.
+   *
+   * `align-self: center` and no longer `start`: the reason for `start` was that
+   * the medallion was taller than the bar and had to hang DOWNWARD only. Nothing
+   * overflows the bar any more, so centring is what puts the lock-up on the bar's
+   * own axis instead of against its top edge.
+   */
+  padding-inline-start: var(--space-5);
 }
 
 .inner {

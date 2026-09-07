@@ -754,27 +754,18 @@ const CITATIONS: readonly Citation[] = [
     theme: "light",
   },
 
-  // --- src/components/site/site-brand.module.css — why the two logo tokens are
-  //     re-pointed on the bar rather than kept, and what the mark reads at on the
-  //     medallion now that the disc follows the bar onto `--accent-active`.
+  // --- src/components/site/site-brand.module.css — why the ink token is
+  //     re-pointed on the bar rather than kept.
+  //
+  //     The three `on-accent` readings that used to be registered here were the
+  //     medallion's: what the mark measured against the disc it sat in. The owner
+  //     chose the "Deux temps" lock-up on 7 September 2026 and the disc went with
+  //     the choice, so the pairs it justified left the file. What the wordmark
+  //     itself reads against the bar is `on-accent/accent-active`, and it is
+  //     registered where the bar is declared — `site-nav.module.css`, below.
   {
     file: "src/components/site/site-brand.module.css",
     measurement: "logo-ink/logo-accent",
-    theme: "light",
-  },
-  {
-    file: "src/components/site/site-brand.module.css",
-    measurement: "on-accent/accent-active",
-    theme: "light",
-  },
-  {
-    file: "src/components/site/site-brand.module.css",
-    measurement: "on-accent/accent-active",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/site/site-brand.module.css",
-    measurement: "on-accent/accent",
     theme: "light",
   },
 

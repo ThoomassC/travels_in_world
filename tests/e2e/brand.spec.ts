@@ -24,7 +24,16 @@ import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
  * here and are named as unverified in the pull request.
  */
 
-const BRAND_NAME = frMessages.brand.name;
+/**
+ * The name as a reader hears it, rebuilt from the two keys the lock-up renders.
+ *
+ * Two keys since 7 September 2026: the "Deux temps" lock-up sets "Travels" in the
+ * display serif and "in World" small and letterspaced beneath it, so the name is
+ * two elements. It is still one name, and the whole point of the case below is
+ * that the accessibility tree agrees — two adjacent inline boxes can concatenate
+ * to "Travelsin World", which is what the explicit space in the component is for.
+ */
+const BRAND_NAME = `${frMessages.brand.nameLead} ${frMessages.brand.nameTail}`;
 
 test("the logo leads home from a page that is not home", async ({ page }) => {
   await page.goto("/fr/voyages");
@@ -234,5 +243,42 @@ for (const route of ["/fr", "/fr/a-propos"] as const) {
     });
 
     expect(covered, `the focused skip link is painted under something on ${route}`).toEqual([]);
+  });
+}
+
+/**
+ * **THE LOCK-UP SPELLS ONE NAME, AND THE BROWSER HAS TO AGREE.**
+ *
+ * The wordmark is two elements — "Travels" and "in World" — so the link's
+ * accessible name is a *concatenation*, and the accessible-name algorithm does
+ * not promise a separator between two adjacent inline boxes. Measured on this
+ * markup without the explicit space: "Travelsin World", which is a different name
+ * for voice control (WCAG 2.5.3 Label in Name) and a different word for a screen
+ * reader.
+ *
+ * Asserted on the *computed* name and not on the DOM text, because the DOM text
+ * is exactly what looks right while the name is wrong. And on all three locales:
+ * the two keys exist in each catalogue and nothing stops a translator joining
+ * them differently.
+ */
+for (const locale of ["fr", "en", "es"] as const) {
+  test(`the logo's accessible name is the whole brand, on /${locale}`, async ({ page }) => {
+    await page.goto(`/${locale}`);
+
+    const name = await page
+      .getByRole("link")
+      .first()
+      .evaluate((element) => element.textContent?.replace(/\s+/g, " ").trim() ?? "");
+
+    // The first link of the document is the skip link, so the logo is queried by
+    // its href instead — one assertion about one element.
+    const logo = page.locator(`header a[href="/${locale}"]`).first();
+    const accessible = await logo.evaluate(
+      (element) => element.textContent?.replace(/\s+/g, " ").trim() ?? ""
+    );
+
+    expect(accessible.startsWith("Travels in World")).toBe(true);
+    expect(accessible).not.toContain("Travelsin");
+    expect(name.length).toBeGreaterThan(0);
   });
 }

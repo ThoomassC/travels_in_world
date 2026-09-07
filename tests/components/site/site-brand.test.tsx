@@ -86,9 +86,40 @@ describe("the logo is the link home", () => {
      * Queried through the accessible name so this cannot pass on some other span:
      * the element carrying `lang` must be the one carrying the name.
      */
-    const word = screen.getByText("Travels in World");
+    /**
+     * The lock-up sets the name on two lines since 7 September 2026, so the
+     * element carrying `lang` is the pair and not a single text node —
+     * `getByText` with a string matcher would look for one node holding the whole
+     * name and find nothing. The matcher below asks for the element whose *own*
+     * text is the name, which is exactly the element the attribute must be on:
+     * putting `lang` on either half would leave the other read in French.
+     */
+    const word = screen.getByText(
+      (_content, element) =>
+        element?.textContent?.replace(/\s+/g, " ").trim() === "Travels in World" &&
+        element.tagName === "SPAN" &&
+        element.children.length === 2
+    );
 
     expect(word).toHaveAttribute("lang", "en");
+  });
+
+  /**
+   * **The two lines concatenate to one name, with a space.**
+   *
+   * The accessible name of the link is the concatenation of its descendants'
+   * text, and two adjacent inline boxes can join to "Travelsin World" — measured.
+   * The component renders an explicit space between them; this is what notices if
+   * someone tidies it away, and `tests/e2e/brand.spec.ts` checks the same thing in
+   * a real browser, which is the only place the algorithm actually runs.
+   */
+  it("joins the two lines of the wordmark with a space", () => {
+    renderBrand(<SiteBrand locale={defaultLocale} />);
+
+    const name = screen.getByRole("link").textContent ?? "";
+
+    expect(name).toContain("Travels in World");
+    expect(name).not.toContain("Travelsin");
   });
 
   it("hides the drawing from assistive technology", () => {

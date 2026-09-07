@@ -152,7 +152,8 @@
     "linkContact": "Escribirme"
   },
   "brand": {
-    "name": "Travels in World",
+    "nameLead": "Travels",
+    "nameTail": "in World",
     "homeDestination": ", volver al inicio"
   },
   "purpose": {

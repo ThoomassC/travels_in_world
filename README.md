@@ -332,10 +332,39 @@ README n'est pas un garde. Le garde, désormais, est
 `tests/styles/colour-contract.test.ts`.
 
 **La marque est remplaçable sans toucher au code.** Le logotype est un **avion vu de face,
-droit**, en `--logo-ink`, une aiguille de compas découpée dans son fuselage, posé sur le
-médaillon de l'en-tête et suivi du nom composé dans la pile de polices du site. C'est le
-troisième dessin du projet : une comète que la plupart des lecteurs prenaient pour une plume,
-puis un avion incliné à 21° volant en tête d'une trajectoire pointillée, puis celui-ci.
+droit**, en `--logo-ink`, une aiguille de compas découpée dans son fuselage, suivi du nom sur
+**deux lignes** : « Travels » dans la serif d'affichage à taille pleine, « IN WORLD » petit et
+très espacé dessous. C'est le verrouillage « Deux temps », choisi par le propriétaire le
+7 septembre 2026 parmi huit, et retenu pour une raison qui n'est pas esthétique : **c'est le
+seul dont la hiérarchie tienne sans couleur** — taille, casse et famille disent la même chose
+trois fois, donc il survit au noir et blanc, à l'impression et à un lecteur qui ne sépare
+aucune teinte. Les sept autres reposaient sur un aplat, un contour ou une pastille, tous des
+objets dont le contraste doit être mesuré et tenu.
+
+C'est le troisième dessin du projet — une comète que la plupart des lecteurs prenaient pour
+une plume, puis un avion incliné à 21° volant en tête d'une trajectoire pointillée, puis
+celui-ci — et le premier à porter le nom dans la marque elle-même. **Deux choses ont disparu
+avec ce choix**, notées ici parce qu'elles ont chacune coûté une correction :
+
+- **le médaillon**, le disque de 6,5 rem à la couleur de la barre qui débordait sous elle. Un
+  verrouillage qui épelle le nom n'a pas besoin d'une plaque, et un disque à côté d'un
+  logotype sur deux lignes fait deux centres de gravité dans un même coin. Sa disparition a
+  fait maigrir la barre empilée de 28 px, ce que `--chrome-height` continuait d'ignorer : le
+  garde de `tests/e2e/map-interaction.spec.ts` l'a dit dès la première exécution ;
+- **le nom posé à côté de la marque.** Il fait maintenant partie du verrouillage, donc le
+  garder aurait imprimé « Travels in World » deux fois dans le même coin.
+
+Le nom est **deux clés** (`brand.nameLead`, `brand.nameTail`) et non une seule coupée au
+rendu : une coupure au rendu serait une règle sur le français qu'aucun traducteur ne peut
+changer. Les capitales de la seconde ligne sont un `text-transform` et non une saisie, pour
+que l'arbre d'accessibilité reçoive « in World » et non « IN WORLD », que certains lecteurs
+d'écran épellent lettre à lettre. Et un espace explicite sépare les deux éléments : mesuré,
+sans lui le nom accessible se concatène en « Travelsin World ».
+
+**Ce qui n'a PAS changé : le favicon reste l'avion seul.** À 16 px un nom sur deux lignes est
+illisible, et une seconde coupe simplifiée serait un second logo. La carte de partage, elle,
+porte le même verrouillage que l'en-tête, en grand — un seul dessin sur toutes les surfaces,
+ce qui était l'argument principal de la proposition retenue.
 
 **Le dessin a changé le 7 septembre 2026, et c'est le premier de ce dépôt qui n'a pas été
 dessiné ici.** Le propriétaire a fourni un PNG de 1600 × 1200 : un avion **vu de face,
