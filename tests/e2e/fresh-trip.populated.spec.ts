@@ -132,20 +132,38 @@ test.describe("the home page", () => {
     await expect(firstCardLink).toHaveAttribute("href", `/fr/voyages/${NEWEST_JOURNEY_SLUG}`);
   });
 
-  test("carries the badge on exactly one card, and on the right one", async ({ page }) => {
+  /**
+   * **"Derniers voyages" shows one card since 7 September 2026, and the fresh
+   * trip is not it.** `perou-bolivie-2023` is the newest *publication* and only
+   * the third-newest *journey*; the block now truncates at the first, which is
+   * `japon-2025`. So no badge appears on the home page at all.
+   *
+   * That is the ticket's own trap reaching its ordinary case rather than a
+   * regression, and it is asserted in both directions — no badge in the block,
+   * and the announcement still made — because "the badge disappeared" and "the
+   * freshness disappeared" are two different pages and only one of them is
+   * correct. The banner above the map and the marker's halo are what carry it
+   * here; the badge itself is still exercised on `/fr/voyages`, below.
+   */
+  test("shows no badge, because the newest journey is not the newest publication", async ({
+    page,
+  }) => {
     await page.goto("/fr");
 
-    /**
-     * The fresh trip is the third-newest journey, so it *is* among the three this
-     * block shows — and it is the second card, not the first. "Et seulement lui"
-     * is the half that needs a count: a page marking every card, or the first
-     * one, satisfies "the badge is present" perfectly.
-     */
-    await expect(badges(page)).toHaveCount(1);
+    await expect(badges(page)).toHaveCount(0);
 
-    const card = badgedCard(page);
+    // The card that IS shown is the newest journey, and it is not the fresh one.
+    const shown = page
+      .getByRole("heading", { level: 2, name: frMessages.home.latestHeading })
+      .locator("xpath=following::ul[1]")
+      .getByRole("article");
+    await expect(shown).toHaveCount(1);
+    await expect(shown.getByRole("heading", { level: 3 })).not.toHaveText(FRESH.title);
 
-    await expect(card.getByRole("link", { name: FRESH.title })).toHaveAttribute("href", FRESH.href);
+    // And the announcement is not lost with it: the banner still names the fresh
+    // récit, and exactly one marker still carries the halo.
+    await expect(page.getByRole("complementary", { name: FRESH.title })).toBeVisible();
+    await expect(page.locator("a[data-trip][data-new]")).toHaveCount(1);
   });
 });
 

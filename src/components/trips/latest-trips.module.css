@@ -14,12 +14,79 @@
 }
 
 /**
+ * The list item that holds the ribbon and the card, stacked with **no gap**.
+ *
+ * Zero is the whole point rather than an omission: the owner asked for a band
+ * *on* the card, and a band floating three pixels above one reads as an
+ * unrelated label. The two boxes therefore share an edge, which
+ * `tests/e2e` measures in the browser rather than this file claiming it.
+ *
+ * A flex column and not `display: block`, so the ribbon can size itself to its
+ * text with `align-self` while the card below still fills the grid track. On a
+ * block parent the `<p>` would take the full width and become the full-bleed
+ * banner this file explains below that it is not.
+ */
+.item {
+  display: flex;
+  flex-direction: column;
+}
+
+/**
+ * **"Nouveau !" — a tab on the card's top edge, not a full-width band.**
+ *
+ * A band spanning the whole card was the first reading of "un petit bandeau" and
+ * it was measured and refused: `.card` in `trip-card.module.css` rounds its top
+ * corners by `--radius-md` (16 px), so a square-cornered strip sitting flush above
+ * it would overhang the curve by two 16 px shoulders of solid accent. Clipping
+ * them would mean an `overflow` wrapper, and that wrapper would also clip the
+ * card's focus ring — `.card:has(.link:focus-visible)` paints an `outline` plus a
+ * 4 px `box-shadow` outside the border box — which trades a corner for WCAG 2.4.11.
+ * The card's radius lives in a stylesheet this ticket must not touch, so the
+ * ribbon yields instead.
+ *
+ * `margin-inline-start: var(--radius-md)` is that yield, and it is the card's own
+ * radius rather than a spacing step on purpose: the tab starts exactly where the
+ * card's top edge stops curving, so it can never overhang however the radius
+ * changes.
+ *
+ * COLOUR. `--accent-active` under `--text-on-accent` — the site's only full-bleed
+ * accent plate, the one the header bar already uses, and it is under contract as
+ * `on-accent/accent-active` in `tests/styles/colour-contract.test.ts` in both
+ * themes. Deliberately *not* the quiet chip of `.badge` and `.flag`: those two are
+ * one fact wearing one look ("Nouveau récit"), and this ribbon is a different
+ * claim, so it must not be mistaken for a third placement of theirs. No ratio is
+ * written here — the contract holds the numbers, and a figure copied into a
+ * comment is a figure that can drift.
+ *
+ * No shadow and no animation: a two-word tab needs neither, and the one animated
+ * thing on this page is the map marker's halo.
+ */
+.ribbon {
+  align-self: flex-start;
+  inline-size: max-content;
+  /* The margin is on the same axis, so the cap has to pay for it or a long
+     translation overhangs the card on a 320 px screen. */
+  max-inline-size: calc(100% - var(--radius-md));
+  margin-block: 0;
+  margin-inline: var(--radius-md) 0;
+  padding-inline: var(--space-3);
+  /* Top corners only: the bottom edge is shared with the card. */
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--accent-active);
+  color: var(--text-on-accent);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: 1.9;
+  letter-spacing: 0.02em;
+}
+
+/**
  * The way out sits after the cards, in the DOM and on screen.
  *
  * Putting it beside the heading is the common arrangement and it was refused
- * here: it would come *before* the three trips in reading order, so a
- * screen-reader user and a keyboard user both meet the escape hatch before the
- * content the section exists for. Below the cards it is where a reader who has
+ * here: it would come *before* the trip in reading order, so a screen-reader user
+ * and a keyboard user both meet the escape hatch before the content the section
+ * exists for. Below the card it is where a reader who has
  * finished reading them looks, and no `order` trick is needed to make the paint
  * disagree with the DOM.
  */
