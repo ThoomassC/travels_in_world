@@ -5,52 +5,32 @@ import { MAP_DRAWING } from "./support/map";
 
 /**
  * The map's accessible equivalent on a **populated** journal, against its own
- * production build of `tests/fixtures/content/home-map` — four trips over four
- * countries, Japan holding two, one trip crossing Peru and Bolivia. See
- * `playwright.config.ts` for why this file gets a second server, and the
- * fixture's own README for why those four trips.
+ * production build of `tests/fixtures/content/home-map` — five trips over five
+ * countries, Japan holding two, one trip crossing Peru and Bolivia, Morocco's
+ * story unwritten. See `playwright.config.ts` for why this file gets a second
+ * server, and the fixture's own README for why those trips.
  *
- * This is the half of TIW-15 that cannot be asserted on the repository's empty
- * content: a count of trips per country needs trips, and the number this ticket
- * exists to add is precisely that count.
+ * **What the equivalent IS changed on 7 September 2026, and this file is where
+ * that shows most.** Until then it was « Les pays visités », a counted list of
+ * five country rows under the drawing, and roughly half the cases below were
+ * about those rows: their order, their labels, their targets, their place in the
+ * tab sequence. The owner removed the block from the map tab; the inventory it
+ * held lives on the Pays and Villes tabs now, which have pages and tests of their
+ * own.
  *
- * Expected table, by French alphabetical order — the order `buildWorldGeometry`
- * collates `visited` in, and the order this list must not re-derive:
+ * What remains here is the equivalent that is left, and it is not nothing: **five
+ * real `<a href>` markers**, each named `{title}, {place}` — and `— récit à venir`
+ * for the untold one — plus a `<figcaption>` that counts in words. That is what
+ * carries WCAG 1.1.1 for a drawing the whole of which is `aria-hidden`. The cases
+ * below were re-pointed at it rather than deleted, because the criteria they
+ * serve did not change: nothing in the drawing is focusable, everything the
+ * drawing says is said in text, and the keyboard reaches all of it and gets back
+ * out.
  *
- *     Bolivie 1 voyage · Islande 1 voyage · Japon 2 voyages · Pérou 1 voyage
+ * The one criterion that genuinely lost its channel is recorded where it belongs
+ * rather than here: `src/app/[locale]/page.tsx` says what the removal costs 1.4.1
+ * at the first published récit.
  */
-
-/**
- * The five rows, in the order the page must render them, each with the target its
- * link carries.
- *
- * **A country holding one trip goes straight to that trip; several go to the
- * listing.** The first version sent every row to `/fr/voyages#pays-<code>` and it
- * dangled: `TripCatalogue` files a trip under its *first arrival* country only,
- * so Bolivia — merely crossed by `perou-bolivie-2023` — had no section, and
- * `#pays-bo` matched nothing on a real build. A fragment matching no id does not
- * fail; it silently leaves the reader at the top of the listing. Every target
- * below is a route, so none can dangle.
- *
- * **Morocco is the row TIW-18 added, and it is a third case.** Its only trip has
- * no page — `maroc-2023` carries `story: unwritten` — so the "one trip, one page"
- * rule would have sent this row to `/fr/voyages/maroc-2023`, an address the build
- * never wrote. It goes to the listing instead, where that trip *is* rendered, and
- * its label ends in « récit à venir »: the `<svg>` is `aria-hidden` and the
- * country's dashed outline says nothing to a screen reader, so this row is the
- * only textual channel the third tint has.
- */
-const EXPECTED = [
-  { name: "Bolivie", label: "Bolivie 1 voyage", href: "/fr/voyages/perou-bolivie-2023" },
-  { name: "Islande", label: "Islande 1 voyage", href: "/fr/voyages/islande-2022" },
-  { name: "Japon", label: "Japon 2 voyages", href: "/fr/voyages" },
-  { name: "Maroc", label: "Maroc 1 voyage récit à venir", href: "/fr/voyages" },
-  { name: "Pérou", label: "Pérou 1 voyage", href: "/fr/voyages/perou-bolivie-2023" },
-] as const;
-
-/** Every row of the equivalent, located by its heading's region. */
-const countryLinks = (page: import("@playwright/test").Page) =>
-  page.getByRole("region", { name: "Les pays visités" }).getByRole("link");
 
 test("the fixture really is the five trips this file assumes", async ({ page }) => {
   /**
@@ -70,43 +50,11 @@ test("the fixture really is the five trips this file assumes", async ({ page }) 
   );
 });
 
-test("the countries and their trip counts are under the map, in the reader's alphabet", async ({
-  page,
-}) => {
+test("nothing in the drawing is a link; the five markers beside it are", async ({ page }) => {
   await page.goto("/fr");
 
-  await expect(
-    page.getByRole("heading", { level: 2, name: frMessages.map.countriesHeading })
-  ).toBeVisible();
-
-  /**
-   * Located through the block's own landmark rather than by a sibling selector:
-   * `h2 ~ ul a` also matches the "Derniers voyages" heading and its list further
-   * down the page, so it would have counted trips as countries.
-   *
-   * The count is *inside* each link, so it is part of the accessible name and a
-   * reader tabbing through hears it. A count beside the link would satisfy a
-   * visual check and be silent to the keyboard.
-   */
-  const links = countryLinks(page);
-  await expect(links).toHaveCount(EXPECTED.length);
-
-  const names = await links.evaluateAll((elements) =>
-    elements.map((element) => (element.textContent ?? "").trim())
-  );
-  expect(names).toEqual(EXPECTED.map((entry) => entry.label));
-
-  // And every link goes where the row promises.
-  for (const entry of EXPECTED) {
-    await expect(page.getByRole("link", { name: entry.label })).toHaveAttribute("href", entry.href);
-  }
-});
-
-test("only the visited countries are links; the other 174 shapes are not", async ({ page }) => {
-  await page.goto("/fr");
-
-  // The whole dataset is drawn — 177 shapes plus a second pass over the 5 tinted
-  // ones, now split across two layers: 4 told, and Morocco untold (TIW-18).
+  // The whole dataset is drawn — 240 shapes at the 50m vintage, plus a second
+  // pass over the 5 tinted ones split across two layers: 4 told, Morocco untold.
   const paths = page.locator(`${MAP_DRAWING} path`);
   expect(await paths.count()).toBeGreaterThan(170);
 
@@ -116,16 +64,36 @@ test("only the visited countries are links; the other 174 shapes are not", async
   expect(await svg.locator("a, button, [tabindex], title, [role]").count()).toBe(0);
 
   /**
-   * Five countries hold a trip, so five country links exist — not 177, and not
-   * 172 neutral ones quietly focusable. Asserted as a relation between the
-   * drawing and the equivalent, which is the property the criterion states.
+   * Five trips, so five links in the figure — not 240, and not 235 neutral shapes
+   * quietly focusable. Asserted as a relation between the drawing and the text
+   * beside it, which is the property the criterion states, and it survived the
+   * removal of « Les pays visités » because the markers were always the other
+   * half of it.
    *
-   * Morocco counts here even though its only trip has no page: the row is still a
-   * link, to the listing, which is what keeps it focusable and keyboard-operable.
-   * A row with no link at all would have been the easy answer and a 2.1.1 failure
-   * — the country would exist in the drawing and be unreachable in the equivalent.
+   * Morocco's marker counts here even though its trip has no page: it is still a
+   * real link, to that trip's entry in the listing, which is what keeps it
+   * focusable and keyboard-operable. A marker with no link at all would have been
+   * the easy answer and a 2.1.1 failure — the country would be tinted in the
+   * drawing and unreachable everywhere else.
    */
-  await expect(countryLinks(page)).toHaveCount(5);
+  const markers = page.locator("figure a[data-trip]");
+  await expect(markers).toHaveCount(5);
+
+  /**
+   * And each one is *named*, which is the whole of what makes them an equivalent
+   * rather than five anonymous targets. The untold trip's name ends in the words
+   * the drawing's copper tint cannot say.
+   */
+  const names = await markers.evaluateAll((elements) =>
+    elements.map((element) => (element.textContent ?? "").replace(/\s+/g, " ").trim()).sort()
+  );
+  expect(names).toEqual([
+    "Islande, cercle d'or, Reykjavik",
+    "Japon, printemps 2024, Tokyo",
+    "Japon, retour à Osaka, Osaka",
+    "Maroc, sud et Atlas, Marrakech — récit à venir",
+    "Pérou et Bolivie, hiver 2023, Cusco — nouveau récit",
+  ]);
 });
 
 /**
@@ -134,21 +102,24 @@ test("only the visited countries are links; the other 174 shapes are not", async
  * elements *can* be focused, not that the path through them makes sense.
  *
  * The route walked here is the one a reader takes: in at the top of the document,
- * through the navigation, across the map's four markers, into the four countries,
- * and out the far side into the rest of the page. Then Enter, twice, on the two
- * kinds of country row — because a link that goes nowhere useful is a link that
- * passed every audit.
+ * through the navigation, across the map's five markers, and out the far side
+ * into the rest of the page. Then Enter, twice, on the two kinds of marker — the
+ * one whose récit is written and the one whose is not — because a control that
+ * does nothing useful is a control that passed every audit.
+ *
+ * **This journey used to have a fifth leg**, through the five country rows of
+ * « Les pays visités ». The block is gone; the legs that remain are the ones that
+ * were always the harder half — the drawing must stay out of the tab order, and
+ * the figure must not trap what enters it.
  */
-test("a reader reaches every country by keyboard and lands on its trips", async ({ page }) => {
+test("a reader reaches every trip by keyboard, and activating one opens it", async ({ page }) => {
   await page.goto("/fr");
 
   /**
-   * Where the focus is, and — crucially — *which block* it is in.
-   *
-   * Not by href pattern: a country holding one trip now links to that trip's own
-   * page, which is the same shape as a marker's href (`/fr/voyages/<slug>`). The
-   * two are told apart by the part of the document they live in, which is what the
-   * criterion is actually about — the equivalent is under the map.
+   * Where the focus is, and — crucially — *which block* it is in. Asserted by
+   * position in the document rather than by href pattern: a marker's href is
+   * `/fr/voyages/<slug>` for a told trip and `/fr/voyages#voyage-<slug>` for an
+   * untold one, and neither shape identifies "in the map".
    */
   const focused = () =>
     page.evaluate(() => {
@@ -165,16 +136,15 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
          */
         isMarker: Boolean(active?.matches("a[data-trip]")),
         isControl: Boolean(active?.closest("figure") && active?.matches("button")),
-        inEquivalent: Boolean(active?.closest("section[aria-labelledby='pays-visites']")),
       };
     });
 
   type Stop = Awaited<ReturnType<typeof focused>>;
   const journey: Stop[] = [];
 
-  // 40 presses is comfortably past the far side of the country list on this
-  // fixture; the loop stops early once the last country has been passed.
-  for (let press = 0; press < 40; press += 1) {
+  // 30 presses is comfortably past the far side of the marker list on this
+  // fixture; the loop stops early once the focus has left the figure again.
+  for (let press = 0; press < 30; press += 1) {
     await page.keyboard.press("Tab");
     const stop = await focused();
 
@@ -184,7 +154,7 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
 
     journey.push(stop);
 
-    if (stop.inEquivalent && stop.text === EXPECTED[EXPECTED.length - 1]?.label) {
+    if (journey.some((earlier) => earlier.isMarker) && !stop.inMap) {
       break;
     }
   }
@@ -193,7 +163,7 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
   expect(journey[0]?.text).toBe(frMessages.trips.skipToContent);
 
   /**
-   * 2a. **There are no controls in the journey any anymore** (TIW-38). The three
+   * 2a. **There are no controls in the journey any more** (TIW-38). The three
    * zoom buttons used to come BEFORE the markers, deliberately: with sixty
    * published trips, controls placed after the marker list would be sixty tab
    * stops away. They are gone, so the assertion that survives is that none came
@@ -204,133 +174,140 @@ test("a reader reaches every country by keyboard and lands on its trips", async 
   const controlStops = journey.filter((stop) => stop.isControl);
   expect(controlStops).toHaveLength(0);
 
-  // 2b. Then the map's five markers, one per trip the journal holds — the untold
-  // one included, since it is a real link like the others (TIW-18).
-  const markerStops = journey.filter((stop) => stop.isMarker);
-  expect(markerStops).toHaveLength(5);
-
-  const lastControl = journey.reduce((last, stop, index) => (stop.isControl ? index : last), -1);
-  const firstMarker = journey.findIndex((stop) => stop.isMarker);
-  expect(firstMarker).toBeGreaterThan(lastControl);
-
   /**
-   * 3. The five countries follow, in order, each announcing its own count. This is
-   * the criterion "entirely navigable by keyboard" stated as the sequence a reader
+   * 2b. Then the map's five markers, one per trip the journal holds — the untold
+   * one included, since it is a real link like the others (TIW-18). This is the
+   * criterion "entirely navigable by keyboard" stated as the sequence a reader
    * actually receives rather than as a property of the markup.
    */
-  const countryStops = journey.filter((stop) => stop.inEquivalent);
-  expect(countryStops.map((stop) => stop.text)).toEqual(EXPECTED.map((entry) => entry.label));
-  expect(countryStops.map((stop) => stop.href)).toEqual(EXPECTED.map((entry) => entry.href));
-
-  // 4. The countries come after the markers: the equivalent is *under* the map in
-  //    the tab order as well as on the screen.
-  const firstCountry = journey.findIndex((stop) => stop.inEquivalent);
-  const lastMarker = journey.reduce((last, stop, index) => (stop.isMarker ? index : last), -1);
-  expect(firstCountry).toBeGreaterThan(lastMarker);
+  const markerStops = journey.filter((stop) => stop.isMarker);
+  expect(markerStops).toHaveLength(5);
+  expect(markerStops.map((stop) => stop.text).sort()).toEqual([
+    "Islande, cercle d'or, Reykjavik",
+    "Japon, printemps 2024, Tokyo",
+    "Japon, retour à Osaka, Osaka",
+    "Maroc, sud et Atlas, Marrakech — récit à venir",
+    "Pérou et Bolivie, hiver 2023, Cusco — nouveau récit",
+  ]);
 
   /**
-   * 5. And the focus leaves both blocks entirely — no trap. One more Tab from the
-   *    last country reaches something that is neither a marker nor a country.
+   * 3. And the focus leaves the figure entirely — no trap. The loop above stops
+   *    on the first stop outside it, so the last entry is that proof.
    */
-  await page.keyboard.press("Tab");
-  const after = await focused();
-  expect(after.insideSvg).toBe(false);
-  expect(after.inMap).toBe(false);
-  expect(after.inEquivalent).toBe(false);
+  const last = journey[journey.length - 1];
+  expect(last?.inMap).toBe(false);
+  expect(last?.insideSvg).toBe(false);
 
   /**
-   * 6. Enter on a country holding one trip lands on that trip. This is the
-   *    assertion that makes "link rather than duplicate" honest: the count under
-   *    the map is only useful if it leads to the trips it counts.
+   * 4. Enter on a marker does something, and **what it does depends on whether
+   *    the script is there** — which is the one thing this leg exists to pin.
    *
-   *    Iceland is the plain case; **Bolivia is the case that broke the first
-   *    version.** Its trip is filed on `/fr/voyages` under Peru, so the fragment
-   *    `#pays-bo` this row used to carry matched nothing at all — and the trip page
-   *    is the one document that does name Bolivia.
+   *    With JavaScript, TIW-14's interaction layer intercepts the activation and
+   *    opens the selection panel at `?voyage=<slug>`; the reader stays on the map.
+   *    Measured, and it is why an earlier version of this case — asserting a
+   *    navigation to the trip's page — was wrong rather than the code being so.
+   *
+   *    The `href` is what a reader **without** the script follows, so it is
+   *    asserted as an attribute rather than by pressing Enter. And the two kinds
+   *    of trip carry two different ones, which is the whole of TIW-18's marker
+   *    rule: Iceland's récit is written, so its marker addresses that trip's own
+   *    page; Morocco's is not, so `tripStaticParams` never built one and the
+   *    marker addresses the trip's entry in the listing instead. A marker
+   *    pointing at `/fr/voyages/maroc-2023` would be a 404 rendered into the HTML
+   *    with a green build. `tests/e2e/no-javascript.populated.spec.ts` is where
+   *    those addresses are actually walked with the script off.
    */
-  for (const [label, slug] of [
-    ["Islande 1 voyage", "islande-2022"],
-    ["Bolivie 1 voyage", "perou-bolivie-2023"],
+  for (const [label, slug, href] of [
+    ["Islande, cercle d'or, Reykjavik", "islande-2022", "/fr/voyages/islande-2022"],
+    [
+      "Maroc, sud et Atlas, Marrakech — récit à venir",
+      "maroc-2023",
+      "/fr/voyages#voyage-maroc-2023",
+    ],
   ] as const) {
     await page.goto("/fr");
-    const row = page.getByRole("link", { name: label });
-    await row.focus();
-    await expect(row).toBeFocused();
+    const marker = page.getByRole("link", { name: label });
+
+    await expect(marker).toHaveAttribute("href", href);
+
+    await marker.focus();
+    await expect(marker).toBeFocused();
     await page.keyboard.press("Enter");
 
-    await expect(page).toHaveURL(new RegExp(`/fr/voyages/${slug}$`));
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`\\?voyage=${slug}$`));
+    await expect(page.getByRole("dialog")).toBeVisible();
   }
-
-  /**
-   * 7. And a country holding several lands on the listing, where its own heading
-   *    holds exactly the number the row promised. The count is only meaningful if
-   *    it matches what the reader then finds.
-   */
-  await page.goto("/fr");
-  const japan = page.getByRole("link", { name: "Japon 2 voyages" });
-  await japan.focus();
-  await page.keyboard.press("Enter");
-
-  await expect(page).toHaveURL(/\/fr\/voyages$/);
-
-  const japanSection = page.locator("section:has(> h3)").filter({ hasText: "Japon" }).first();
-  await expect(japanSection.getByRole("heading", { level: 3, name: "Japon" })).toBeVisible();
-  /**
-   * The section's *own* list items, hence the direct-child selector: a `TripCard`
-   * contains lists of its own, so `getByRole("listitem")` inside the section
-   * counted 8 where the fixture has 2 — measured.
-   */
-  await expect(japanSection.locator("> ul > li")).toHaveCount(2);
 });
 
-test("shift-tab walks back out of the country list the way it came", async ({ page }) => {
+test("shift-tab walks back out of the marker list the way it came", async ({ page }) => {
   // The other direction, which a trap can break on its own: a container that
   // catches backwards focus is just as stuck.
   await page.goto("/fr");
 
-  const bolivia = page.getByRole("link", { name: "Bolivie 1 voyage" });
-  await bolivia.focus();
+  const where = () =>
+    page.evaluate(() => ({
+      insideSvg: Boolean(document.activeElement?.closest("svg")),
+      inMap: Boolean(document.activeElement?.closest("figure")),
+      isMarker: Boolean(document.activeElement?.matches("a[data-trip]")),
+      tag: document.activeElement?.tagName ?? "NONE",
+    }));
+
+  await page.locator("figure a[data-trip]").first().focus();
   await page.keyboard.press("Shift+Tab");
 
-  const back = await page.evaluate(() => ({
-    insideSvg: Boolean(document.activeElement?.closest("svg")),
-    inMap: Boolean(document.activeElement?.closest("figure")),
-    inEquivalent: Boolean(
-      document.activeElement?.closest("section[aria-labelledby='pays-visites']")
-    ),
-  }));
+  /**
+   * One step back from the first marker is **the zoom slider**, measured — TIW-38
+   * put a range input in the same `<figure>`, before the marker list. So the
+   * focus is still in the map, and that is correct rather than a trap: it has
+   * left the markers for the control that precedes them.
+   */
+  const first = await where();
+  expect(first.insideSvg).toBe(false);
+  expect(first.isMarker).toBe(false);
+  expect(first.tag).toBe("INPUT");
 
-  expect(back.insideSvg).toBe(false);
-  // Backwards from the first country is the map's last marker — so the focus left
-  // the equivalent rather than sticking on Bolivia or falling nowhere.
-  expect(back.inEquivalent).toBe(false);
-  expect(back.inMap).toBe(true);
+  // And one more step leaves the figure altogether, which is the property a
+  // backwards trap would break.
+  await page.keyboard.press("Shift+Tab");
+  const second = await where();
+  expect(second.insideSvg).toBe(false);
+  expect(second.inMap).toBe(false);
 });
 
-test("the list is in the HTML the server sent, not assembled by a script", async ({ request }) => {
+test("the markers are in the HTML the server sent, not assembled by a script", async ({
+  request,
+}) => {
   /**
    * Fetched as bytes, with no browser and no JavaScript at all: "présente dans le
    * DOM rendu par le serveur" is a property of the response, and the only way to
    * assert it is to read the response. A page rendered by hydration would satisfy
    * every other test in this file and fail this one.
    *
-   * It is also the indexer's and the slow connection's view of the page, which the
-   * ticket names as reasons this list exists at all.
+   * It is also the indexer's and the slow connection's view of the page, which is
+   * one of the reasons the marker is a real `<a href>` and not a script-driven
+   * hit area.
    */
   const response = await request.get("/fr");
   expect(response.status()).toBe(200);
 
   const html = await response.text();
 
-  expect(html).toContain(frMessages.map.countriesHeading);
-  for (const entry of EXPECTED) {
-    expect(html).toContain(entry.name);
-    expect(html).toContain(`href="${entry.href}"`);
+  for (const [name, href] of [
+    ["Islande, cercle d'or, Reykjavik", "/fr/voyages/islande-2022"],
+    ["Japon, printemps 2024, Tokyo", "/fr/voyages/japon-2024"],
+    ["Japon, retour à Osaka, Osaka", "/fr/voyages/japon-2025"],
+    ["Maroc, sud et Atlas, Marrakech — récit à venir", "/fr/voyages#voyage-maroc-2023"],
+    ["Pérou et Bolivie, hiver 2023, Cusco — nouveau récit", "/fr/voyages/perou-bolivie-2023"],
+  ] as const) {
+    expect(html).toContain(name);
+    expect(html).toContain(`href="${href}"`);
   }
-  // Two trips for Japan and one for the rest: the count itself is in the bytes.
-  expect(html).toContain("2 voyages");
-  // And not a single dangling fragment, which is what the first version shipped.
+
+  // The count is in the bytes too, in the caption the figure is named by.
+  expect(html).toContain("5 voyages, 5 pays");
+  // And not a single dangling fragment: `#pays-` was the spelling that shipped
+  // once, pointing at sections `TripCatalogue` does not emit for a crossed
+  // country. Nothing writes it any more, and this is what notices if it returns.
   expect(html).not.toContain("#pays-");
 });
 
@@ -483,4 +460,62 @@ test("the marker overlap is still there, undecided rather than fixed", async ({ 
    */
   const report = await auditPage(page);
   expect(report.incomplete).toContain("target-size");
+});
+
+/**
+ * **THE TWO COUNTRY STATES DIFFER BY SOMETHING THAT IS NOT A COLOUR** — WCAG 1.4.1,
+ * and the guard that turns a comment into a property.
+ *
+ * Since TIW-38 the drawing tells "this country has a récit" from "this one does
+ * not" with copper against teal, a difference of hue alone. An audit measured the
+ * two outlines at **1.08:1** in the light theme and **1.02:1** simulated for a
+ * deuteranope — identical, in other words — while `world-map.module.css` carried a
+ * comment claiming the outline was "also thicker". Both states were declared at
+ * `stroke-width: 2`. The comment named a channel the stylesheet did not have.
+ *
+ * The channel exists now — 3.5 device pixels against 2 — and this is what keeps it
+ * existing. It runs **here** and not in a unit test for two reasons: the widths are
+ * a *computed* style, which needs a browser; and this fixture is the only place in
+ * the repository where both states are rendered at once, because every trip in
+ * `content/trips` is `story: unwritten` and the real site paints one tint.
+ *
+ * The assertion is a relation and not two numbers, so a future redesign may move
+ * both as long as they stay apart.
+ *
+ * PROVEN BY DELIBERATE FAILURE, on the state the audit found:
+ *
+ *   // src/components/map/world-map.module.css, .visited path
+ *   -  stroke-width: 3.5;
+ *   +  stroke-width: 2;
+ *
+ *   npm run test:e2e:content  ->  1 failed | 96 passed
+ *                                 "Expected: > 2   Received: 2"
+ */
+test("a reader who separates no hues can still tell the two country states apart", async ({
+  page,
+}) => {
+  await page.goto("/fr");
+
+  const widths = await page.evaluate(() => {
+    const widthOf = (selector: string) => {
+      const [shape] = document.querySelectorAll<SVGPathElement>(selector);
+      return shape === undefined ? null : Number(getComputedStyle(shape).strokeWidth.replace("px", ""));
+    };
+
+    return {
+      land: widthOf("figure svg g:not([class*='visited']):not([class*='untold']) path"),
+      told: widthOf("figure svg g[class*='visited'] path"),
+      untold: widthOf("figure svg g[class*='untold'] path"),
+    };
+  });
+
+  // The fixture really renders both states — without this the comparison below
+  // would be vacuously true on a journal with one tint.
+  expect(widths.told, "no told country is drawn: the fixture changed").not.toBeNull();
+  expect(widths.untold, "no untold country is drawn: the fixture changed").not.toBeNull();
+
+  expect(widths.told).toBeGreaterThan(Number(widths.untold));
+  // And both are still heavier than neutral land, which is the older distinction
+  // this one must not have swallowed.
+  expect(Number(widths.untold)).toBeGreaterThan(Number(widths.land));
 });

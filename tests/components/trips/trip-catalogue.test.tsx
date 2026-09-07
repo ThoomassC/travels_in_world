@@ -17,7 +17,7 @@ import { defaultLocale, renderWithMessages } from "./support";
  * no page of its own and this listing is where its dates, its countries and
  * « Récit à venir » are written. A fragment naming nothing leaves the reader
  * silently at the top of a sixty-entry page — which is not a hypothetical here:
- * `visited-countries.tsx` records measuring exactly that failure on a production
+ * `tests/e2e/dead-links.populated.spec.ts` records measuring exactly that failure on a production
  * build, with `#pays-bo`, and it is why the target is asserted rather than assumed.
  */
 

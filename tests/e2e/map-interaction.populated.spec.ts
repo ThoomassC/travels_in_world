@@ -146,8 +146,10 @@ test("without JavaScript the map is still drawn and every destination still reac
     expect(html).toContain(trip.title);
   }
 
-  // 3. The textual equivalent under it, untouched by this ticket.
-  expect(html).toContain(frMessages.map.countriesHeading);
+  // 3. The untold trip's marker too, pointing at the listing rather than at a
+  //    page the build never wrote — the half of the equivalent that used to be
+  //    checked here through « Les pays visités », removed on 7 September 2026.
+  expect(html).toContain('href="/fr/voyages#voyage-maroc-2023"');
 
   /**
    * 4. And NOT the controls, nor the panel. A zoom button in the server's HTML
@@ -326,7 +328,19 @@ test.describe("the trip panel", () => {
     ]);
 
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await opened.waitForLoadState();
+
+    /**
+     * `waitForURL` and not `waitForLoadState()`, and the difference is why this
+     * case was flaky — it failed two full runs out of four on 7 September 2026,
+     * always with `about:blank` where the trip's path was expected.
+     *
+     * `context.waitForEvent("page")` resolves the moment the tab exists, which is
+     * before it has navigated anywhere. `waitForLoadState()` then waits for the
+     * `load` of whatever is currently there — and `about:blank` is already loaded,
+     * so it returns immediately and the assertion reads the blank URL. Waiting on
+     * the URL waits for the thing the test is actually about.
+     */
+    await opened.waitForURL(new RegExp(`/fr/voyages/${REYKJAVIK.slug}$`));
     expect(new URL(opened.url()).pathname).toBe(`/fr/voyages/${REYKJAVIK.slug}`);
     await opened.close();
   });

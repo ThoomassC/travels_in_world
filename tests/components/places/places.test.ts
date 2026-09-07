@@ -10,7 +10,7 @@ import {
  * The arithmetic behind `/villes`: which cities and places the published trips
  * reach, and how many stays each one holds.
  *
- * **A pure module for the reason `tallyVisitedCountries` is one** — the header of
+ * **A pure module for the reason `untoldOnlyCountryCodes` is one** — the header of
  * `src/components/map/countries.ts` argues it at length, and this file is its
  * twin: the degenerate cases are worth a dozen cheap assertions rather than a
  * dozen renders, and the three states the acceptance criteria name (zero places,
@@ -133,7 +133,8 @@ describe("tallyVisitedPlaces", () => {
     /**
      * Tokyo holds the most stays and still comes last. Sorting by count is the
      * tempting "where has he been most" reading and it is refused for the reason
-     * `tallyVisitedCountries` refuses it: a reader scanning a list of fourteen
+     * the map's own country tally refused it too, before it was deleted: a
+     * reader scanning a list of fourteen
      * names needs the alphabet they are scanning with.
      */
     const tally = tallyVisitedPlaces(

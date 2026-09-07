@@ -466,9 +466,11 @@ describe("WorldMap", () => {
       /**
        * A `<figcaption>` *is* the `<figure>`'s accessible name (HTML-AAM), and
        * until TIW-15 it also carried a visually hidden enumeration of every
-       * visited country. That was the right call while nothing else named them;
-       * `VisitedCountries` now names them visibly, counted and linked, so forty
-       * country names in a *label* is all that removal leaves behind.
+       * visited country. That was the right call while nothing else named them,
+       * and it stopped being one the moment a visible list did — forty country
+       * names in a *label* is all the enumeration ever added. The list itself
+       * was later removed from the map tab; the caption never took the names
+       * back, and this case is what keeps it from doing so.
        *
        * Asserted on the caption's own text rather than through
        * `toHaveAccessibleName`, because jsdom's name computation for `figure` is
@@ -644,7 +646,7 @@ describe("WorldMap — the newest récit's marker", () => {
  *   whole point is that it works with none.
  *
  * So the href points at something that certainly exists — the listing entry of
- * this very trip — which is the same move `visited-countries.tsx` records making
+ * this very trip — which is the same move the map's country list recorded making
  * when its `#pays-xx` fragment turned out to dangle.
  */
 describe("WorldMap — a trip whose récit is not written", () => {
@@ -787,9 +789,9 @@ describe("WorldMap — the untold country layer", () => {
     /**
      * "2 pays" and not "1 pays": the caption answers *where has he been*, and a
      * country visited without being written about has still been visited. The
-     * distinction belongs to the tint and to `VisitedCountries`, not to this
-     * count — which is also what keeps the caption agreeing with the textual
-     * equivalent beside it, since that list counts trips per country the same way.
+     * distinction belongs to the tint and to the marker's own name, not to this
+     * count — which is also what keeps the caption agreeing with the Pays tab,
+     * where a trip is grouped whether its récit is written or not.
      */
     expect(screen.getByText(/2 voyages, 2 pays/)).toBeInTheDocument();
   });
@@ -799,9 +801,7 @@ describe("WorldMap — the untold country layer", () => {
     const untold = COUNTRIES.slice(2, 4);
     const { container } = renderMap({ visited, untold, marks: [CENTRED_MARK] });
 
-    expect(drawnPaths(container)).toHaveLength(
-      COUNTRIES.length + visited.length + untold.length
-    );
+    expect(drawnPaths(container)).toHaveLength(COUNTRIES.length + visited.length + untold.length);
   });
 
   it("is absent from the drawing when there is no drawing at all", () => {

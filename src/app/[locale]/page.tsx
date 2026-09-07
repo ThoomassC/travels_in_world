@@ -5,14 +5,8 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 // caught by the `"**/map/*"` half of the geometry façade's guard, which compares
 // strings and cannot tell `src/components/map` from a relative spelling of
 // `src/map`. See the header of `src/components/map/index.ts`.
-import {
-  untoldOnlyCountryCodes,
-  VisitedCountries,
-  WorldMap,
-  type TripMark,
-} from "@/components/map";
+import { untoldOnlyCountryCodes, WorldMap, type TripMark } from "@/components/map";
 import { FreshTripBanner } from "@/components/trips/fresh-trip-banner";
-import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { ProjectPurpose } from "@/components/site/project-purpose";
 import { PAGE_MARK } from "@/components/site/site-nav";
 import { LatestTrips } from "@/components/trips/latest-trips";
@@ -157,8 +151,9 @@ export default async function HomePage({ params }: HomePageProps) {
              * HTML with a green build. The destination is chosen from what
              * certainly exists: the trip's own entry in the listing, which is
              * exactly where « Récit à venir », its dates and its countries are
-             * written. Same move `visited-countries.tsx` records making after
-             * measuring that its `#pays-xx` fragment dangled.
+             * written. Same move the map's country list made after measuring
+             * that its `#pays-xx` fragment dangled — the finding outlived the
+             * list, in the header of `tests/e2e/dead-links.populated.spec.ts`.
              *
              * The fragment is `#voyage-<slug>`, the id `TripCatalogue` puts on
              * each entry — the same scheme the trip page uses to point back at a
@@ -286,10 +281,11 @@ export default async function HomePage({ params }: HomePageProps) {
         ITEM, so a map nested one level deeper would have been laid out by the
         section and never by the page.
 
-        That is also why `VisitedCountries` below is a sibling now rather than the
-        map's neighbour inside a wrapper — the reading order the criterion asks for
-        ("sous la carte") is unchanged, and each of the three blocks now sits on
-        the track it belongs to.
+        It was also why the countries list below used to be a sibling rather than
+        the map's neighbour inside a wrapper. That list is gone (see the note
+        after this block), and the reason survives it: each block on this page
+        sits on the track it belongs to, and the map is the only one on the wide
+        one.
 
         A wrapper and not the attribute on the `<figure>` itself: `WorldMap` owns
         its own root element and takes no `className`, and widening its props so a
@@ -314,38 +310,31 @@ export default async function HomePage({ params }: HomePageProps) {
           it does not own.
         */}
       {/*
-          The map's textual equivalent (TIW-15), and it sits *outside* the map's
-          own box on purpose. The map caps itself at `45vh × aspect` — about
-          691 px on a 1152 px desktop — so a list rendered inside it would be a
-          centred column two thirds of the page wide, with its `h2` out of line
-          with the "Derniers voyages" `h2` right below. The reading order is what
-          the acceptance criterion asks for ("sous la carte"), and DOM order gives
-          it. (Until TIW-14 the cap was this page's `.mapFrame`; the wrapper is
-          gone and the sibling relation is unchanged.)
+          **« Les pays visités » was here, and it is gone at the owner's request.**
+          Deleted rather than hidden, and the component with it: a block nothing
+          renders is a block that rots, and this one carried enough measured
+          reasoning that leaving it half-alive would have been worse than either
+          keeping or removing it.
 
-          **`trips` and not `world.visited`.** The equivalent is derived from the
-          content, never from the geometry beside it: `buildWorldGeometry` throws
-          for a declared code it cannot draw, so a state with no country shape is
-          a state with no declared code, and a list fed from the tinted subset
-          would have been empty in exactly the states where the drawing is
-          missing. One failure, both channels — which is the opposite of what the
-          "map failed" criterion asks for. The two counts still agree: the
-          caption counts the tinted subset, which `@/map` selects from these very
-          codes.
+          **What replaced it, and what did not.** The inventory of "which
+          countries, how many trips" is now the Pays tab (`/voyages`, grouped by
+          country) and the Villes tab beside it — the site did not lose it, this
+          page did. What this page loses is the *join* between the drawing and
+          those names: a reader who cannot use the map now has the marker list —
+          thirteen real links, each named "titre, lieu" and, for an untold trip,
+          "— récit à venir" — plus the `<figcaption>`'s count. That still carries
+          1.1.1 for an `aria-hidden` drawing.
 
-          The naming and the collation come from the listing's own helpers, so a
-          country reads the same here and on `/fr/voyages`, and this page stays
-          the one place that holds both façades.
+          **The debt this opens, said plainly rather than discovered later.**
+          `world-map.module.css` recorded this list as the channel WCAG 1.4.1
+          rests on, because since TIW-38 the told/untold distinction in the
+          drawing is copper against teal — a difference of hue alone. It is
+          inert today: every published trip is `story: unwritten`, so the map
+          paints one tint and there is no colour-only distinction to carry. It
+          becomes real at the **first published récit**, and the fix then is a
+          shape difference in the drawing (the dashed stroke TIW-38 replaced),
+          not a list a reader must scroll to.
         */}
-      <VisitedCountries
-        trips={trips}
-        labels={{
-          countryName: (code) => countryNameOf(locale, code),
-          compare: collatorFor(locale).compare,
-        }}
-        tripHref={(slug) => localePathname({ href: tripPath(slug), locale })}
-        allTripsHref={localePathname({ href: tripsPath(), locale })}
-      />
 
       <LatestTrips trips={trips} locale={locale} freshSlug={fresh?.slug} />
 

@@ -331,24 +331,42 @@ composant. **Depuis TIW-37 ce fichier ne porte plus la palette** : il importe ce
 README n'est pas un garde. Le garde, désormais, est
 `tests/styles/colour-contract.test.ts`.
 
-**La marque est remplaçable sans toucher au code.** Le logotype est un **avion vu de dessus,
-incliné à 21°, nez en haut à gauche** en `--logo-ink` — une seule masse connexe, sans vide interne — posé en tête
-d'une trajectoire en pointillé en `--logo-accent`, et suivi du nom composé dans la pile de
-polices du site. L'inclinaison est la décision de dessin : un avion droit est le pictogramme
-que toutes les signalétiques d'aéroport impriment déjà, il nomme la catégorie et pas ce
-carnet ; incliné, la même silhouette devient un vol. Il remplace une comète que la plupart
-des lecteurs prenaient pour une plume.
+**La marque est remplaçable sans toucher au code.** Le logotype est un **avion vu de face,
+droit**, en `--logo-ink`, une aiguille de compas découpée dans son fuselage, posé sur le
+médaillon de l'en-tête et suivi du nom composé dans la pile de polices du site. C'est le
+troisième dessin du projet : une comète que la plupart des lecteurs prenaient pour une plume,
+puis un avion incliné à 21° volant en tête d'une trajectoire pointillée, puis celui-ci.
 
-Deux corrections à ce paragraphe, laissées visibles parce qu'elles disent quelque chose sur la
-méthode. Il annonçait **30°** : c'est l'angle demandé au générateur, pas celui du résultat — la
-coupe de départ n'était pas droite, et l'ajustement d'un axe de symétrie sur les vingt sommets
-donne 21,0° avec un résidu de 0,0012. Il annonçait aussi que l'avion « vient se poser au bout de
-la route pointillée » : son nez pointe en fait vers la **gauche**, alors que le filet monte de
-gauche à droite. **L'avion remonte sa route à contresens.** Un miroir horizontal du tracé le
-corrigerait, au prix d'une régénération des deux PNG ; ce n'est pas fait parce que le dessin
-lui-même est en cours de réexamen. `src/components/site/brand-art.ts` porte les deux mesures. C'est une
-marque **typographique**, assumée comme telle : il n'y a ni police propre, ni dessin de
-lettres. Cinq fichiers, et une seule source de vérité :
+**Le dessin a changé le 7 septembre 2026, et c'est le premier de ce dépôt qui n'a pas été
+dessiné ici.** Le propriétaire a fourni un PNG de 1600 × 1200 : un avion **vu de face,
+droit**, avec une aiguille de compas **découpée** dans le fuselage. L'ancienne marque — un
+avion incliné à 21° volant en tête d'un filet pointillé — a été retirée, et avec elle les
+trois constantes du filet.
+
+Deux choses à savoir avant d'y toucher :
+
+1. **Le chemin a deux contours et se peint en `fill-rule: evenodd`.** Le premier est la
+   cellule, le second est l'aiguille, et l'aiguille est un **trou**. Peinte avec la règle
+   non nulle par défaut, elle se remplit et la marque perd son seul détail — sans erreur,
+   sans avertissement. `tests/components/site/brand-art.test.ts` refuse qu'un des deux
+   fichiers qui dessinent ce chemin oublie la règle.
+2. **La cellule a été retracée puis réécrite à la main.** Le traceur donnait un bout d'aile
+   gauche à x 0 et un droit à x 360,435 ; un logo asymétrique à 0,12 % reste un logo
+   asymétrique. Chaque arête droite est exacte, les deux courbes de nez sont les mêmes deux
+   cubiques en miroir, et la symétrie autour de x 36 est une propriété de la construction et
+   non une mesure. L'aiguille, elle, est le contour tracé mis à l'échelle 1/5 : il est
+   ressorti symétrique à 0,01 près, il n'y avait rien à corriger.
+
+Ce que la nouvelle coupe donne à 16 px, mesuré : **34,4 % de la boîte encrée**, 44 pixels sur
+256 au-delà d'alpha 200, contre 14,6 % et 22 pixels pour l'avion incliné. Une silhouette
+droite vue de face est bien plus dense qu'une croix inclinée. En regard, **l'aiguille
+disparaît à cette taille** — 2,4 unités dans une boîte de 72, donc un demi-pixel — et la
+marque se dégrade en silhouette pleine, qui se lit encore comme un avion ; l'aiguille revient
+à 32 px. C'est une acceptation, pas un oubli : une seconde coupe simplifiée pour les petites
+tailles serait un second logo.
+
+C'est une marque **typographique**, assumée comme telle : il n'y a ni police propre, ni dessin
+de lettres. Cinq fichiers, une seule source de vérité, et **une commande** :
 
 | Fichier                                     | Ce qu'il porte                                       |
 | ------------------------------------------- | ---------------------------------------------------- |
@@ -357,33 +375,45 @@ lettres. Cinq fichiers, et une seule source de vérité :
 | `src/app/apple-icon.png`                    | 180 × 180, opaque, sur la plaque `--logo-bg`         |
 | `public/opengraph-default.png`              | 1200 × 630, l'image de partage par défaut du site    |
 | `src/components/site/site-brand.module.css` | les tailles et les états du verrouillage d'en-tête   |
+| `scripts/generate-brand-rasters.ts`         | **redessine les deux PNG** depuis la géométrie       |
 
 Pour substituer un dessin définitif : remplacer les chaînes de `brand-art.ts`, recopier le
-même `d` dans `icon.svg`, régénérer les deux PNG. Aucun composant, aucun test et aucune
-feuille de style n'a besoin d'être modifié. **Ce qui casse si les proportions changent** : le
-`viewBox` du verrouillage décide de la largeur de la marque pour une hauteur de `2rem` (la
-boîte est plus large que haute, c'est ce qui l'empêche de dominer le nom) ; la plaque de
-l'icône Apple porte la seule couleur en dur du lot, parce qu'un PNG ne suit aucun thème ; et
-l'image de partage **doit** rester en 1200 × 630, sans quoi `og:image:width` /
-`og:image:height` mentent et la carte se réagence après le chargement.
-`tests/build/brand.test.ts` refuse ce dernier cas en lisant l'en-tête du PNG.
+même `d` dans `icon.svg`, puis `npm run brand:rasters`. Aucun composant, aucun test et aucune
+feuille de style n'a besoin d'être modifié.
 
-Deux contraintes de dessin sont mesurées et ne se contournent pas. **Encre contre accent ne
-vaut que 1,56:1 en clair et 1,45:1 en sombre** : aucune forme ne peut donc reposer sur cette
-frontière, et c'est pourquoi l'avion et la trajectoire sont deux objets séparés par 6,68 unités
-de fond nu — chacun se lit contre la page (encre 8,97:1 clair et 10,28:1 sombre, accent 5,76:1 et
-7,10:1) et jamais contre l'autre. Ces quatre chiffres sont recalculés par
+**Cette commande n'existait pas avant le 7 septembre 2026**, et c'est ce qui rendait la phrase
+ci-dessus fausse en pratique : les deux PNG avaient été faits à la main, le README disait « les
+régénérer » sans dire comment, et la géométrie avait une source de vérité que les rasters
+n'avaient pas. Elle ne vit pas dans `npm test` — un garde qui réécrit l'artefact qu'il garde ne
+peut pas échouer, et une suite qui touche `public/` à chaque exécution rend `git status`
+inutilisable. Ce qui vérifie les rasters, c'est `tests/build/brand.test.ts`, qui lit leurs
+en-têtes.
+
+**Ce qui casse si les proportions changent** : le `viewBox` de la marque décide de sa largeur
+pour une hauteur donnée (0,72 : 1 — plus haute que large, contrairement à l'ancienne, d'où le
+médaillon qui la porte plutôt qu'une boîte carrée) ; la plaque de l'icône Apple porte la seule
+couleur en dur du lot, parce qu'un PNG ne suit aucun thème ; et l'image de partage **doit**
+rester en 1200 × 630, sans quoi `og:image:width` / `og:image:height` mentent et la carte se
+réagence après le chargement. `tests/build/brand.test.ts` refuse ce dernier cas en lisant
+l'en-tête du PNG.
+
+Une contrainte de dessin est mesurée et ne se contourne pas — et une deuxième a disparu avec
+l'ancienne marque, ce qui vaut d'être dit plutôt que silencieusement omis. **Encre contre
+accent ne vaut que 1,56:1 en clair et 1,45:1 en sombre** : c'est ce qui interdisait à l'avion
+incliné et à sa trajectoire de partager une arête, et ce qui les séparait par 6,68 unités de
+fond nu. La marque actuelle n'a **aucune partie accentuée** — une encre, une silhouette, et un
+trou qui laisse voir le médaillon — donc cette frontière n'existe plus nulle part dans le logo.
+Ce qui reste dû, c'est la lecture de l'encre contre la page : **8,97:1 en clair et 10,28:1 en
+sombre**. Ces chiffres sont recalculés par
 `tests/styles/colour-contract.test.ts` ; la palette partagée de TIW-37 a **resserré** la
 contrainte plutôt que de la desserrer (1,99 → 1,56 en clair), parce que l'accent y est un
 seul teal dans les deux thèmes au lieu d'un teal sombre et d'un cyan clair.
 
-**Le favicon abandonne la trajectoire** : à 16 px ses points et leurs vides passent sous le
-pixel, alors que la masse de l'avion tient. **Ce qu'elle tient moins bien que la précédente,
-et c'est le coût assumé du dessin** : rastérisé à 16 px, l'avion encre 14,6 % de la boîte
-contre 28,8 % pour la comète qu'il remplace, et 22 de ses 256 pixels atteignent alpha 200
-là où la comète en avait 64. Un avion incliné est un fin cruciforme et aucun dessin d'avion
-n'est dense ; les marges L3 R3,5 rachètent ce qui pouvait l'être — aux marges de la comète,
-la même forme n'encrait que 10,7 %. Le relevé de 10,31 au pire sur les huit gris
+**Le favicon ne porte plus de trajectoire, et il n'y en a plus nulle part.** Ce que la coupe
+actuelle encre à 16 px est mesuré plus haut — 34,4 % de la boîte, 44 pixels sur 256 au-delà
+d'alpha 200 — contre 14,6 % et 22 pixels pour l'avion incliné, et 28,8 % pour la comète encore
+avant. Le sens de la série a donc changé deux fois : la marque s'était allégée, elle est
+redevenue dense. Le relevé de 10,31 au pire sur les huit gris
 de barres d'onglets de Chrome, Firefox et Safari **n'a pas été refait pour la nouvelle
 encre** et n'est donc plus valable : la liste de ces huit gris n'est consignée nulle part
 dans le dépôt, seul son résultat l'est (`docs/adr/0013`). Ce qui est mesuré, c'est le sens de
@@ -433,26 +463,30 @@ nécessaire à la compréhension ; la distinction visité / non visité est port
 en `--text-accent` **et par son épaisseur**, parce qu'aucune valeur de remplissage ne dépasse
 3:1 en thème clair et qu'un canal non coloré est nécessaire.
 
-**L'équivalent textuel de la carte est un composant à part, pas un bloc masqué**
-(`src/components/map/visited-countries.tsx`, TIW-15) : sous la carte, les pays
-atteints par les voyages publiés avec le nombre de voyages de chacun, chaque pays
-étant un lien. Quatre choses à savoir avant d'y toucher :
+**L'équivalent textuel de la carte, c'est la liste des balises — plus une liste de
+pays.** Jusqu'au 7 septembre 2026, `src/components/map/visited-countries.tsx`
+(TIW-15) rendait sous la carte les pays atteints par les voyages publiés, chacun
+avec son nombre de voyages et son lien. **Le propriétaire a fait retirer ce bloc de
+l'onglet Carte** ; l'inventaire vit désormais sur les onglets **Pays** (`/voyages`,
+groupé par pays) et **Villes** (`/villes`, index alphabétique des lieux). Le
+composant, sa feuille de style et ses tests ont été supprimés avec lui.
 
-1. **Il lit les voyages, jamais la géométrie.** C'est ce qui rend le critère « carte
-   en échec » atteignable : `buildWorldGeometry` **jette** pour un code déclaré
-   qu'il ne sait pas dessiner, donc un état sans forme de pays est un état sans code
-   déclaré — et une liste alimentée par le sous-ensemble teinté aurait été vide
-   exactement dans les états où le dessin manque. Une panne, deux canaux perdus.
-2. **Il relie, il ne duplique pas.** `/voyages` est déjà l'inventaire complet de
-   « quels voyages, où ». Ce qui manquait était le **compte par pays**, qui
-   n'existait dans aucun canal. Le lien d'une ligne va vers ce qui existe à coup
-   sûr : **le voyage lui-même** quand le pays n'en porte qu'un, la liste complète
-   sinon. Jamais un fragment. La première version pointait
-   `/voyages#pays-<code>` et **ça pendait dans le vide** — `buildCatalogue` classe
-   un voyage sous son **pays de première arrivée** seulement, donc un pays
-   seulement _traversé_ n'a aucune section, et `#pays-bo` ne correspondait à rien
-   (mesuré sur un build de production). Un fragment sans cible n'échoue pas : il
-   dépose le lecteur en haut d'une longue page.
+Ce qui porte l'équivalent aujourd'hui, et ce que ça change :
+
+1. **Les balises.** Une par voyage, un vrai `<a href>`, nommée « titre, lieu » — et
+   « — récit à venir » pour un voyage sans récit. Le `<svg>` est `aria-hidden`
+   (ADR 0003), donc c'est cette liste-là, plus le `<figcaption>` compté, qui
+   satisfait la 1.1.1. Elle est dans le HTML que le serveur envoie :
+   `tests/e2e/map-equivalent.populated.spec.ts` le vérifie octet par octet.
+2. **Une dette de 1.4.1, nommée et datée.** Depuis TIW-38 la distinction
+   raconté / non raconté dans le dessin est cuivre contre teal — une différence de
+   teinte seule — et c'était la liste supprimée qui la portait aussi en toutes
+   lettres, visiblement. Elle est **inerte aujourd'hui** : les treize voyages
+   publiés sont tous `story: unwritten`, donc la carte ne peint qu'une teinte. Elle
+   devient réelle **au premier récit publié**, et la réparation est alors une
+   différence de _forme_ dans le dessin, pas une liste à faire défiler.
+   `src/components/map/world-map.module.css` et `src/app/[locale]/page.tsx` la
+   portent tous les deux.
 3. **La légende ne promet plus le monde quand le cadre est recadré.** `frameAround`
    plancher un cadre à 30 % de la largeur du monde, donc avec **un** voyage publié
    la carte montrait un continent sous « Carte du monde : 1 voyage, 1 pays ». Deux
@@ -464,11 +498,23 @@ atteints par les voyages publiés avec le nombre de voyages de chacun, chaque pa
    verrouillé contenant du vide, sans une erreur ni une ligne de console.
    `WorldMap` ne rend alors pas la boîte du tout : une phrase prend sa place.
 
+Et la leçon qui a survécu à la suppression, parce qu'elle vaut pour tout lien de ce
+dépôt : **jamais un fragment vers une section qui peut ne pas exister.** La liste
+supprimée pointait `/voyages#pays-<code>` et **ça pendait dans le vide** —
+`buildCatalogue` classe un voyage sous son **pays de première arrivée** seulement,
+donc un pays seulement _traversé_ n'a aucune section, et `#pays-bo` ne
+correspondait à rien (mesuré sur un build de production). Un fragment sans cible
+n'échoue pas : il dépose le lecteur en haut d'une longue page. La mesure est
+conservée dans l'en-tête de `tests/e2e/dead-links.populated.spec.ts`, le garde
+qu'elle a payé.
+
 L'énumération masquée des pays visités qui vivait dans le `<figcaption>` a été
-**retirée** : un `<figcaption>` est le **nom accessible** du `<figure>` (HTML-AAM),
-et quarante noms de pays dans un nom accessible n'est pas un libellé. La liste
-visible la remplace sur tous les plans. `docs/adr/0003-carte-svg-inerte-et-balises-html.md`
-en décrit encore l'ancienne version : à reprendre avec TIW-27.
+**retirée** dès TIW-15 : un `<figcaption>` est le **nom accessible** du `<figure>`
+(HTML-AAM), et quarante noms de pays dans un nom accessible n'est pas un libellé.
+Elle n'est pas revenue avec la suppression de la liste, et
+`tests/components/map/world-map.test.tsx` est ce qui l'en empêche.
+`docs/adr/0003-carte-svg-inerte-et-balises-html.md` en décrit encore l'ancienne
+version : à reprendre avec TIW-27.
 
 **Dépendances écartées** (délibérément, ne pas les rajouter sans ticket) : bibliothèque de
 carte côté client (Leaflet, MapLibre), gestionnaire d'état (Redux, Zustand), client HTTP ou

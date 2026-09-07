@@ -315,16 +315,38 @@
  * neutral land in the light theme and 8.59:1 in the dark one, well past the 3:1
  * of 1.4.11.
  *
- * And the outline is also **thicker**, which is the part that matters for 1.4.1
- * (use of colour): a heavier line is a non-colour visual cue, so the distinction
- * survives for a reader who cannot separate the two hues at all. The fill stays
- * as reinforcement, because it is what makes the map readable at a glance for
- * everyone else.
+ * **AND THE OUTLINE IS THICKER THAN THE UNTOLD ONE'S, WHICH IS THE PART THAT
+ * MATTERS FOR 1.4.1.** 3.5 device pixels against 2, both pinned by
+ * `non-scaling-stroke` below, so the ratio survives any crop.
+ *
+ * That sentence was in this file before and it was **false**: it said the outline
+ * was thicker while both states were declared at `stroke-width: 2`, and what it
+ * was really describing was the 2-against-1 difference with neutral *land*. An
+ * accessibility audit measured the two states at **1.08:1** in the light theme —
+ * and **1.02** simulated for a deuteranope, which is to say identical. (That
+ * second figure is a colour-blindness simulation and not a contrast of this
+ * sheet, so it is written without its `:1`; the first is registered in
+ * `tests/styles/colour-contract.test.ts` and recomputed on every run.) A comment
+ * claiming a channel that is not in the rule below it is worse than no comment: it
+ * is the reason nobody looked.
+ *
+ * **Why the TOLD state is the heavy one and not the untold one.** Today every
+ * published trip is `story: unwritten`, so `.visited` paints nothing and the map
+ * is entirely `.untold`; putting the weight there would have thickened every
+ * border on the site for a distinction that has no second term yet. This way the
+ * map looks exactly as it does now, and a country gains a heavier ring the day it
+ * gains a récit — which is also the right emphasis, since that is the country
+ * with something to read.
+ *
+ * `tests/e2e/map-equivalent.populated.spec.ts` is what keeps this true: it runs on
+ * the fixture, where four countries are told and one is not, and it reads the two
+ * computed widths off the page. The fill stays as reinforcement, because it is
+ * what makes the map readable at a glance for everyone else.
  */
 .visited path {
   fill: var(--accent-quiet);
   stroke: var(--text-accent);
-  stroke-width: 2;
+  stroke-width: 3.5;
 }
 
 /**
@@ -343,14 +365,25 @@
  * teal, after `nicoailleurs.com`, at the owner's explicit direction and against
  * the recommendation recorded on the ticket.
  *
- * **What carries 1.4.1 now, and it is not this file.** `VisitedCountries`, beside
- * the drawing, writes « récit à venir » in full on the country's own row, and the
- * accessible name of every untold marker ends in the same words. That list is
- * itself a *visual* means, so the page still conveys the state without colour —
- * but the drawing on its own no longer does. The consequence is a hard
- * constraint rather than a note: **`VisitedCountries` may not be removed, hidden,
- * or moved behind an interaction.** It stopped being the map's courtesy
- * equivalent and became the channel the criterion rests on.
+ * **1.4.1 HAS NO VISUAL CHANNEL ON THIS PAGE, AND THAT IS A KNOWN DEBT.**
+ *
+ * When TIW-38 made the two states two hues, the thing that saved 1.4.1 was « Les
+ * pays visités » beside the drawing, which wrote « récit à venir » in full on the
+ * country's own row: a *visual* means, so the page conveyed the state without
+ * colour even though the drawing alone did not. That block was removed from the
+ * map tab on 7 September 2026 at the owner's request — see the note in
+ * `src/app/[locale]/page.tsx`.
+ *
+ * What is left is the accessible name of every untold marker, which still ends in
+ * « récit à venir ». That is enough for a screen reader and NOT enough for 1.4.1,
+ * which is about what a sighted reader who separates no hues can perceive.
+ *
+ * **It is inert today and it will not stay that way.** Every published trip is
+ * `story: unwritten`, so `untoldOnlyCountryCodes` returns every visited country,
+ * `.visited` paints nothing, and there is no two-state distinction to carry. The
+ * debt comes due at the **first published récit**, and the fix then is a shape
+ * difference in the drawing — the dashed stroke described just above, which this
+ * block replaced — and not a list a reader has to scroll to find.
  *
  * The measured half is unchanged and is what makes the two hues legible at all:
  * a fill cannot carry this — `--accent-quiet` over land is 1.14:1 — so the
@@ -358,11 +391,11 @@
  * both far past the 3:1 of 1.4.11. The copper is the shared sheet's decor ink,
  * which a country tint is; the teal keeps the markers, which are controls.
  *
- * And the distinction is carried in **text** as well, which is what actually
- * satisfies 1.4.1: `VisitedCountries` beside the drawing says « récit à venir » on
- * the country's own row, and each untold marker's accessible name ends in the same
- * words. The `<svg>` is `aria-hidden` (ADR 0003), so no rule in this block is ever
- * a reader's only source.
+ * The distinction is still carried in **text** for anyone using the
+ * accessibility tree: each untold marker's accessible name ends in « récit à
+ * venir ». The `<svg>` is `aria-hidden` (ADR 0003), so no rule in this block is
+ * ever a screen reader's only source — the gap named above is the sighted
+ * reader's, not theirs.
  *
  * `stroke-dasharray` is in **user units and scales with the crop**, which is
  * deliberate and is the one thing here `non-scaling-stroke` does not pin: the
@@ -718,8 +751,9 @@
  * text from the tree, which would leave a link unnamed and a caption silent.
  *
  * Used once, for a marker's accessible name. It served the caption's hidden
- * enumeration of visited countries too until TIW-15 replaced that with the
- * visible `VisitedCountries` list. Out of flow, so it changes neither the 44 px
+ * enumeration of visited countries too until TIW-15 replaced that with a visible
+ * list, itself removed from this tab in September 2026. Out of flow, so it
+ * changes neither the 44 px
  * box of a marker nor the height of the caption, and `white-space: nowrap` inside
  * a 1 px box cannot scroll anything.
  */

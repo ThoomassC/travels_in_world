@@ -24,11 +24,14 @@ import styles from "./world-map.module.css";
  * header and in the ticket's report.
  *
  * **What a reader without JavaScript still gets, unchanged:** this whole
- * component. The `<svg>` is rendered with the frame `frameAround` chose, every
- * marker is a real `<a href>` to its trip, and `VisitedCountries` lists the
- * destinations beside it. The criterion "the map stays shown in a frozen version
- * and the list of destinations stays usable" was already met before this ticket;
- * nothing here is a fallback built for the occasion.
+ * component. The `<svg>` is rendered with the frame `frameAround` chose, and
+ * every marker is a real `<a href>` to its trip, named in words. The criterion
+ * "the map stays shown in a frozen version and the list of destinations stays
+ * usable" was already met before this ticket; nothing here is a fallback built
+ * for the occasion. The counted list of countries that used to sit beside this
+ * figure was removed from the map tab on 7 September 2026 — see
+ * `src/app/[locale]/page.tsx` — and the marker list is what carries the
+ * destinations now.
  *
  * Translations come from `useTranslations`, not `getTranslations`: the former
  * works in a *synchronous* Server Component, which is what keeps the whole
@@ -67,21 +70,21 @@ export type MapCountry = {
   /**
    * Localised name, already resolved upstream by `Intl.DisplayNames`.
    *
-   * **This component no longer reads it**, and the field stays because the type
-   * is the narrowing of `@/map`'s `CountryShape` that the joining page checks
-   * against — and because `VisitedCountries`, the textual equivalent beside this
-   * drawing, reads exactly this field.
+   * **This component no longer reads it**, and the field stays for one reason
+   * that outlived the two it used to have: the type is the narrowing of `@/map`'s
+   * `CountryShape` that the joining page checks against, so a rename in the
+   * geometry façade fails `npm run typecheck` in `src/app/[locale]/page.tsx` and
+   * nowhere else. Drop the field and that check goes with it.
    *
    * Until TIW-15 the name was rendered here, as a visually hidden enumeration
    * inside the `<figcaption>`: without it, which countries hold a trip was
    * carried by the tint alone — a distinction measured at 1.14:1 — so a screen
-   * reader learnt "7 pays" and never which seven (WCAG 1.1.1). That enumeration
-   * is gone because `VisitedCountries` supersedes it on every count: the names
-   * are visible rather than hidden, each carries the number of trips that reach
-   * it, and each is a link into the listing that holds them. It rendered under
-   * exactly the same condition (`visited.length > 0`), so no state loses a
-   * channel. Removing it also stops piling forty country names into the
-   * `<figure>`'s accessible *name*, which is a label and not a description.
+   * reader learnt "7 pays" and never which seven (WCAG 1.1.1). TIW-15 replaced
+   * that enumeration with a visible counted list beside the figure, and the owner
+   * removed that list from the map tab on 7 September 2026. What names the
+   * destinations today is the marker list below — one link per trip, `{title},
+   * {place}` — which is a list of *journeys* and not of countries. The
+   * `src/app/[locale]/page.tsx` note says what that costs and when.
    *
    * The drawing itself has never read this field; a `<path>` inside an
    * `aria-hidden` SVG has nothing to say.
@@ -515,9 +518,10 @@ export function WorldMap({
           }}
         >
           {/*
-            Inert by construction rather than by a list of CSS rules. 177 country
-            shapes have nothing to say to a screen reader — the names live in
-            `VisitedCountries`, next to this figure — and hiding the whole SVG is
+            Inert by construction rather than by a list of CSS rules. 240 country
+            shapes have nothing to say to a screen reader — what a reader needs is
+            the marker list below, not a roll-call of the world — and hiding the
+            whole SVG is
             what makes the acceptance criterion "the other countries are neutral,
             not focusable and have no hover state" true without relying on anyone
             remembering to leave out a `tabindex` or a `:hover`.
@@ -587,18 +591,17 @@ export function WorldMap({
 
         A `<figcaption>` is also the `<figure>`'s accessible *name* (HTML-AAM),
         which is why the enumeration of visited countries that used to hang here
-        as hidden text is gone. `VisitedCountries` carries the names now —
-        visible, counted and linked — and a label made of forty country names was
-        never a label.
+        as hidden text is gone: a label made of forty country names was never a
+        label. The caption counts; the markers name.
       */}
       <figcaption className={styles.caption}>
         {/*
           `visited.length + untold.length`, and the sum is the honest count: the
           caption answers *where has he been*, and a country visited without being
-          written about has still been visited. Counting only `visited` would make
-          the caption disagree with `VisitedCountries` beside it, which tallies
-          trips per country over the whole collection — and would quietly shrink
-          the number the day a récit went unwritten.
+          written about has still been visited. Counting only `visited` would
+          quietly shrink the number the day a récit went unwritten, and disagree
+          with the Pays tab, which groups every published trip whether its récit
+          is written or not.
         */}
         {showsWholeWorld
           ? t("summary", { trips: marks.length, countries: visited.length + untold.length })

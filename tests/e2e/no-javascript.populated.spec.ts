@@ -85,13 +85,22 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
     await expect(page.locator("a[data-trip]")).toHaveCount(5);
     await expect(page.getByRole("link", { name: new RegExp(TRIP.title) }).first()).toBeVisible();
 
-    // ---- 2. The list of destinations, under the drawing. ----
-    await expect(
-      page.getByRole("heading", { level: 2, name: frMessages.map.countriesHeading })
-    ).toBeVisible();
-    // The fixture's own table: four countries, Japan holding two trips.
-    for (const country of ["Bolivie", "Islande", "Japon", "Pérou"]) {
-      await expect(page.getByRole("link", { name: new RegExp(country) }).first()).toBeVisible();
+    /**
+     * ---- 2. The destinations, in words. ----
+     *
+     * Until 7 September 2026 this was « Les pays visités », a counted list of
+     * countries under the drawing. The owner removed that block from the map tab
+     * and the countries moved to the Pays tab, which step 3 below reaches with no
+     * script at all. What has to be readable *here*, script-less, is what the
+     * figure itself says: its caption, and the name of every marker.
+     */
+    await expect(page.locator("figcaption")).toContainText("5 voyages, 5 pays");
+    for (const name of [
+      "Islande, cercle d'or, Reykjavik",
+      "Japon, printemps 2024, Tokyo",
+      "Maroc, sud et Atlas, Marrakech — récit à venir",
+    ]) {
+      await expect(page.getByRole("link", { name })).toBeVisible();
     }
 
     // ---- 3. Navigation: a link in the site's nav, followed with no script. ----
@@ -157,7 +166,10 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
     await expect(page.getByText("Transport : Train")).toBeVisible();
 
     // The trip's own map is drawn here too, server-side and inert.
-    await expect(drawing(page).locator(MAP_DRAWING_IN_FIGURE)).toHaveAttribute("viewBox", /[\d. ]+/);
+    await expect(drawing(page).locator(MAP_DRAWING_IN_FIGURE)).toHaveAttribute(
+      "viewBox",
+      /[\d. ]+/
+    );
 
     /**
      * The photographs: every one carries both dimensions, which is what reserves
@@ -186,7 +198,10 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
     // ---- 5. And back to the map, still with no script. ----
     await page.getByRole("link", { name: frMessages.trip.seeOnWorldMap }).click();
     expect(new URL(page.url()).pathname.replace(/\/$/, "")).toBe("/fr");
-    await expect(drawing(page).locator(MAP_DRAWING_IN_FIGURE)).toHaveAttribute("viewBox", /[\d. ]+/);
+    await expect(drawing(page).locator(MAP_DRAWING_IN_FIGURE)).toHaveAttribute(
+      "viewBox",
+      /[\d. ]+/
+    );
   } finally {
     await context.close();
   }

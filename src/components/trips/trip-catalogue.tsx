@@ -125,8 +125,9 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
                 **The code is the schema's, so it is UPPERCASE**, and HTML
                 fragments are case-sensitive: the address is `#pays-FR`, never
                 `#pays-fr`. Worth saying out loud because this project has already
-                paid for a dangling `#pays-bo` once — `visited-countries.tsx`
-                records the measurement — and because the two spellings look
+                paid for a dangling `#pays-bo` once — the measurement is recorded
+                in the header of `tests/e2e/dead-links.populated.spec.ts`, the
+                guard it bought — and because the two spellings look
                 interchangeable in a diff.
 
                 **What still does NOT link here, and why the id is emitted
@@ -172,7 +173,8 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
                       its own, so this fragment is the whole of its address. A
                       fragment naming nothing leaves the reader silently at the
                       top of a sixty-entry page — measured, on `#pays-bo`, and
-                      recorded in `visited-countries.tsx`.
+                      recorded in the header of
+                      `tests/e2e/dead-links.populated.spec.ts`.
 
                       **Why `LatestTrips` does not get one**, though it renders
                       the same cards: the home page also renders the map, whose

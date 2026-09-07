@@ -55,8 +55,8 @@
  * from 5.11:1 down to 1.83:1 and made it *less* delimitable than leaving it
  * alone.
  *
- * That is the exact defect `src/components/map/visited-countries.module.css`
- * measured and rejected for its own pills, one ticket earlier. `--text-accent`
+ * That is the exact defect the map's own country pills measured and rejected one
+ * ticket earlier, in a stylesheet since deleted with the block it dressed. `--text-accent`
  * is the way out: it is in the teal family, so hover still reads as the accent,
  * and it measures 7.08:1 on a card in the light theme and 8.59:1 in the dark —
  * above the resting border in both, so the cue is now a gain and never a loss.

@@ -11,10 +11,13 @@ import { expect, test, type Page } from "@playwright/test";
  * about the addresses it *links to*, which is where a reader actually goes.
  *
  * **It is not a hypothetical, and the repository has paid for it twice.** The
- * map's textual equivalent shipped `/fr/voyages#pays-bo`, a fragment matching no
- * id on a real build, and `src/components/map/visited-countries.tsx` records
- * measuring it: a fragment that resolves to nothing does not fail, it silently
- * leaves the reader at the top of a listing. And the trip page's own
+ * map's textual equivalent — « Les pays visités », since removed — shipped
+ * `/fr/voyages#pays-bo` on a real build. `TripCatalogue` files a trip under its
+ * *first arrival* country only, so Bolivia, merely crossed by
+ * `perou-bolivie-2023`, had no section and the fragment matched nothing.
+ * Measured, and recorded here because the file that recorded it is gone: a
+ * fragment resolving to nothing does not fail, it silently leaves the reader at
+ * the top of a listing. And the trip page's own
  * `/#voyage-<slug>` pointed at a home page that did not yet emit those ids —
  * TIW-20's note calls it "a promise the URL made and the document did not keep".
  * Both were caught by hand.

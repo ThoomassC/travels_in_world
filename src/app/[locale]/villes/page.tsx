@@ -179,12 +179,13 @@ export default async function PlacesPage({ params }: { params: Promise<LocalePar
         >
           {places.map((place) => {
             /**
-             * **Where a row leads, and why it is a fragment here when
-             * `visited-countries.tsx` refuses one.**
+             * **Where a row leads, and why it is a fragment here when the
+             * map's country list refused one.**
              *
-             * That component measured `/fr/voyages#pays-xx` dangling, because the
-             * catalogue emits a country section only for a country a trip
-             * *arrives* in. `#voyage-<slug>` is a different promise: the
+             * That list — removed in September 2026, its finding kept in the
+             * header of `tests/e2e/dead-links.populated.spec.ts` — measured
+             * `/fr/voyages#pays-xx` dangling, because the catalogue emits a
+             * country section only for a country a trip *arrives* in. `#voyage-<slug>` is a different promise: the
              * catalogue puts that id on **every** entry it renders, and it
              * renders every published trip — untold ones included. So the
              * fragment cannot dangle for the same reason the other one could.

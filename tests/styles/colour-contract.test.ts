@@ -26,10 +26,10 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
  * see: the fifty-odd contrast ratios written into the comments of this
  * repository's own CSS Modules.
  *
- * Those numbers are the review artefact. `visited-countries.module.css` rejects
- * a token on the strength of a table; `trip-card.module.css` picks a border by
- * comparing three. A wrong number there is worse than no number, because it is
- * an argument that reads as if it had been checked.
+ * Those numbers are the review artefact. `world-map.module.css` chooses between
+ * two country tints on the strength of a table; `trip-card.module.css` picks a
+ * border by comparing three. A wrong number there is worse than no number,
+ * because it is an argument that reads as if it had been checked.
  *
  * TWO ASSERTIONS, AND THE SECOND IS THE ONE THAT MAKES THIS A GUARD:
  *
@@ -415,6 +415,29 @@ const MEASUREMENTS = {
     light: 1.56,
     dark: 1.45,
   },
+  /**
+   * The two country outlines against **each other** — the pair an accessibility
+   * audit measured on 7 September 2026 and the reason `.visited` is now stroked
+   * 3.5 device pixels against `.untold`'s 2.
+   *
+   * It is registered rather than written as prose because it is a real contrast of
+   * this sheet, and because the number is an *argument*: it says the hue carries
+   * nothing, which is why the stroke width has to. If a future palette pulled these
+   * two apart, this line is what would say so — and the thickness could then be
+   * revisited on evidence instead of on memory.
+   *
+   * There is no threshold column for it, deliberately. WCAG sets none for two
+   * non-textual objects distinguished from each other; 1.4.1 asks for a channel
+   * that is not colour, and `tests/e2e/map-equivalent.populated.spec.ts` is what
+   * checks that one exists.
+   */
+  "text-accent/accent-secondary": {
+    label: "the told country's outline against the untold one's — hue alone, measured",
+    foreground: token("--text-accent"),
+    background: token("--accent-secondary"),
+    light: 1.08,
+    dark: 1.43,
+  },
   /* `satisfies` and not a type annotation: an annotation widens the keys to
      `string`, and `Citation.measurement` — declared as `keyof typeof
      MEASUREMENTS` — would then accept any string and index into `undefined`
@@ -451,100 +474,12 @@ const CITATIONS: readonly Citation[] = [
     theme: "light",
   },
 
-  // --- src/components/map/visited-countries.module.css — the header table, then
-  //     the `.link:hover` argument, then the count's own line.
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-accent/surface",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-accent/surface",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/surface",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/surface",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/page",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/surface",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/surface",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "accent-quiet-border/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "accent-quiet-border/page",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-accent/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "surface/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "accent-quiet-border/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "accent-quiet-border/page",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/surface",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/surface",
-    theme: "dark-os",
-  },
-
   // --- src/components/map/world-map.module.css
+  {
+    file: "src/components/map/world-map.module.css",
+    measurement: "text-accent/accent-secondary",
+    theme: "light",
+  },
   //     The coastline argument, then the three country states.
   {
     file: "src/components/map/world-map.module.css",
@@ -947,6 +882,11 @@ const CITATIONS: readonly Citation[] = [
   },
 
   // --- src/components/site/brand-art.ts
+  //     The mark the owner supplied on 7 September 2026 has no accented part, so
+  //     the two `logo-accent/page` readings left the file with the trajectory
+  //     they justified. The ink/accent pair stays: the header still recounts why
+  //     the *old* mark needed a clearance, and a historical claim quoted with a
+  //     live number has to keep being a live number.
   { file: "src/components/site/brand-art.ts", measurement: "logo-ink/logo-accent", theme: "light" },
   {
     file: "src/components/site/brand-art.ts",
@@ -955,9 +895,6 @@ const CITATIONS: readonly Citation[] = [
   },
   { file: "src/components/site/brand-art.ts", measurement: "logo-ink/page", theme: "light" },
   { file: "src/components/site/brand-art.ts", measurement: "logo-ink/page", theme: "dark-os" },
-  { file: "src/components/site/brand-art.ts", measurement: "logo-accent/page", theme: "light" },
-  { file: "src/components/site/brand-art.ts", measurement: "logo-accent/page", theme: "dark-os" },
-  { file: "src/components/site/brand-art.ts", measurement: "logo-ink/logo-accent", theme: "light" },
 
   // --- README.md — the "Marque" and "Carte" sections quote the same pairs, in
   //     French decimal notation.
@@ -965,8 +902,6 @@ const CITATIONS: readonly Citation[] = [
   { file: "README.md", measurement: "logo-ink/logo-accent", theme: "dark-os" },
   { file: "README.md", measurement: "logo-ink/page", theme: "light" },
   { file: "README.md", measurement: "logo-ink/page", theme: "dark-os" },
-  { file: "README.md", measurement: "logo-accent/page", theme: "light" },
-  { file: "README.md", measurement: "logo-accent/page", theme: "dark-os" },
   { file: "README.md", measurement: "border-subtle/page", theme: "light" },
 ];
 
@@ -985,8 +920,6 @@ const CITATIONS: readonly Citation[] = [
 const NOT_A_CONTRAST: Readonly<Record<string, readonly string[]>> = {
   // The Open Graph image is 1200 x 630 — an aspect ratio, not a contrast.
   "src/app/share.ts": ["1.91"],
-  // The WCAG threshold the table above is judged against, quoted as a threshold.
-  "src/components/map/visited-countries.module.css": ["4.5"],
 };
 
 /** Two decimals, the precision the comments are written in. */
