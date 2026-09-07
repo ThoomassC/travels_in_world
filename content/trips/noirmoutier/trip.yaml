@@ -1,0 +1,49 @@
+# Noirmoutier — un des voyages réels de Thomas, préparé par TIW-24.
+#
+# CE LIEU AVAIT DISPARU, ET C'EST POURQUOI CE FICHIER EXISTE. Les quatorze lieux
+# fournis le 4 septembre vivaient dans content/places.yaml (commit 8121e46). Ce
+# fichier n'existe plus, et la conversion en voyages n'en a repris que dix :
+# Rouen, La Rochelle, Noirmoutier et Paris étaient tombés en route. Les
+# coordonnées ci-dessous sont celles du commit d'origine, résolues par
+# « npm run geocode:places » et vérifiées par point-dans-polygone contre le fond
+# world-atlas — elles ne sont pas re-devinées ici.
+#
+# LES DATES DE CE FICHIER SONT FICTIVES, ET C'EST DÉLIBÉRÉ. Thomas n'a fourni
+# aucune date ; il a demandé des dates provisoires pour que le carnet tourne en
+# attendant les vraies. Elles sont inventées de bout en bout — début, fin,
+# publication et chaque étape — et elles ne disent RIEN de quand ce voyage a eu
+# lieu.
+#
+# COMMENT LES RECONNAÎTRE SANS LIRE CE COMMENTAIRE : les voyages provisoires
+# commencent tous le PREMIER du mois, et portent tous la même date de publication
+# (2026-09-07). Treize départs le 1er est une coïncidence que la réalité ne produit
+# pas : c'est le marqueur, et il disparaît au fur et à mesure que les vraies dates
+# arrivent. La liste complète est dans content/DATES-FICTIVES.md.
+#
+# Le récit n'est pas écrit : « story: unwritten » en fin de fichier. Le voyage est
+# donc sur la carte et dans les listes, sa fiche dit « Récit à venir », et il n'a
+# pas de page. Aucune photo n'a été fournie : photos est vide.
+
+slug: noirmoutier
+title: Noirmoutier
+startDate: 2024-07-01  # FICTIF — à remplacer
+endDate: 2024-07-07  # FICTIF — à remplacer
+publishedAt: 2026-09-07  # FICTIF — à remplacer
+
+places:
+  - slug: noirmoutier
+    name: Noirmoutier
+    countryCode: FR
+    coordinates:
+      lat: 47.00461
+      lon: -2.24152
+
+steps:
+  - kind: stay
+    placeSlug: noirmoutier
+    startDate: 2024-07-01  # FICTIF — à remplacer
+    endDate: 2024-07-07  # FICTIF — à remplacer
+
+photos: []
+
+story: unwritten
