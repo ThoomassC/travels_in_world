@@ -156,3 +156,83 @@ test("the icon and share files are all really served", async ({ request }) => {
     expect(response.headers()["content-type"]).toContain(type);
   }
 });
+
+/**
+ * **THE FIRST TAB STOP OF EVERY PAGE MUST BE VISIBLE WHEN IT IS FOCUSED**, and
+ * this case exists because for two milestones it was not.
+ *
+ * The skip link is the 2.4.1 bypass: it is the first thing in the document and it
+ * jumps a keyboard reader past the header into `<main>`. It was declared at
+ * `z-index: 10` — "above the map's marker layer" — and the sticky header bar sits
+ * at 20 in the same stacking context, so the link was painted *under* the bar on
+ * every page of the site. An accessibility audit measured it with
+ * `elementsFromPoint`: eight of nine sample points inside the focused link's box
+ * returned the brand medallion.
+ *
+ * WCAG 2.4.11 Focus Not Obscured (Minimum) is a AA criterion of WCAG 2.2 and axe
+ * does not check it — it is a question about what covers what after layout, and
+ * only a browser can answer it. Hence a Playwright case rather than a unit test,
+ * and hence an assertion on the *outcome* (nothing covers the link) rather than on
+ * the z-index that currently produces it.
+ *
+ * It runs on `/fr` and on `/fr/a-propos`: the home page is where the map's own
+ * positioned layer competes, and the second is where the bar is the only thing
+ * that could cover anything — a fix that only worked on one of them would be a
+ * fix that read the wrong cause.
+ *
+ * PROVEN BY DELIBERATE FAILURE, which is this repository's standard for a guard:
+ *
+ *   // src/app/[locale]/layout.module.css, .skip:focus-visible
+ *   -  z-index: 30;
+ *   +  z-index: 10;
+ *
+ *   npx playwright test tests/e2e/brand.spec.ts
+ *   -> 2 failed, on both routes, nine points out of nine:
+ *      "(0.1, 0.1) is covered by SPAN.site-brand-module…__medallion"
+ *      "(0.9, 0.5) is covered by SPAN.site-brand-module…__word"
+ */
+for (const route of ["/fr", "/fr/a-propos"] as const) {
+  test(`the focused skip link is not covered by the header on ${route}`, async ({ page }) => {
+    await page.goto(route);
+    await page.keyboard.press("Tab");
+
+    const skip = page.locator(":focus");
+    await expect(skip).toBeVisible();
+    // The first stop really is the bypass and not something else that happens to
+    // be visible — an assertion that would otherwise pass on the logo.
+    await expect(skip).toHaveAttribute("href", /#/);
+
+    /**
+     * Nine points across the link's box, because a partial cover is still a
+     * cover: the bar could clip the top half and leave the bottom readable, which
+     * 2.4.11 (Minimum) tolerates only if *no* part is hidden by author content.
+     * `elementsFromPoint` returns the paint order at each point; the link has to
+     * be the first entry every time.
+     */
+    const covered = await page.evaluate(() => {
+      const element = document.activeElement;
+      if (element === null) {
+        return ["no focus at all"];
+      }
+
+      const box = element.getBoundingClientRect();
+      const problems: string[] = [];
+
+      for (const fx of [0.1, 0.5, 0.9]) {
+        for (const fy of [0.1, 0.5, 0.9]) {
+          const x = box.left + box.width * fx;
+          const y = box.top + box.height * fy;
+          const [top = null] = document.elementsFromPoint(x, y);
+
+          if (top !== element && top !== null && !element.contains(top)) {
+            problems.push(`(${fx}, ${fy}) is covered by ${top.tagName}.${top.className}`);
+          }
+        }
+      }
+
+      return problems;
+    });
+
+    expect(covered, `the focused skip link is painted under something on ${route}`).toEqual([]);
+  });
+}

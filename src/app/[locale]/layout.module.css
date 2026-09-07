@@ -55,9 +55,28 @@
   position: fixed;
   inset-block-start: var(--space-3);
   inset-inline-start: var(--space-3);
-  /* Above the map's marker layer, which is the only positioned content on the
-     first screen. */
-  z-index: 10;
+  /**
+   * **30, and the number is the whole of the fix.**
+   *
+   * It was 10, chosen "above the map's marker layer, which is the only positioned
+   * content on the first screen" — and the sticky header bar
+   * (`site-nav.module.css`, `z-index: 20`, same stacking context) was not counted.
+   * So the first Tab on every page of the site focused a link that was painted
+   * *under* the bar: measured with `elementsFromPoint`, eight of nine sample
+   * points inside the link's box returned the brand medallion instead. A reader
+   * pressed Tab, saw nothing happen, pressed again and found the focus on the
+   * logo — WCAG 2.4.11 Focus Not Obscured, and it silently disarmed the 2.4.1
+   * bypass this link exists to be.
+   *
+   * The comment in `site-nav.module.css` said the opposite of what it described,
+   * which is why it survived review: "20 sits above the skip link's own 10, so a
+   * focused skip link is never painted under the bar". The premise is the defect
+   * and the conclusion inverts it. Both comments are rewritten.
+   *
+   * 30 clears the bar's 20 and the marker layer's 10. `tests/e2e/brand.spec.ts`
+   * checks the outcome rather than the number: nothing covers the focused link.
+   */
+  z-index: 30;
   display: inline-flex;
   align-items: center;
   inline-size: auto;

@@ -45,8 +45,11 @@
    * occupies and costs nothing to the pages.
    *
    * The stacking context matters more than the number: `z-index: 20` sits above
-   * the map's marker layer (10 in `world-map.module.css`) and above the skip
-   * link's own 10, so a focused skip link is never painted under the bar.
+   * the map's marker layer (10 in `world-map.module.css`). It used to sit above
+   * the **skip link** too, which is exactly the bug an audit found on
+   * 7 September 2026 — the bar painted over the one control a keyboard reader
+   * meets first. The skip link is at 30 now (`layout.module.css`, which carries
+   * the measurement); this bar must stay below it.
    */
   position: sticky;
   inset-block-start: 0;
