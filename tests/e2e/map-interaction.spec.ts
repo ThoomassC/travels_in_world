@@ -139,3 +139,69 @@ test("the empty map is drawn by the server, controls and all excluded", async ({
   expect(html).not.toMatch(/<button/);
   expect(html).not.toContain("data-interactive");
 });
+
+/**
+ * **`--chrome-height` has to be the bar's real height, or the map runs under the
+ * fold.**
+ *
+ * This is a guard on a hand-copied number, and it exists because the number was
+ * wrong for the whole life of TIW-38. `src/styles/tokens.css` declared
+ * `--chrome-height: 4rem` once, with no media query; `site-nav.module.css` stacks
+ * the bar into three rows at `58rem`, where it really measures 200 px. The map
+ * subtracts the token from `100dvh` to size itself, so between 26rem and 58rem it
+ * over-claimed 136 px of viewport and its `<figure>` ended 51 to 66 px BELOW the
+ * fold — measured at 844x390, 900x600, 928x600 and 820x600, on the page whose
+ * only subject is that map.
+ *
+ * Nothing could have caught it. The fold guard in `journal-notice.spec.ts` runs at
+ * 1152x800 and 1280x720, both *above* the breakpoint, so the bar is never stacked
+ * there; the narrow cases in `map-interaction.populated.spec.ts` measure the
+ * canvas's aspect ratio and never the figure's position. The hole was exactly
+ * complementary to the two guards that existed.
+ *
+ * So this compares the token with the element it claims to describe, at four
+ * widths that straddle the breakpoint. It is the only thing standing between the
+ * two `58rem` literals — one in `site-nav.module.css`, one now in `tokens.css` —
+ * and a silent disagreement.
+ *
+ * **320 px is deliberately not in the list.** Below 26rem the nav links wrap and
+ * the bar grows to 248 px, which is content-driven and has no media query to hang
+ * a value on, so the token stays at 12.5rem and is knowingly short. It costs
+ * nothing: at that width the map's `min()` is bound by its *width* term, so the
+ * height budget — and therefore this token — never reaches the result. Asserting
+ * there would be asserting a number nobody reads.
+ */
+const CHROME_HEIGHT_WIDTHS = [1280, 1024, 900, 640] as const;
+
+for (const width of CHROME_HEIGHT_WIDTHS) {
+  test(`the header is exactly --chrome-height tall at ${String(width)} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/fr");
+
+    const measured = await page.evaluate(() => {
+      const bar = document.querySelector("header");
+      if (bar === null) throw new Error("no header");
+
+      const declared = getComputedStyle(document.documentElement)
+        .getPropertyValue("--chrome-height")
+        .trim();
+
+      // `rem` resolved against the document's own root size rather than assumed
+      // to be 16: a reader who has enlarged their default text moves both sides
+      // of this comparison, and the test has to move with them.
+      const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+
+      return {
+        real: bar.getBoundingClientRect().height,
+        declared: Number.parseFloat(declared) * (declared.endsWith("rem") ? rootFontSize : 1),
+      };
+    });
+
+    expect(
+      measured.real,
+      `the bar measures ${String(measured.real)} px where --chrome-height claims ` +
+        `${String(measured.declared)} px — the map subtracts the claim from 100dvh, so the ` +
+        `difference is how far it runs under the fold`
+    ).toBeCloseTo(measured.declared, 0);
+  });
+}

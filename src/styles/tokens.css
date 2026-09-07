@@ -46,6 +46,31 @@
    * `site-nav.module.css` because two files need it and they must not disagree:
    * the bar sets its own height from it, and the home page's map subtracts it to
    * work out how much viewport is left to fill.
+   *
+   * **It had one value and the bar had three, which is a lie the map paid for.**
+   * `site-nav.module.css` stacks the bar at `58rem`: the brand keeps its row, the
+   * links take a second and the language picker a third. Measured on the served
+   * page, the bar is 64 px above 58rem and **200 px** from 26rem to 58rem — while
+   * this token went on saying 4rem. The map subtracts it from `100dvh` to size
+   * itself, so it over-claimed 136 px of viewport and ran under the fold by 51 to
+   * 66 px on every landscape phone and every narrow desktop window (measured at
+   * 844x390, 900x600, 928x600 and 820x600). The page whose entire subject is the
+   * map was cropping the map.
+   *
+   * The override below is the same `58rem` written a third time — `site-nav` owns
+   * it, `site-brand` already copies it, and now this file does too. That is a
+   * genuine fragility and the reason the guard exists rather than a comment
+   * asking the next reader to remember: `tests/e2e/map-interaction.spec.ts`
+   * measures the real bar against this token at four widths and fails if they
+   * disagree by more than a pixel.
+   *
+   * **Below 26rem the bar grows again, to 248 px, and this token does NOT follow
+   * it** — deliberately, and it is not an oversight. That third step comes from
+   * the nav links wrapping, which is content-driven and has no media query to
+   * hang a value on. It costs nothing: at those widths the map's width term is
+   * what binds its `min()`, not the height budget, so the number this token
+   * carries never enters the result. The guard skips that range for the same
+   * reason, and says so.
    */
   --chrome-height: 4rem;
 
@@ -67,6 +92,16 @@
   --logo-accent: var(--text-accent);
   --logo-bg: var(--site-background);
 }
+/**
+ * The stacked bar's real height, from 26rem to 58rem. See the token's own
+ * comment above for why this exists and what it cost before it did.
+ */
+@media (max-width: 58rem) {
+  :root {
+    --chrome-height: 12.5rem;
+  }
+}
+
 
 /* =============================================================================
    Minimal base. Anything beyond document-level defaults belongs in a CSS Module.
