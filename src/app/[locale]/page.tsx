@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -6,14 +7,15 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 // strings and cannot tell `src/components/map` from a relative spelling of
 // `src/map`. See the header of `src/components/map/index.ts`.
 import { untoldOnlyCountryCodes, WorldMap, type TripMark } from "@/components/map";
+import { panelPhotos } from "@/components/photos/collection";
 import { FreshTripBanner } from "@/components/trips/fresh-trip-banner";
 import { ProjectPurpose } from "@/components/site/project-purpose";
 import { PAGE_MARK } from "@/components/site/site-nav";
 import { LatestTrips } from "@/components/trips/latest-trips";
-import { TripCard } from "@/components/trips/trip-card";
-import { listTripSummaries, listWishedCountries } from "@/content/trips";
+import { TripPanel } from "@/components/trips/trip-panel";
+import { loadTrips, listWishedCountries } from "@/content/trips";
 import { freshestTrip } from "@/domain/freshness";
-import { hasStory } from "@/domain/trip";
+import { hasStory, visitedPlaces } from "@/domain/trip";
 import { buildWorldGeometry, projectPoint } from "@/map";
 import { localePathname } from "@/i18n/pathname";
 import { tripPath, tripsPath } from "@/i18n/paths";
@@ -61,7 +63,7 @@ export default async function HomePage({ params }: HomePageProps) {
    * flatten. The façade memoises its parse for the whole build, so a second call
    * would cost no second disk read — only a second projection of the same trips.
    */
-  const trips = await listTripSummaries();
+  const trips = await loadTrips();
   const t = await getTranslations("home");
 
   /**
@@ -151,9 +153,6 @@ export default async function HomePage({ params }: HomePageProps) {
           {
             slug: trip.slug,
             title: trip.title,
-            // Read only by `zonesOf`, which sorts a zone's panel by date
-            // descending rather than trusting the order this list arrives in.
-            startDate: trip.startDate,
             placeName: trip.firstArrival.name,
             /**
              * **Where this marker leads, and the one decision the map layer does
@@ -199,37 +198,51 @@ export default async function HomePage({ params }: HomePageProps) {
   });
 
   /**
-   * The body of each trip's row in the map's selection panel (TIW-14).
+   * The body of each trip's panel on the map.
    *
-   * **Built here, and handed to the map as rendered nodes.** A card needs `Intl`
-   * date formatting, the `trips` namespace and a locale-prefixed href — none of
-   * which `src/components/map/**` may reach without ending its own rule that the
-   * whole layer renders under jsdom from a seven-shape fixture
+   * **What this used to be, and why it changed.** Until now it was one
+   * `TripCard` per trip, and the map stacked *every card of a zone* into one
+   * panel: clicking Paris opened « Les 6 voyages à cet endroit » with
+   * Gand-Bruges at the top, because a zone was named after its most recent trip.
+   * The owner's report is the specification — « quand je clique sur un voyage je
+   * veux le descriptif avec les photos du voyage, pas les autres voyages du pays
+   * » — so a panel now belongs to one trip and carries its description. The
+   * markers a finger would cover along with it are still reachable, as a short
+   * list of links `world-map.tsx` appends under « Aussi à cet endroit ».
+   *
+   * **Built here, and handed to the map as rendered nodes**, which is the one
+   * thing that did not change. A body needs `Intl` date formatting, two message
+   * namespaces and a locale-prefixed href — none of which `src/components/map/**`
+   * may reach without ending its own rule that the whole layer renders under
+   * jsdom from a seven-shape fixture
    * (`docs/adr/0003-carte-svg-inerte-et-balises-html.md`). This page is already
-   * the one file holding both façades and both narrowed types, so it is the
-   * right place for the join. The map decides *which* card goes in *which*
-   * panel; it never decides what a card looks like.
+   * the one file holding both façades and both narrowed types, so it is where the
+   * join belongs. The map decides *which* body goes in *which* panel; it never
+   * decides what a body looks like.
    *
-   * `TripCard` and not a second card written for the panel: it is exactly the
-   * criterion's list — cover, title, dates, duration and a read affordance — and
-   * a copy would be a second place for the date format to drift. `headingLevel:
-   * 3` sits under the panel's own `<h2>`.
+   * `TripCard` is not reused: a card is a *listing* row — a cover, a title and a
+   * read affordance, with the title as its link — and the panel's `<h2>` already
+   * carries the title, so a card here would print it twice and link the second
+   * one. `TripCard` is untouched and still renders « Derniers voyages » below.
    *
-   * The cards live in the flight payload whether a panel opens or not. Measured
-   * on the four-trip fixture, that is the cost recorded in this ticket's report;
-   * the alternative — serialising trip data and building the card in the browser
-   * — would have put the formatting, the namespace and the markup in the client
-   * bundle, which is the budget this ticket must not spend.
+   * The bodies live in the flight payload whether a panel opens or not, which is
+   * the cost this ticket's report measures on a real build.
    */
-  const tripCards = new Map(
+  const tripPanels = new Map<string, ReactNode>(
     trips.map((trip) => [
       trip.slug,
-      <TripCard
+      <TripPanel
         key={trip.slug}
         trip={trip}
         locale={locale}
-        headingLevel={3}
-        isNew={trip.slug === fresh?.slug}
+        /*
+          Resolved here and not inside the component, for the reason every prop
+          of that file has: `visitedPlaces` is a domain function, and a component
+          that called it could no longer be rendered from a literal in a unit
+          test. The page holds the façades; the component holds the markup.
+        */
+        cityNames={visitedPlaces(trip).map((place) => place.name)}
+        photos={panelPhotos(trip)}
       />,
     ])
   );
@@ -321,7 +334,7 @@ export default async function HomePage({ params }: HomePageProps) {
           wished={world.wished}
           marks={marks}
           world={{ width: world.width, height: world.height }}
-          tripCards={tripCards}
+          tripPanels={tripPanels}
         />
       </div>
 

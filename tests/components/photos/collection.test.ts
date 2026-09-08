@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { photosByPlace, unplacedPhotos, viewerPhotos } from "@/components/photos/collection";
-import { photo } from "./fixtures";
+import {
+  PANEL_PHOTO_LIMIT,
+  panelPhotos,
+  photosByPlace,
+  unplacedPhotos,
+  viewerPhotos,
+} from "@/components/photos/collection";
+import { photo, photos } from "./fixtures";
 
 /**
  * The numbering, and the three-way split that hangs off it. Pure functions, so
@@ -105,5 +111,88 @@ describe("photosByPlace", () => {
 
     expect(byPlace.has("tokyo")).toBe(false);
     expect(byPlace.size).toBe(0);
+  });
+});
+
+describe("panelPhotos", () => {
+  /**
+   * The cover leads, and it is the opposite decision from {@link viewerPhotos}
+   * one function above — deliberately, because the two answer different
+   * questions. The viewer excludes the cover because the trip page's header has
+   * already shown it; a map panel has no header image at all, so leaving it out
+   * would hide the one photograph the author picked to stand for the trip.
+   */
+  it("puts the cover first, then the declaration order", () => {
+    const preview = panelPhotos({
+      photos: [photo({ src: "/a.jpg" }), photo({ src: "/cover.jpg" }), photo({ src: "/c.jpg" })],
+      coverPhotoSrc: "/cover.jpg",
+    });
+
+    expect(preview.map((entry) => entry.src)).toEqual(["/cover.jpg", "/a.jpg", "/c.jpg"]);
+  });
+
+  /**
+   * `TripSchema` requires the cover to be one of `photos[]`, but `panelPhotos`
+   * takes a structural shape and the page may narrow it: a `coverPhotoSrc`
+   * naming a file that is not in the list must not conjure a photo with no
+   * `alt`, no dimensions and no placeholder.
+   */
+  it("ignores a cover that is not one of the trip's photos", () => {
+    const preview = panelPhotos({
+      photos: [photo({ src: "/a.jpg" }), photo({ src: "/b.jpg" })],
+      coverPhotoSrc: "/elsewhere.jpg",
+    });
+
+    expect(preview.map((entry) => entry.src)).toEqual(["/a.jpg", "/b.jpg"]);
+  });
+
+  /** The cover is promoted, never duplicated: it is one photograph and a reader
+   * meeting it twice in a three-tile strip reads it as a rendering fault. */
+  it("never repeats a source", () => {
+    const preview = panelPhotos({
+      photos: [photo({ src: "/cover.jpg" }), photo({ src: "/b.jpg" })],
+      coverPhotoSrc: "/cover.jpg",
+    });
+
+    expect(preview.map((entry) => entry.src)).toEqual(["/cover.jpg", "/b.jpg"]);
+  });
+
+  /** The document budget is the reason, and it is written on the constant. */
+  it("stops at PANEL_PHOTO_LIMIT, cover included", () => {
+    const preview = panelPhotos({
+      photos: photos(6),
+      coverPhotoSrc: "/photos/japon-2024/photo-4.jpg",
+    });
+
+    expect(preview).toHaveLength(PANEL_PHOTO_LIMIT);
+    expect(preview.map((entry) => entry.src)).toEqual([
+      "/photos/japon-2024/photo-4.jpg",
+      "/photos/japon-2024/photo-0.jpg",
+      "/photos/japon-2024/photo-1.jpg",
+    ]);
+  });
+
+  /**
+   * Field by field and never a spread. `placeSlug` is the field that proves it:
+   * it means nothing to a panel, and a spread would carry it — and whatever the
+   * content model grows next — into every marker's payload in the prerendered
+   * document, on the one page that already spends 203.5 KiB of a 240 KiB budget.
+   */
+  it("carries the five fields a figure needs, and nothing else", () => {
+    const [first] = panelPhotos({ photos: [photo({ placeSlug: "tokyo" })] });
+
+    expect(first === undefined ? [] : Object.keys(first).sort()).toEqual([
+      "alt",
+      "blurDataUrl",
+      "height",
+      "src",
+      "width",
+    ]);
+  });
+
+  it("answers nothing for a trip that declares no photo", () => {
+    expect(panelPhotos({})).toEqual([]);
+    expect(panelPhotos({ photos: [] })).toEqual([]);
+    expect(panelPhotos({ photos: [], coverPhotoSrc: "/cover.jpg" })).toEqual([]);
   });
 });

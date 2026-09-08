@@ -103,3 +103,63 @@ export function photosByPlace(
 
   return byPlace;
 }
+
+/**
+ * How many photos a panel preview carries.
+ *
+ * **Three, and the next number is where the wall is.** A map panel's photos are
+ * inlined in the home document — `PhotoFigure` writes a `srcset`, a `sizes` and
+ * a base64 placeholder per photograph — so this constant multiplies by the
+ * number of markers the page draws. The measured figures, so the next reader
+ * does not have to rediscover them: `/fr` weighs **203.5 KiB brotli** against a
+ * **240 KiB** ceiling (`tests/build/prerender.test.ts:93`), and one photo costs
+ * **~160 to 260 bytes brotli** inside the document. The wall is therefore around
+ * **196 photos** — about **65 trips at three photos each**, thirteen of which
+ * exist today.
+ *
+ * Raising this to four moves that wall to ~49 trips. It is a budget decision,
+ * not a taste one, and it is `npm run test:build` that will say so.
+ */
+export const PANEL_PHOTO_LIMIT = 3;
+
+/**
+ * The photos a trip's map panel shows: the cover first, then declaration order,
+ * capped at {@link PANEL_PHOTO_LIMIT}.
+ *
+ * **The cover leads here, where {@link viewerPhotos} excludes it.** The two are
+ * not in contradiction: the viewer excludes it because the trip page's header
+ * has already shown that image, and a panel has no header image at all. Leaving
+ * it out would drop the one photograph the author chose to stand for the trip
+ * from the only three the reader is offered.
+ *
+ * **Built field by field, never `{ ...photo }`.** A panel is rendered once per
+ * marker in the *home document*, and a spread would carry `placeSlug` — which
+ * means nothing to a panel — plus whatever the content model grows next, into
+ * that document for every trip on the map. The five fields below are exactly
+ * what `PhotoFigure` reads.
+ *
+ * A `coverPhotoSrc` naming a file that is not in `photos[]` is ignored rather
+ * than conjured: `TripSchema` forbids it, but this function takes a structural
+ * shape and inventing a photo with no `alt` and no dimensions is the worse
+ * failure of the two.
+ */
+export function panelPhotos(trip: PhotoBearingTrip): readonly PhotoView[] {
+  const declared = trip.photos ?? [];
+  const cover = declared.find((photo) => photo.src === trip.coverPhotoSrc);
+  /* Filtered on `src` and not on object identity: `src` is the content's own
+     primary key for a photo — the same key `PhotoGallery` uses for its React key
+     — so promoting the cover cannot leave a second entry sharing its source
+     behind, whatever `photos[]` was assembled from. */
+  const ordered =
+    cover === undefined
+      ? declared
+      : [cover, ...declared.filter((photo) => photo.src !== cover.src)];
+
+  return ordered.slice(0, PANEL_PHOTO_LIMIT).map((photo) => ({
+    src: photo.src,
+    alt: photo.alt,
+    width: photo.width,
+    height: photo.height,
+    blurDataUrl: photo.blurDataUrl,
+  }));
+}

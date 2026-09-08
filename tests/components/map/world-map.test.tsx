@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import frMessages from "@/i18n/messages/fr.json";
 import { defaultLocale } from "@/i18n/routing";
@@ -59,7 +59,6 @@ function tripMark(index: number): TripMark {
     slug,
     title: `Voyage ${index}`,
     // Descending with the index, like the content façade's own order.
-    startDate: `20${String(24 - (index % 20)).padStart(2, "0")}-06-01`,
     placeName: `Ville ${index}`,
     href: `/fr/voyages/${slug}`,
     // Scattered across the world box so that 60 markers really do frame the
@@ -78,7 +77,6 @@ function tripMark(index: number): TripMark {
 const CENTRED_MARK: TripMark = {
   slug: "japon-2024",
   title: "Japon 2024",
-  startDate: "2024-04-12",
   placeName: "Tokyo",
   href: "/fr/voyages/japon-2024",
   point: { x: 480, y: 250 },
@@ -535,7 +533,6 @@ describe("WorldMap — the newest récit's marker", () => {
   const OLDER: TripMark = {
     slug: "perou-2019",
     title: "Pérou 2019",
-    startDate: "2019-08-01",
     placeName: "Cusco",
     href: "/fr/voyages/perou-2019",
     point: { x: 200, y: 300 },
@@ -571,8 +568,8 @@ describe("WorldMap — the newest récit's marker", () => {
     const marked = container.querySelectorAll("[data-new]");
 
     expect(marked).toHaveLength(1);
-    // The attribute sits on the `<a>`, beside `data-trip` and `data-zone` — the
-    // element the halo lives inside and the one the stylesheet keys off.
+    // The attribute sits on the `<a>`, beside `data-trip` — the element the halo
+    // lives inside and the one the stylesheet keys off.
     expect(marked[0]?.getAttribute("data-trip")).toBe(CENTRED_MARK.slug);
   });
 
@@ -729,20 +726,26 @@ describe("WorldMap — a trip whose récit is not written", () => {
     expect(screen.queryByRole("link", { name: /nouveau récit/ })).toBeNull();
   });
 
-  it("still opens its zone's panel, which is where « Récit à venir » is read", () => {
+  it("still gets a panel of its own, which is where « Récit à venir » is read", () => {
     /**
      * The criterion asks for the panel to say it, so the marker has to be able to
-     * open one: `data-zone` is what the client component reads, and dropping it
-     * for this state would have made the panel unreachable for exactly the trips
-     * that need it. The card's own wording is `TripCard`'s business and is
-     * asserted there.
+     * open one. There is no `data-zone` to check any more — a panel is keyed on the
+     * trip's own slug — so what is asserted is the thing that actually decides:
+     * the body the page handed over for this slug is the body the panel holds, and
+     * the marker is announced as opening a dialog.
+     *
+     * The wording itself is `TripPanel`'s business and is asserted there.
      */
-    const { container } = renderMap({
+    renderMap({
       marks: [UNTOLD_MARK],
-      tripCards: new Map([["maroc-2026", <p key="card">Récit à venir</p>]]),
+      tripPanels: new Map([["maroc-2026", <p key="body">Récit à venir</p>]]),
     });
 
-    expect(container.querySelector("a[data-trip='maroc-2026']")).toHaveAttribute("data-zone");
+    fireEvent.click(screen.getByRole("link", { name: untoldName(UNTOLD_MARK) }));
+
+    const panel = screen.getByRole("dialog");
+    expect(panel).toHaveAccessibleName(UNTOLD_MARK.title);
+    expect(within(panel).getByText("Récit à venir")).toBeInTheDocument();
   });
 });
 

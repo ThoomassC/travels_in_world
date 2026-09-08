@@ -584,3 +584,61 @@ Aucun de ces signaux n'est présent aujourd'hui.
 > tient, et c'est lui qui décide — pas cette note.
 >
 > Les signaux 2 et 3 restent absents.
+
+> **Note (2026-09-08, le panneau passe de la zone au voyage).** Un retour du
+> propriétaire, et il porte sur le contenu du panneau et non sur le dessin :
+> « quand je clique sur un voyage je veux le descriptif avec les photos du
+> voyage, pas les autres voyages du pays ».
+>
+> **Ce qu'il voyait.** Relevé dans le document servi : cliquer Paris ouvrait
+> « Les 6 voyages à cet endroit » — Gand-Bruges, Paris, Noirmoutier, La Rochelle,
+> Les Sables-d'Olonne, Rouen — avec Gand-Bruges en tête, parce qu'une zone était
+> nommée d'après son voyage le plus récent. Le voyage activé n'était ni le titre,
+> ni le premier élément. Le défaut est structurel et pas cosmétique : le panneau
+> répondait à une question que le lecteur avait déjà tranchée en visant.
+>
+> **Ce qui change.** Un panneau appartient à un voyage. Son `<h2>` est le titre du
+> voyage, son corps est `src/components/trips/trip-panel.tsx` — pays, dates,
+> durée, villes, au plus trois photos, et une sortie réelle — et
+> `map.panelHeading`, le pluriel ICU sur un compte de voyages, est supprimé des
+> trois catalogues. Le `data-zone` des balises disparaît : `data-trip` suffit.
+>
+> **Ce qui ne change pas, et c'est ce qui rendait le regroupement nécessaire.**
+> Les balises se recouvrent vraiment. Mesuré sur le contenu du dépôt, à 1440 px,
+> cibles de 44 px : `annecy ↔ geneve` sur 44 × 24 px, `paris ↔ rouen` sur
+> 30 × 36 px, `roses ↔ barcelone` sur 33 × 31 px, et neuf autres paires — à
+> 390 px, tout recouvre tout. Un lecteur au pointeur ne peut donc pas toujours
+> viser la balise qu'il veut. La réponse est un bloc secondaire en pied de
+> panneau, « Aussi à cet endroit », et non le contenu principal.
+>
+> **`zonesOf` est remplacée par `overlappingMarks`, et c'est le seul changement
+> d'algorithme.** L'ancienne fonction faisait du *single linkage* : une balise
+> rejoignait une zone dès qu'elle touchait **une** de ses membres, ce qui
+> chaînait six voyages là où seules deux paires se touchent. Ce chaînage n'avait
+> de sens que parce qu'une zone devait être une **partition**. Un panneau par
+> voyage n'en demande plus : la seule question restante — « quelles balises la
+> mienne recouvre-t-elle » — est une relation par paire, pas transitive. Le rayon
+> et son argumentaire (une largeur de cible WCAG 2.5.8) sont conservés tels quels.
+>
+> **Le défaut que la bascule a mis au jour, et qu'aucun test unitaire ne pouvait
+> voir.** L'attribut qui marque un lien de bascule a d'abord été déclaré dans
+> `map-viewport.tsx`, qui porte `'use client'`. Un module client n'exporte pas
+> ses valeurs vers un Server Component, il exporte des *références* : le serveur
+> a rendu l'attribut avec la source d'une fonction pour NOM.
+>
+>     React does not recognize the `function() { throw new Error("Attempted to
+>     call PANEL_SWITCH_ATTRIBUTE() from the server…") }` prop on a DOM element.
+>     Invalid attribute name: `%s`
+>
+> Les 345 cas de `tests/components/map/**` étaient verts pendant ce temps : Vitest
+> importe le module directement et n'applique jamais le proxy de frontière. C'est
+> la **deuxième** fois que ce dépôt paie cette leçon — `ZOOM_VALUE_TOKEN` l'avait
+> déjà payée, et le paragraphe qui la raconte dans `viewport.ts` disait
+> explicitement exister « pour que la leçon ne soit pas apprise deux fois ». Elle
+> l'a été. La constante vit désormais à côté de lui, dans le module pur.
+>
+> **Ce que la décision de cette ADR gagne au passage.** Rien du dessin n'a bougé :
+> le `<svg>` est toujours `aria-hidden`, toujours sans `pointer-events`, et le
+> bloc voisin est du HTML posé par-dessus, exactement comme une balise et comme
+> les notes de pays souhaités de la note précédente. Le compte de composants
+> clients reste à trois.

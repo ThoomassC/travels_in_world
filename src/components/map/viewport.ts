@@ -154,6 +154,32 @@ export const DRAG_THRESHOLD_PX = 8;
  */
 export const ZOOM_VALUE_TOKEN = "{percent}";
 
+/**
+ * The attribute a link inside the trip panel carries to say "swap the panel to
+ * this trip instead of navigating".
+ *
+ * A dedicated attribute and not `data-trip` alone, because `data-trip` is also
+ * what the marker handler reads: the opt-in has to be explicit, so nothing in a
+ * server-rendered panel body becomes interactive by accident.
+ *
+ * **It lives here for the reason the paragraph above gives**, and the lesson was
+ * learnt a second time anyway. Declared in `map-viewport.tsx` first, it reached
+ * `world-map.tsx` as a client reference — a function — and the server rendered
+ * the attribute with that function's source as its NAME:
+ *
+ *     React does not recognize the `function() { throw new Error("Attempted to
+ *     call PANEL_SWITCH_ATTRIBUTE() from the server but PANEL_SWITCH_ATTRIBUTE
+ *     is on the client…") }` prop on a DOM element.
+ *     Invalid attribute name: `%s`
+ *
+ * Two things worth keeping from that. The whole unit suite stayed green — Vitest
+ * imports the module directly and never applies the client-boundary proxy, so
+ * only a real server render can catch this class of defect. And the failure was
+ * *loud but late*: it appeared on the first click, in a dev overlay, not at
+ * build time.
+ */
+export const PANEL_SWITCH_ATTRIBUTE = "data-panel-switch";
+
 /** The query parameter carrying the frame: `x,y,width`, one decimal each. */
 export const VIEW_PARAM = "carte";
 

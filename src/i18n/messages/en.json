@@ -40,6 +40,9 @@
     "cardRead": "Read the story",
     "cardNew": "New story",
     "cardStoryToCome": "Story to come",
+    "panelCities": "Cities: {cities}",
+    "panelPhotosLabel": "Photos of {title}",
+    "panelSeeInListing": "See in the list of trips",
     "continentAfrica": "Africa",
     "continentAmericas": "Americas",
     "continentAntarctica": "Antarctica",
@@ -80,7 +83,7 @@
     "markLabel": "{title}, {place}",
     "markLabelNew": "{title}, {place} — new story",
     "markLabelToCome": "{title}, {place} — story to come",
-    "panelHeading": "{count, plural, one {The trip here} other {The # trips here}}",
+    "panelNearbyHeading": "Also here",
     "panelClose": "Close the trip panel",
     "zoomLabel": "Map zoom",
     "zoomValue": "Zoom {percent}%"

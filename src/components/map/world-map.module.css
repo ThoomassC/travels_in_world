@@ -1192,11 +1192,44 @@
  */
 @media (min-width: 769px) {
   .panel {
-    inset-block: var(--space-4);
+    /*
+      **Anchored at the top and grown by its content, not stretched between the
+      two edges.** `inset-block: var(--space-4)` pinned both ends, which was right
+      when a panel held every trip of a zone — six cards filled it. A panel now
+      holds one trip, and on this journal that is five lines: measured on the
+      served page, the drawn column was 850 px tall around 120 px of content, so
+      the panel read as a mostly empty sheet laid over the map.
+
+      `inset-block-end: auto` with a cap is what lets it hug: the cap is the same
+      travel the old rule allowed, so a trip with three photographs and a list of
+      neighbours still scrolls inside the panel instead of off the screen.
+    */
+    /*
+      **Anchored to the BOTTOM right, and that is an accessibility fix rather
+      than a taste.** Pinned 16 px from the top, the panel sat over the sticky
+      header — `z-index: 20` on both, and the portal appends to `document.body`,
+      so the panel painted last and won. Measured at four widths, panel open:
+      `#site-search-field` was covered whole every time (1440: the field spans
+      1068→1337, the panel 1040→1424), and Playwright refused to click it —
+      « panelHeader from div[role=dialog] subtree intercepts pointer events ».
+      The site's own search and language controls vanished under an opaque
+      surface, with nothing to say so.
+
+      Bottom-anchored, the panel cannot reach the header at any header height —
+      which is what makes this a fix and not a second number for two stylesheets
+      to keep in step, the trade `site-nav.module.css` refuses in its own header.
+      It also puts the desktop panel and the touch sheet on the same edge.
+
+      The cap keeps that true when a trip carries three photographs and a list of
+      neighbours: 70 % of the viewport, so the top of the screen — header
+      included — is never reached.
+    */
+    inset-block-start: auto;
+    inset-block-end: var(--space-4);
     inset-inline-start: auto;
     inset-inline-end: var(--space-4);
     inline-size: min(24rem, 42vw);
-    max-block-size: none;
+    max-block-size: min(70dvh, calc(100dvh - 2 * var(--space-4)));
     border-block-end: 1px solid var(--control-border);
     border-radius: var(--radius-lg);
     /* A pull-to-close gesture has no meaning with a pointer, and the component
@@ -1243,6 +1276,12 @@
 
 .panelTitle {
   font-size: var(--text-md);
+  /* The heading is a trip's title now, which is content and not a fixed string:
+     a long one with no space in it would push the panel wider than the 24 rem
+     it is given and scroll the sheet sideways at 320 px (WCAG 1.4.10). The
+     neighbour rows below already carry this. */
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
 .panelClose {
@@ -1269,9 +1308,10 @@
 }
 
 /**
- * The cards. A vertical column with `overflow-x: hidden`, so "several trips in
- * the zone, all reachable without horizontal scrolling" is a property of the
- * layout rather than of where a scrollbar happens to be.
+ * The trip's body, and under it the « Aussi à cet endroit » block. A vertical
+ * column with `overflow-x: hidden`, so "all reachable without horizontal
+ * scrolling" is a property of the layout rather than of where a scrollbar happens
+ * to be.
  */
 .panelBody {
   display: flex;
@@ -1283,6 +1323,83 @@
   /* The list is the scroller, so a one-finger drag here is a scroll and not a
      pull-to-close — the header owns that gesture. */
   overscroll-behavior: contain;
+}
+
+/* -----------------------------------------------------------------------------
+   « Aussi à cet endroit » — the way out of an overlap
+   -------------------------------------------------------------------------- */
+
+/**
+ * The panel's secondary block, and everything about it says "secondary".
+ *
+ * The panel is one trip's, and this is the answer to a different question: which
+ * OTHER markers the reader's finger was covering. Measured on this repository's
+ * content at 1440 px with 44 px targets, that question is real — annecy/geneve
+ * overlap by 44x24 px, paris/rouen by 30x36, and twelve more pairs besides — so
+ * the block has to be reachable and must not read as part of the trip above it.
+ *
+ * A rule above it and a hair of extra space, rather than a card or a tint: the
+ * separation is structural (a `<section>` with its own `<h3>`) and the paint only
+ * has to confirm it.
+ */
+.nearby {
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/**
+ * Smaller than the `<h2>` above it and set in the muted ink, because it labels a
+ * list of links rather than announcing a second subject. It stays a real `<h3>`:
+ * the heading outline is how a screen reader reader skips the trip's body to
+ * reach this, and a styled `<p>` would take that away for a saving of nothing.
+ */
+.nearbyHeading {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.nearbyList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/**
+ * One row per overlapping trip, and **44 px tall because nothing here is exempt**.
+ *
+ * `tests/e2e/support/axe.ts` confines this map's one tolerated `target-size`
+ * allowance to the `<figure>`, and the panel is portalled to `document.body` —
+ * outside it. So the allowance does not reach these rows, deliberately: the whole
+ * point of the block is to be the target a reader gets when the 44 px markers on
+ * the drawing were too close together, and a 20 px row would answer an
+ * under-sized target with another one.
+ *
+ * `display: flex` with `align-items: center` rather than a line-height tall
+ * enough: the row keeps its height when the label wraps to two lines, which it
+ * does at 320 px on a long title.
+ *
+ * `overflow-wrap: anywhere` is what keeps a 24 rem panel — and a 320 px screen —
+ * free of horizontal scrolling on a title with no space in it to break at.
+ */
+.nearbyLink {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-accent);
+  overflow-wrap: anywhere;
+  transition: background-color 120ms ease;
+}
+
+/* The same quiet wash the panel's close button uses, so the two controls of this
+   panel answer a pointer the same way. */
+.nearbyLink:hover {
+  background: var(--accent-quiet);
 }
 
 /**

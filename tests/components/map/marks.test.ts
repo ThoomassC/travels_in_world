@@ -240,7 +240,6 @@ describe("placeMarks — what it does to the trip it carries", () => {
       "placeName",
       "point",
       "slug",
-      "startDate",
       "story",
       "title",
     ]);

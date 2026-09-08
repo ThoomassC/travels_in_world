@@ -40,6 +40,9 @@
     "cardRead": "Leer el relato",
     "cardNew": "Nuevo relato",
     "cardStoryToCome": "Relato pendiente",
+    "panelCities": "Ciudades: {cities}",
+    "panelPhotosLabel": "Fotos de {title}",
+    "panelSeeInListing": "Ver en la lista de viajes",
     "continentAfrica": "África",
     "continentAmericas": "América",
     "continentAntarctica": "Antártida",
@@ -80,7 +83,7 @@
     "markLabel": "{title}, {place}",
     "markLabelNew": "{title}, {place} — nuevo relato",
     "markLabelToCome": "{title}, {place} — relato pendiente",
-    "panelHeading": "{count, plural, one {El viaje en este lugar} other {Los # viajes en este lugar}}",
+    "panelNearbyHeading": "También aquí",
     "panelClose": "Cerrar el panel del viaje",
     "zoomLabel": "Zoom del mapa",
     "zoomValue": "Zoom del {percent} %"

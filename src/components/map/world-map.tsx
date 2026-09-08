@@ -1,10 +1,10 @@
-import { Fragment, type CSSProperties, type ReactElement, type ReactNode } from "react";
+import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { frameAround, type WorldBox } from "./frame";
-import { MapViewport, type MapViewportZone } from "./map-viewport";
-import { ZOOM_VALUE_TOKEN } from "./viewport";
+import { MapViewport, type MapViewportPanel } from "./map-viewport";
+import { PANEL_SWITCH_ATTRIBUTE, ZOOM_VALUE_TOKEN } from "./viewport";
 import { placeMarks, spreadCoincident, type TripMark } from "./marks";
-import { worldPointOf, zonesOf } from "./zones";
+import { overlappingMarks, worldPointOf } from "./zones";
 import { MARK_PIN_PATH, MARK_VIEWBOX } from "./mark-art";
 import styles from "./world-map.module.css";
 
@@ -150,22 +150,23 @@ export type WorldMapProps = {
   /** The projected world box — `{ width: 960, height: 500 }` in production. */
   readonly world: WorldBox;
   /**
-   * The body of a trip's row in the selection panel, keyed by slug and **rendered
-   * by the page** — a `TripCard` with its cover, its dates and its duration.
+   * The body of one trip's panel, keyed by slug and **rendered by the page** — a
+   * `TripPanel` with the trip's description and its photos.
    *
    * A `ReactNode` and not trip data, which is the decision that keeps this layer
-   * where `docs/adr/0003-carte-svg-inerte-et-balises-html.md` put it. A card needs
-   * `Intl` date formatting, the `trips` message namespace and a locale-prefixed
-   * href; receiving it already rendered means `src/components/map/**` still
-   * imports neither façade, still renders under jsdom from a seven-shape fixture,
-   * and still has no second definition of what a trip looks like. It also means
-   * the cards travel in the flight payload as markup rather than as code: the
-   * client component displays one, and never builds one.
+   * where `docs/adr/0003-carte-svg-inerte-et-balises-html.md` put it. A panel body
+   * needs `Intl` date formatting, the `trips` message namespace, the photo
+   * components and a locale-prefixed href; receiving it already rendered means
+   * `src/components/map/**` still imports neither façade, still renders under
+   * jsdom from a seven-shape fixture, and still has no second definition of what a
+   * trip looks like. It also means the bodies travel in the flight payload as
+   * markup rather than as code: the client component displays one, and never
+   * builds one.
    *
    * Optional, because a map with no panel is a valid map — the component test
    * renders it that way, and a marker then keeps its plain navigation.
    */
-  readonly tripCards?: ReadonlyMap<string, ReactNode>;
+  readonly tripPanels?: ReadonlyMap<string, ReactNode>;
 };
 
 /**
@@ -219,7 +220,7 @@ export function WorldMap({
   wished = [],
   marks,
   world,
-  tripCards,
+  tripPanels,
 }: WorldMapProps): ReactElement {
   const t = useTranslations("map");
 
@@ -239,15 +240,12 @@ export function WorldMap({
   const placed = spreadCoincident(placeMarks(marks, frame), frame);
 
   /**
-   * Which markers a reader would take for one place, and therefore which trips
-   * one activation has to offer. Computed here, at build time, on the frame the
-   * server rendered — `zonesOf` records why it is not re-clustered as the reader
-   * zooms, and what that buys.
+   * Which markers each marker overlaps, and therefore which other trips a panel
+   * has to offer a way to. Computed here, at build time, on the frame the server
+   * rendered — `overlappingMarks` records why it is not recomputed as the reader
+   * zooms, and why the answer is pairwise rather than a grouping.
    */
-  const zones = zonesOf(placed, frame);
-  const zoneOfTrip = new Map(
-    zones.flatMap((zone) => zone.marks.map((entry) => [entry.mark.slug, zone.id] as const))
-  );
+  const overlaps = overlappingMarks(placed, frame);
 
   /**
    * The figure's height cap, which used to live in `src/app/[locale]/page.tsx`'s
@@ -343,9 +341,7 @@ export function WorldMap({
             <li key={country.code ?? country.name} className={styles.note} style={style}>
               {/* The dot is what a pointer aims at; the label is what it reveals. */}
               <span className={styles.noteDot} aria-hidden="true" />
-              <span className={styles.noteLabel}>
-                {t("wishedNote", { country: country.name })}
-              </span>
+              <span className={styles.noteLabel}>{t("wishedNote", { country: country.name })}</span>
             </li>
           );
         })}
@@ -424,19 +420,21 @@ export function WorldMap({
                 instead — whose own card carries this very href. A modified click
                 is never intercepted, so "open in a new tab" still works.
 
-                `data-trip` and `data-zone` are the whole interface between this
-                server-rendered list and the client component: one delegated
-                listener reads them from `event.target.closest("a[data-trip]")`,
-                so no marker needs a React node, a handler or a byte of bundle.
-                `aria-haspopup` is added on mount and never rendered here — a
-                reader without the script must not be told about a dialog that
-                cannot open.
+                `data-trip` is the whole interface between this server-rendered
+                list and the client component — one attribute, since TIW-40 —
+                and one delegated listener reads it from
+                `event.target.closest("a[data-trip]")`, so no marker needs a React
+                node, a handler or a byte of bundle. The `data-zone` that used to
+                sit beside it is gone with the zones: a panel is keyed on the
+                trip's own slug, so the marker already carries everything the
+                client needs to name one. `aria-haspopup` is added on mount and
+                never rendered here — a reader without the script must not be told
+                about a dialog that cannot open.
               */}
               <a
                 className={styles.link}
                 href={mark.href}
                 data-trip={mark.slug}
-                data-zone={zoneOfTrip.get(mark.slug)}
                 /*
                   TIW-19's badge on the map. An attribute and not a second class
                   name, so the halo below is one CSS rule keyed on it and the
@@ -549,32 +547,97 @@ export function WorldMap({
     ) : null;
 
   /**
-   * One panel per zone, its cards already rendered by the page. A zone with no
-   * card at all — the state a caller that passes no `tripCards` produces — is
-   * dropped, so the client component finds no zone for that marker and leaves its
-   * link alone rather than swallowing the activation.
+   * **One panel per trip**, its body already rendered by the page, its heading the
+   * trip's own title. A trip with no body — the state a caller that passes no
+   * `tripPanels` produces, and the state of a slug the page chose not to describe
+   * — is dropped, so the client component finds no panel for that marker and
+   * leaves its link alone rather than swallowing the activation.
+   *
+   * The « Aussi à cet endroit » block is appended here, on the server, and not in
+   * the client component. It needs `mark.title`, `mark.placeName`, `mark.href` and
+   * a message key, all of which this component already holds: rendering it here
+   * crosses no façade, adds nothing to the client bundle, and keeps the panel's
+   * whole content server-rendered markup — which is what
+   * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` asks of this layer.
    */
-  const panelZones: readonly MapViewportZone[] =
-    tripCards === undefined
+  const panels: readonly MapViewportPanel[] =
+    tripPanels === undefined
       ? []
-      : zones.flatMap((zone) => {
-          const cards = zone.marks.flatMap((entry) => {
-            const card = tripCards.get(entry.mark.slug);
+      : placed.flatMap((entry) => {
+          const body = tripPanels.get(entry.mark.slug);
 
-            return card === undefined ? [] : [<Fragment key={entry.mark.slug}>{card}</Fragment>];
-          });
+          if (body === undefined) {
+            return [];
+          }
 
-          return cards.length === 0
-            ? []
-            : [
-                {
-                  id: zone.id,
-                  // Resolved here, on the server, ICU plural included: the client
-                  // component takes no translator — see `MapViewportLabels`.
-                  heading: t("panelHeading", { count: cards.length }),
-                  body: cards,
-                },
-              ];
+          /**
+           * Absent from the map means "no neighbour" — `overlappingMarks` never
+           * stores an empty list — so `?? []` is the only check needed and the
+           * block below cannot be rendered as a heading over nothing.
+           */
+          const nearby = overlaps.get(entry.mark.slug) ?? [];
+
+          return [
+            {
+              trip: entry.mark.slug,
+              /**
+               * The trip's own title, and that is the ticket. It used to be
+               * `t("panelHeading", { count })` — « Les 6 voyages à cet endroit » —
+               * which named a grouping rather than the thing the reader clicked.
+               * The key no longer exists in any of the three catalogues, and
+               * `tests/i18n/message-arguments.test.ts` is what would notice a call
+               * to it surviving.
+               */
+              heading: entry.mark.title,
+              body: (
+                <>
+                  {body}
+                  {nearby.length > 0 ? (
+                    <section className={styles.nearby}>
+                      <h3 className={styles.nearbyHeading}>{t("panelNearbyHeading")}</h3>
+                      {/*
+                        `role="list"` because the stylesheet removes the bullets,
+                        and Safari removes the list semantics along with them —
+                        the count is the whole reason this block exists, so losing
+                        it would be losing the block.
+                      */}
+                      <ul className={styles.nearbyList} role="list">
+                        {nearby.map((neighbour) => (
+                          <li key={neighbour.mark.slug}>
+                            {/*
+                              A real `<a href>`, so it works with no script at all
+                              — it then simply navigates to the trip. With the
+                              interaction layer running, `PANEL_SWITCH_ATTRIBUTE`
+                              is what tells the panel's delegated handler to swap
+                              the panel instead, and `data-trip` is the slug it
+                              swaps to. A modified click is never intercepted.
+
+                              **The title alone, and NOT `map.markLabel`.** That
+                              key is `{title}, {place}` and it is right on the
+                              drawing, where a marker is a dot that has to say
+                              where it stands. Here the heading above has just
+                              said it, and on this journal most titles *are* the
+                              place — measured in the served document, the two
+                              neighbours of Annecy and Paris read « Genève,
+                              Genève » and « Rouen, Rouen ». One name, once.
+                            */}
+                            <a
+                              className={styles.nearbyLink}
+                              href={neighbour.mark.href}
+                              data-trip={neighbour.mark.slug}
+                              {...{ [PANEL_SWITCH_ATTRIBUTE]: "" }}
+                            >
+                              {neighbour.mark.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+                </>
+              ),
+            },
+          ];
         });
 
   return (
@@ -583,10 +646,11 @@ export function WorldMap({
         /*
           The client boundary, and the only one this map has. Everything below is
           rendered here, on the server, and travels as nodes: `children` is the
-          drawing, `overlay` is the marker list, and each zone's `body` is a stack
-          of trip cards. `MapViewport` adds the `<svg>` tag whose `viewBox` it
-          owns, four custom properties, three buttons and a panel shell — see its
-          header for why that is the whole of the client's job.
+          drawing, `overlay` is the marker list, and each panel's `body` is one
+          trip's description followed by the markers it overlaps. `MapViewport`
+          adds the `<svg>` tag whose `viewBox` it owns, four custom properties, a
+          zoom slider and a panel shell — see its header for why that is the whole
+          of the client's job.
         */
         <MapViewport
           initialFrame={frame}
@@ -603,7 +667,7 @@ export function WorldMap({
               {notes}
             </>
           }
-          zones={panelZones}
+          panels={panels}
           labels={{
             panelClose: t("panelClose"),
             zoomLabel: t("zoomLabel"),

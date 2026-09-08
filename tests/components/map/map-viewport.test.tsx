@@ -44,14 +44,14 @@ const COUNTRIES: readonly MapCountry[] = [
 ];
 
 /**
- * Three trips: two on the same spot — the zone the panel exists for — and one far
- * away. The pair is given in the WRONG chronological order on purpose, so the
- * panel's "date descending" is asserted against a sort and not against the input.
+ * Three trips: two on the same spot — the overlap « Aussi à cet endroit » exists
+ * for — and one far away. The pair is given in the WRONG chronological order on
+ * purpose, so nothing below can pass by accident on an input order that happens
+ * to match a sort the panel no longer does.
  */
 const TOKYO: TripMark = {
   slug: "japon-2024",
   title: "Japon, printemps 2024",
-  startDate: "2024-04-12",
   placeName: "Tokyo",
   href: "/fr/voyages/japon-2024",
   story: "written",
@@ -61,7 +61,6 @@ const TOKYO: TripMark = {
 const OSAKA: TripMark = {
   slug: "japon-2025",
   title: "Japon, retour à Osaka",
-  startDate: "2025-03-02",
   placeName: "Osaka",
   href: "/fr/voyages/japon-2025",
   story: "written",
@@ -71,7 +70,6 @@ const OSAKA: TripMark = {
 const REYKJAVIK: TripMark = {
   slug: "islande-2022",
   title: "Islande, cercle d’or",
-  startDate: "2022-09-10",
   placeName: "Reykjavik",
   href: "/fr/voyages/islande-2022",
   story: "written",
@@ -80,9 +78,9 @@ const REYKJAVIK: TripMark = {
 
 const MARKS: readonly TripMark[] = [TOKYO, OSAKA, REYKJAVIK];
 
-/** A card that is unmistakably the server's output and not the client's. */
-const cardsFor = (marks: readonly TripMark[]) =>
-  new Map(marks.map((mark) => [mark.slug, <p key={mark.slug}>Fiche de {mark.title}</p>]));
+/** A panel body that is unmistakably the server's output and not the client's. */
+const panelsFor = (marks: readonly TripMark[]) =>
+  new Map(marks.map((mark) => [mark.slug, <p key={mark.slug}>Récit de {mark.title}</p>]));
 
 function renderMap(marks: readonly TripMark[] = MARKS) {
   return render(
@@ -92,18 +90,33 @@ function renderMap(marks: readonly TripMark[] = MARKS) {
         visited={COUNTRIES}
         marks={marks}
         world={WORLD}
-        tripCards={cardsFor(marks)}
+        tripPanels={panelsFor(marks)}
       />
     </NextIntlClientProvider>
   );
 }
 
+/**
+ * A marker's accessible name: `map.markLabel`, `{title}, {place}`. A dot on a
+ * drawing has to say where it stands, so the place is part of the name.
+ */
+const linkNameOf = (mark: TripMark): string =>
+  frMessages.map.markLabel.replace("{title}", mark.title).replace("{place}", mark.placeName);
+
 const markerFor = (mark: TripMark): HTMLElement =>
-  screen.getByRole("link", {
-    name: frMessages.map.markLabel
-      .replace("{title}", mark.title)
-      .replace("{place}", mark.placeName),
-  });
+  screen.getByRole("link", { name: linkNameOf(mark) });
+
+/**
+ * A trip's row inside an open panel, named by its **title alone**.
+ *
+ * Deliberately not `linkNameOf`: « Aussi à cet endroit » has just said where
+ * these trips are, and on this journal most titles are the place — the served
+ * document read « Genève, Genève » and « Rouen, Rouen » when the row reused the
+ * marker's name. Scoped to the panel all the same, because a title is also a
+ * substring of its own marker's name.
+ */
+const nearbyLinkIn = (panel: HTMLElement, mark: TripMark): HTMLElement =>
+  within(panel).getByRole("link", { name: mark.title });
 
 const svgOf = (container: HTMLElement): SVGSVGElement => {
   const svg = container.querySelector("svg");
@@ -233,57 +246,85 @@ describe("what the server rendered is still what is drawn", () => {
 });
 
 describe("opening a trip panel", () => {
-  it("opens the zone's panel instead of navigating", () => {
+  it("opens the clicked trip's own panel instead of navigating", () => {
     renderMap();
 
     fireEvent.click(markerFor(TOKYO));
 
     const panel = screen.getByRole("dialog");
     expect(panel).toBeInTheDocument();
-    // The card came from the server, through the client component, untouched.
-    expect(within(panel).getByText(`Fiche de ${TOKYO.title}`)).toBeInTheDocument();
+    // The body came from the server, through the client component, untouched.
+    expect(within(panel).getByText(`Récit de ${TOKYO.title}`)).toBeInTheDocument();
   });
 
-  it("lists every trip of the zone, most recent first", () => {
+  it("names the panel after the trip that was clicked, and never after a count", () => {
     /**
-     * Tokyo and Osaka are 400 km apart, which at any realistic rendered scale is
-     * a handful of pixels: two 44 px targets overlapping, so a reader cannot have
-     * meant one of them in particular. The criterion is that both are reachable,
-     * date descending — and `OSAKA` is the newer trip while `TOKYO` is given
-     * first, so this fails if the order is the input's rather than the sort's.
+     * **The owner's report, turned into an assertion.** The panel used to belong
+     * to a *zone* named after its most recent trip, so clicking Tokyo opened
+     * "Les 2 voyages à cet endroit" with Osaka — the newer of the pair — at the
+     * top: « quand je clique sur un voyage je veux le descriptif avec les photos
+     * du voyage, pas les autres voyages du pays ».
+     *
+     * Tokyo and Osaka overlap, and `OSAKA` is the newer trip, so this fails if
+     * anything but the clicked slug decides the heading.
+     */
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    expect(screen.getByRole("dialog")).toHaveAccessibleName(TOKYO.title);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    fireEvent.click(markerFor(REYKJAVIK));
+    expect(screen.getByRole("dialog")).toHaveAccessibleName(REYKJAVIK.title);
+  });
+
+  it("shows the clicked trip's body and not its neighbour's", () => {
+    // The other half of the same report: the overlapping trip is a link in a
+    // secondary block, never a second body in the panel's main content.
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+
+    const panel = screen.getByRole("dialog");
+    expect(within(panel).getByText(`Récit de ${TOKYO.title}`)).toBeInTheDocument();
+    expect(within(panel).queryByText(`Récit de ${OSAKA.title}`)).not.toBeInTheDocument();
+  });
+
+  it("names the overlapping trip under « Aussi à cet endroit »", () => {
+    /**
+     * The reason the grouping does not simply disappear: Tokyo and Osaka are two
+     * 44 px targets whose centres are less than one target apart, so a reader at a
+     * pointer cannot always hit the one they meant. The way out is a link in the
+     * panel — a secondary block, not the panel's subject.
      */
     renderMap();
 
     fireEvent.click(markerFor(TOKYO));
 
     const panel = screen.getByRole("dialog");
-    const cards = within(panel)
-      .getAllByText(/^Fiche de /)
-      .map((node) => node.textContent);
+    expect(
+      within(panel).getByRole("heading", { name: frMessages.map.panelNearbyHeading })
+    ).toBeInTheDocument();
 
-    expect(cards).toEqual([`Fiche de ${OSAKA.title}`, `Fiche de ${TOKYO.title}`]);
+    const link = nearbyLinkIn(panel, OSAKA);
+    expect(link).toHaveAttribute("href", OSAKA.href);
+    // The title and nothing else: the heading above already said "here".
+    expect(link).toHaveAccessibleName(OSAKA.title);
   });
 
-  it("names the panel after how many trips it holds", () => {
-    renderMap();
-
-    fireEvent.click(markerFor(TOKYO));
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Les 2 voyages à cet endroit");
-
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    fireEvent.click(markerFor(REYKJAVIK));
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Le voyage à cet endroit");
-  });
-
-  it("opens a lone marker's panel with its own trip only", () => {
+  it("gives a lone marker's panel no « Aussi à cet endroit » block at all", () => {
+    // An empty secondary block is a heading promising rows that do not exist;
+    // `overlappingMarks` leaves a lone marker out of its answer entirely.
     renderMap();
 
     fireEvent.click(markerFor(REYKJAVIK));
 
     const panel = screen.getByRole("dialog");
-    expect(within(panel).getByText(`Fiche de ${REYKJAVIK.title}`)).toBeInTheDocument();
-    expect(within(panel).queryByText(`Fiche de ${TOKYO.title}`)).not.toBeInTheDocument();
+    expect(within(panel).getByText(`Récit de ${REYKJAVIK.title}`)).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("heading", { name: frMessages.map.panelNearbyHeading })
+    ).toBeNull();
   });
 
   it("moves the focus into the panel, and marks the marker expanded", () => {
@@ -315,7 +356,7 @@ describe("opening a trip panel", () => {
     }
   });
 
-  it("swaps panels when another zone is activated", () => {
+  it("swaps panels when another marker is activated", () => {
     renderMap();
 
     fireEvent.click(markerFor(TOKYO));
@@ -323,7 +364,210 @@ describe("opening a trip panel", () => {
 
     const panels = screen.getAllByRole("dialog");
     expect(panels).toHaveLength(1);
-    expect(within(panels[0] as HTMLElement).getByText(`Fiche de ${REYKJAVIK.title}`)).toBeVisible();
+    expect(within(panels[0] as HTMLElement).getByText(`Récit de ${REYKJAVIK.title}`)).toBeVisible();
+  });
+});
+
+describe("switching to an overlapping trip from inside the panel", () => {
+  it("swaps the panel to that trip without leaving the page", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const activation = fireEvent.click(nearbyLinkIn(screen.getByRole("dialog"), OSAKA));
+
+    // `fireEvent` answers false when a handler called `preventDefault`.
+    expect(activation).toBe(false);
+
+    const panel = screen.getByRole("dialog");
+    expect(panel).toHaveAccessibleName(OSAKA.title);
+    expect(within(panel).getByText(`Récit de ${OSAKA.title}`)).toBeInTheDocument();
+    // And the block now offers the way back.
+    expect(nearbyLinkIn(panel, TOKYO)).toBeInTheDocument();
+  });
+
+  it("keeps the focus inside the panel it just swapped", () => {
+    // The link that was under the pointer is gone with the block that held it, so
+    // a focus left where it was would be a focus on a detached node.
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    fireEvent.click(nearbyLinkIn(screen.getByRole("dialog"), OSAKA));
+
+    expect(screen.getByRole("dialog")).toHaveFocus();
+  });
+
+  it("gives Escape back to the NEW trip's marker, not to the link that vanished", () => {
+    /**
+     * **The trap this whole handler is written around.** The obvious
+     * implementation records the clicked link as the element to restore the focus
+     * to — and that link is unmounted by the very swap it triggered, so `close()`
+     * finds `isConnected === false`, skips the `focus()` and drops the reader on
+     * `<body>`: WCAG 2.4.3 lost, silently, with every assertion above still green.
+     *
+     * The trigger registered by a swap is therefore the **marker of the new trip**
+     * on the map, which is a node that outlives the panel.
+     */
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    fireEvent.click(nearbyLinkIn(screen.getByRole("dialog"), OSAKA));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(markerFor(OSAKA)).toHaveFocus();
+    expect(document.body).not.toHaveFocus();
+  });
+
+  it("reflects the swap in the address bar, so the new panel is the shareable one", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    fireEvent.click(nearbyLinkIn(screen.getByRole("dialog"), OSAKA));
+
+    expect(search().get(TRIP_PARAM)).toBe(OSAKA.slug);
+  });
+
+  it("leaves a modified click on a neighbour to the browser", () => {
+    /**
+     * Same rule as on a marker, and it has to be restated because this is a second
+     * delegated handler on a second root: the panel is portalled to
+     * `document.body`, out of the canvas the marker handler listens on. Ctrl, Cmd,
+     * Shift, Alt and the middle button all mean something to a browser.
+     */
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const panel = screen.getByRole("dialog");
+
+    for (const modifier of [
+      { metaKey: true },
+      { ctrlKey: true },
+      { shiftKey: true },
+      { altKey: true },
+      { button: 1 },
+    ]) {
+      const activation = fireEvent.click(nearbyLinkIn(panel, OSAKA), modifier);
+
+      expect(activation).toBe(true);
+      expect(screen.getByRole("dialog")).toHaveAccessibleName(TOKYO.title);
+    }
+  });
+});
+
+/**
+ * Two ways of leaving, or re-entering, a panel that the panel-per-trip change
+ * broke or made worse. Both were found by an adversarial review of the diff and
+ * neither was reachable from the cases above — which is the point of writing
+ * them down rather than fixing quietly.
+ */
+describe("the activations a string-shaped selection nearly swallowed", () => {
+  /**
+   * **The regression this change introduced.** The selection used to be an
+   * object literal, so every activation handed `setSelection` a fresh reference
+   * and React re-rendered. It is a string now: re-selecting the trip already
+   * open is a value React compares equal, so it bails out and the effect that
+   * moves the focus into the panel never runs — while the handler has already
+   * called `preventDefault()`.
+   *
+   * The reader this stranded is a real one: the marker of the open panel carries
+   * `aria-haspopup="dialog"` and `aria-expanded="true"`, so a screen reader
+   * announces a control that opens a dialog. Activating it did nothing at all —
+   * no navigation, no focus, no answer.
+   */
+  it("re-activating the open trip's marker puts the focus back in its panel", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const panel = screen.getByRole("dialog");
+    expect(panel).toHaveFocus();
+
+    // The reader shift-tabs back out to the marker, then activates it again.
+    markerFor(TOKYO).focus();
+    expect(markerFor(TOKYO)).toHaveFocus();
+
+    fireEvent.click(markerFor(TOKYO));
+
+    expect(screen.getByRole("dialog")).toHaveFocus();
+    expect(screen.getByRole("dialog")).toHaveAccessibleName(TOKYO.title);
+  });
+
+  /**
+   * **Back closed the panel and dropped the focus on `<body>`** — WCAG 2.4.3.
+   * Older than this change, and made far more likely by it: swapping between
+   * neighbours pushes a history entry each time, so Back becomes the natural way
+   * back to the previous trip.
+   */
+  it("gives the focus back to the marker when Back closes the panel", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    expect(screen.getByRole("dialog")).toHaveFocus();
+
+    window.history.pushState({}, "", "/fr");
+    fireEvent.popState(window);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(markerFor(TOKYO)).toHaveFocus();
+  });
+
+  /**
+   * The other half of the rule, and the reason the fix is conditional: this
+   * callback also runs on mount, and a reader who has since tabbed away must not
+   * have the focus yanked back onto the map by a history entry.
+   */
+  /**
+   * **Escape listens on `document`, so it reaches this component from anywhere on
+   * the page** — including the header's search field, which has an Escape of its
+   * own. Measured before the guard: a reader clearing « jap » from that field
+   * emptied it *and* found the focus thrown onto a marker on the map.
+   *
+   * The panel still closes. Only the focus stays put.
+   */
+  it("closes on Escape from outside the panel without taking the focus", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const elsewhere = markerFor(REYKJAVIK);
+    elsewhere.focus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(elsewhere).toHaveFocus();
+  });
+
+  /**
+   * **A row and a marker make the same bargain, so they must say the same thing.**
+   * Both are `<a href>` whose plain activation opens a dialog instead of
+   * navigating; the marker announced it, the row did not, because the sweep that
+   * adds the attribute reads the map's canvas and the panel is portalled out of
+   * it. Measured on the served page: 14 links carrying `data-trip`, 13 carrying
+   * `aria-haspopup`.
+   *
+   * No `aria-expanded` on a row: that attribute says a control owns an expanded
+   * region, and a row does not own the panel it replaces.
+   */
+  it("announces the dialog on a panel row, exactly as on a marker", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const row = nearbyLinkIn(screen.getByRole("dialog"), OSAKA);
+
+    expect(row).toHaveAttribute("aria-haspopup", "dialog");
+    expect(row).not.toHaveAttribute("aria-expanded");
+  });
+
+  it("leaves the focus alone when Back closes a panel the reader had left", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const elsewhere = markerFor(REYKJAVIK);
+    elsewhere.focus();
+
+    window.history.pushState({}, "", "/fr");
+    fireEvent.popState(window);
+
+    expect(elsewhere).toHaveFocus();
   });
 });
 
@@ -667,7 +911,7 @@ describe("the state in the address bar", () => {
     renderMap();
 
     const panel = screen.getByRole("dialog");
-    expect(within(panel).getByText(`Fiche de ${TOKYO.title}`)).toBeInTheDocument();
+    expect(within(panel).getByText(`Récit de ${TOKYO.title}`)).toBeInTheDocument();
     // Moving the focus on page load is hostile: the reader has not asked for
     // anything yet. It moves when THEY open a panel, and it comes back when they
     // close one — which the closing test above pins.
@@ -743,12 +987,12 @@ describe("a map with nothing on it", () => {
    * cases above already assert it.
    */
 
-  it("leaves a marker's link alone when the page passed no cards at all", () => {
+  it("leaves a marker's link alone when the page passed no panel at all", () => {
     /**
-     * `tripCards` is optional, and a caller that omits it gets a map with no
+     * `tripPanels` is optional, and a caller that omits it gets a map with no
      * panel. The activation must then fall through to the link rather than being
-     * swallowed by a panel that cannot open — which is what the "is this zone
-     * known?" test in the click handler is for.
+     * swallowed by a panel that cannot open — which is what the "does this trip
+     * have a panel?" test in the click handler is for.
      */
     render(
       <NextIntlClientProvider locale={defaultLocale} messages={frMessages}>

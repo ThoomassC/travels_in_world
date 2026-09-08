@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 import type { Frame, WorldBox } from "./frame";
 import {
   CENTRE,
+  PANEL_SWITCH_ATTRIBUTE,
   TRIP_PARAM,
   VIEW_PARAM,
   ZOOM_SCALE_STEPS,
@@ -62,7 +63,7 @@ import styles from "./world-map.module.css";
  *
  * The second is what moves sixty markers without touching one of them. The
  * markers are server-rendered `<a>` elements carrying their position in **world**
- * units (`--mark-x`, `--mark-y`, see `zonesOf`/`worldPointOf`), and the
+ * units (`--mark-x`, `--mark-y`, see `worldPointOf`), and the
  * stylesheet re-derives each percentage from the live frame:
  *
  *     left: calc((var(--mark-x) - var(--frame-x)) / var(--frame-w) * 100%)
@@ -73,11 +74,11 @@ import styles from "./world-map.module.css";
  * ## What is server-rendered, and therefore free
  *
  * `children` (the paths), `overlay` (the marker list, with its real `<a href>`
- * and its accessible names), and each zone's `body` (the trip cards, with their
- * covers, dates and durations, formatted by `Intl` on the server). This component
- * renders the chrome — an `<svg>`, a zoom slider, a panel shell — and nothing
- * else. The ticket's "client component strictly limited to interaction"
- * is a structural property here rather than a promise.
+ * and its accessible names), and each panel's `body` (one trip's description, its
+ * photos, and the « Aussi à cet endroit » block naming the markers it overlaps).
+ * This component renders the chrome — an `<svg>`, a zoom slider, a panel shell —
+ * and nothing else. The ticket's "client component strictly limited to
+ * interaction" is a structural property here rather than a promise.
  *
  * ## What the reader keeps when this file never loads
  *
@@ -94,13 +95,13 @@ import styles from "./world-map.module.css";
  * It stays. A marker is an `<a href="/fr/voyages/<slug>">` in the document, in
  * the tab ring, named from the message catalogue — exactly as before. What
  * changes is that *while this script is running*, a plain primary activation
- * (mouse click or Enter) opens the panel instead of navigating, and the panel's
- * own card carries the same href. Nothing is lost and one step is gained: the
- * cover, the dates and the duration before the reader commits to a page. Three
- * things keep that honest:
+ * (mouse click or Enter) opens **that trip's** panel instead of navigating.
+ * Nothing is lost and one step is gained: the trip's description and its photos
+ * before the reader commits to a page. Three things keep that honest:
  *
  * - a modified click — Ctrl, Cmd, Shift, Alt, middle button — is **not**
- *   intercepted, so "open in a new tab" still works on a marker;
+ *   intercepted, so "open in a new tab" still works on a marker, and the same
+ *   rule is restated on the panel's own delegated handler;
  * - `aria-haspopup="dialog"` is added to the markers **on mount** and never
  *   server-rendered, so a reader without the script is not told about a dialog
  *   that cannot open;
@@ -108,17 +109,21 @@ import styles from "./world-map.module.css";
  *   is an acceptance criterion and the thing a panel most often breaks.
  */
 
-/** One zone's panel: the trips a reader would take for one place. */
-export type MapViewportZone = {
-  /** `zonesOf`'s id — the newest trip's slug — and the marker's `data-zone`. */
-  readonly id: string;
-  /**
-   * The panel's own heading, **already formatted by the server** — "Les 2 voyages
-   * à cet endroit". The count is known at build time, so the ICU plural is
-   * resolved there; see {@link MapViewportLabels} for what that buys.
-   */
+/**
+ * One trip's panel.
+ *
+ * **It used to be one zone's panel, and the difference is the ticket.** A zone
+ * grouped every marker a reader's finger could cover and named itself after the
+ * most recent of them, so clicking Paris opened « Les 6 voyages à cet endroit »
+ * with Gand-Bruges at the top. A panel now belongs to the trip that was clicked;
+ * the markers it overlaps are a secondary block at the foot of `body`, rendered
+ * by the server like the rest of it.
+ */
+export type MapViewportPanel = {
+  /** The slug: a marker's `data-trip`, and the value of `TRIP_PARAM`. */
+  readonly trip: string;
+  /** The trip's own title, rendered as-is in the `<h2>` — no ICU here any more. */
   readonly heading: string;
-  /** The cards, server-rendered, date descending. */
   readonly body: ReactNode;
 };
 
@@ -145,9 +150,10 @@ export type MapViewportZone = {
  * (`docs/adr/0005-getpathname-sans-le-link-client.md`), found by measuring every
  * prerendered route rather than only the one being worked on.
  *
- * Resolving the strings on the server keeps every ICU plural (`panelHeading`)
- * where the catalogue already is, and keeps this component to what the ticket asks
- * of it: interaction. The net cost of the whole ticket is the third row minus the
+ * Resolving the strings on the server keeps every message where the catalogue
+ * already is — including a panel's heading, which is now the trip's own title and
+ * so never crosses this boundary as a key at all — and keeps this component to
+ * what the ticket asks of it: interaction. The net cost of the whole ticket is the third row minus the
  * first — **+3.1 KB brotli and one chunk on `/fr`, nothing anywhere else** — of
  * which the chunk itself is 3.09 KB: this file plus its CSS class map, and no
  * other chunk changed by a byte.
@@ -173,8 +179,8 @@ export type MapViewportProps = {
   readonly children: ReactNode;
   /** The server-rendered marker list, or `null` when no trip is published. */
   readonly overlay: ReactNode;
-  /** One entry per zone; empty when there is nothing to select. */
-  readonly zones: readonly MapViewportZone[];
+  /** One entry per trip that has a panel; empty when there is nothing to select. */
+  readonly panels: readonly MapViewportPanel[];
   /** The chrome's strings, already translated — see {@link MapViewportLabels}. */
   readonly labels: MapViewportLabels;
 };
@@ -189,12 +195,6 @@ type FrameStyle = CSSProperties &
   Record<"--frame-x" | "--frame-y" | "--frame-w" | "--frame-h", string>;
 
 type SheetStyle = CSSProperties & Record<"--sheet-shift", string>;
-
-/** What is selected: a trip, its zone, and the element to give the focus back to. */
-type Selection = {
-  readonly trip: string;
-  readonly zone: string;
-};
 
 /** How far a finger must pull a sheet down before it closes, in CSS pixels. */
 const SHEET_CLOSE_PX = 72;
@@ -263,7 +263,7 @@ export function MapViewport({
   world,
   children,
   overlay,
-  zones,
+  panels,
   labels,
 }: MapViewportProps): ReactElement {
   const headingId = useId();
@@ -277,7 +277,8 @@ export function MapViewport({
   const initialView = useMemo(() => clampViewport(initialFrame, bounds), [initialFrame, bounds]);
 
   const [view, setView] = useState<Viewport>(initialView);
-  const [selection, setSelection] = useState<Selection | null>(null);
+  /** The slug of the open panel, and nothing else — see {@link MapViewportPanel}. */
+  const [selection, setSelection] = useState<string | null>(null);
   /**
    * False until the effects have run, and the whole of the progressive
    * enhancement. The zoom slider and the panel are rendered only when it is
@@ -292,6 +293,41 @@ export function MapViewport({
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * The panels, read through a ref by `applyUrl` and **never through its
+   * dependency list**, which is the point of the ref and not a style preference.
+   *
+   * `applyUrl` is called by the mount effect that also sets `ready`, and that
+   * effect depends on `applyUrl`. Put `panels` in the callback's dependencies and
+   * the effect re-runs whenever the prop's identity changes — the array is built
+   * fresh by `world-map.tsx` on every render of the server tree — and re-running
+   * it re-reads a URL the reader has since moved past: the open panel closes on
+   * its own, for no reason anything in the DOM could explain.
+   *
+   * Seeded from the first render's `panels` by `useRef`'s own initial value, so
+   * the mount call already sees the right list, and kept in step by the effect
+   * below rather than by an assignment during the render — `react-hooks/refs`
+   * refuses the latter, measured, and the seed is what makes the effect's
+   * one-commit lag harmless: nothing reads this ref before the browser has
+   * painted once.
+   */
+  const panelsRef = useRef<readonly MapViewportPanel[]>(panels);
+  /**
+   * The open panel's slug, readable from an event handler.
+   *
+   * Not a convenience: `selection` is a **string**, so re-selecting the trip that
+   * is already open hands `setSelection` a value React compares equal, and React
+   * bails out — no re-render, so the effect that moves the focus into the panel
+   * never runs. Meanwhile the handler has already called `preventDefault()`. The
+   * reader who tabs back to the marker of the open panel — which announces
+   * `aria-haspopup="dialog"` and `aria-expanded="true"` — and presses Enter
+   * therefore got **nothing at all**: no navigation, no focus, no answer.
+   *
+   * It is a regression of the panel-per-trip change and not an old defect: the
+   * selection used to be an object literal, so every activation produced a fresh
+   * reference and the effect always re-ran.
+   */
+  const selectionRef = useRef<string | null>(null);
   /** The marker the focus goes back to — an acceptance criterion of its own. */
   const triggerRef = useRef<HTMLElement | null>(null);
   /** Set only when the reader opened the panel, never when a URL restored it. */
@@ -312,9 +348,9 @@ export function MapViewport({
    */
   const pushHistoryRef = useRef(false);
 
-  const activeZone = useMemo(
-    () => (selection === null ? null : (zones.find((zone) => zone.id === selection.zone) ?? null)),
-    [selection, zones]
+  const activePanel = useMemo(
+    () => (selection === null ? null : (panels.find((panel) => panel.trip === selection) ?? null)),
+    [selection, panels]
   );
 
   /**
@@ -369,19 +405,68 @@ export function MapViewport({
   );
 
   /**
-   * Opens the panel of a zone. `fromReader` is false only when a URL restored the
+   * Opens a trip's panel. `fromReader` is false only when a URL restored the
    * selection: that must neither move the focus nor add a history entry.
+   *
+   * `trigger` is the element the focus goes back to on closing, and it is always
+   * a **marker on the map** — never the control that was activated. See
+   * `onPanelClick` for the case where the two differ and why it matters.
    */
-  const select = useCallback(
-    (trip: string, zone: string, trigger: HTMLElement | null, fromReader: boolean) => {
-      triggerRef.current = trigger;
-      wantsFocusRef.current = fromReader;
-      pushHistoryRef.current = pushHistoryRef.current || fromReader;
-      setSheetShift(0);
-      setSelection({ trip, zone });
-    },
-    []
-  );
+  const select = useCallback((trip: string, trigger: HTMLElement | null, fromReader: boolean) => {
+    triggerRef.current = trigger;
+    wantsFocusRef.current = fromReader;
+    pushHistoryRef.current = pushHistoryRef.current || fromReader;
+    setSheetShift(0);
+
+    /**
+     * **The panel this trip already owns is re-focused here and not by the
+     * effect below**, for the reason `selectionRef` records: React bails out on
+     * an identical string, so there is no render to hang an effect on. Done in
+     * the handler, which is also where `close` puts its own `focus()` and for
+     * the same argument — a browser honours a synchronous `focus()` inside a
+     * user gesture.
+     *
+     * `fromReader` guards it: a URL restoring the selection must never move the
+     * focus, and that is the only caller that passes false.
+     */
+    if (fromReader && selectionRef.current === trip && panelRef.current !== null) {
+      wantsFocusRef.current = false;
+      panelRef.current.focus();
+    }
+
+    setSelection(trip);
+  }, []);
+
+  /**
+   * Whether closing the panel would leave the reader's focus nowhere.
+   *
+   * **Every close has to ask this, and three of the four passed a literal.**
+   * Escape, the close button, a pulled sheet and a Back all unmount the same
+   * dialog, and whether the marker should take the focus back depends on where
+   * the focus *is* — not on which control was used.
+   *
+   * Two cases answer yes, and they are different:
+   *
+   * - the focus is **inside the panel**, so unmounting it would drop the focus on
+   *   `<body>` — WCAG 2.4.3, the criterion a dialog most often fails;
+   * - **nobody holds the focus**, which is the state a panel restored from a
+   *   `?voyage=` address leaves the page in: that restore deliberately does not
+   *   steal the focus, so a reader who then presses Escape is placed on the
+   *   marker the address named. That is a gain and it takes the focus from no one.
+   *
+   * The case that answers no is the one an audit caught: the focus was in the
+   * header's search field, and Escape — pressed to clear that field — emptied it
+   * **and** threw the focus onto a marker on the map.
+   */
+  const focusWouldBeLost = useCallback((): boolean => {
+    const active = document.activeElement;
+
+    return (
+      active === null ||
+      active === document.body ||
+      panelRef.current?.contains(active) === true
+    );
+  }, []);
 
   const close = useCallback((restoreFocus: boolean) => {
     const trigger = triggerRef.current;
@@ -407,6 +492,20 @@ export function MapViewport({
   }, []);
 
   /**
+   * The one write to `panelsRef`, and the only reason it is an effect: the panels
+   * are not derived state, they are the latest value of a prop that an event
+   * subscription — `popstate` — has to read without being torn down and rebuilt
+   * every time the server tree re-renders.
+   */
+  useEffect(() => {
+    panelsRef.current = panels;
+  }, [panels]);
+
+  useEffect(() => {
+    selectionRef.current = selection;
+  }, [selection]);
+
+  /**
    * Reads the URL and puts the map where it says — on mount, so a reloaded or
    * shared address restores the frame and the panel, and on `popstate`, so Back
    * closes the panel and undoes a zoom.
@@ -424,24 +523,44 @@ export function MapViewport({
     setView(state.view ?? initialView);
 
     if (state.trip === null) {
+      /**
+       * **Back closes the panel, and the focus has to go somewhere.** Without
+       * this the dialog is unmounted from under the reader and `document.body`
+       * inherits the focus — WCAG 2.4.3, and measured: after opening a panel,
+       * swapping to a neighbour and pressing Back, `document.activeElement` was
+       * `<body>`. Escape and the close button had always restored it; Back never
+       * did, and swapping between neighbours makes Back the natural way out.
+       *
+       * **Only when the focus is inside the panel being removed.** This callback
+       * also runs on mount, where `triggerRef` is null and nothing is focused,
+       * and a reader who has since tabbed into the header must not have the
+       * focus yanked back onto the map by a history entry.
+       */
+      const losingFocus = focusWouldBeLost();
+      const trigger = triggerRef.current;
+
       setSelection(null);
       triggerRef.current = null;
+
+      if (losingFocus && trigger !== null && trigger.isConnected) {
+        trigger.focus();
+      }
       return;
     }
 
-    const marker = markerOf(state.trip);
-    const zone = marker?.dataset.zone;
+    const trip = state.trip;
 
-    if (marker === undefined || marker === null || zone === undefined) {
-      // A slug that names no marker: a stale link, or a trip since withdrawn.
-      // The map is shown as it is rather than pretending a selection exists.
+    if (!panelsRef.current.some((panel) => panel.trip === trip)) {
+      // A slug with no panel: a stale link, a trip since withdrawn, or a page
+      // that passed no bodies at all. The map is shown as it is rather than
+      // pretending a selection exists.
       setSelection(null);
       return;
     }
 
     // No focus move: stealing the focus on page load, or on a Back, is hostile.
-    select(state.trip, zone, marker, false);
-  }, [bounds, initialView, markerOf, select]);
+    select(trip, markerOf(trip), false);
+  }, [bounds, focusWouldBeLost, initialView, markerOf, select]);
 
   useEffect(() => {
     /**
@@ -491,7 +610,7 @@ export function MapViewport({
     }
     const push = pushHistoryRef.current;
     pushHistoryRef.current = false;
-    writeUrl({ view, trip: selection?.trip ?? null }, push);
+    writeUrl({ view, trip: selection }, push);
   }, [ready, view, selection, writeUrl]);
 
   /**
@@ -507,29 +626,58 @@ export function MapViewport({
       return;
     }
     /**
-     * Only markers whose zone really has a panel are announced as opening one.
-     * A caller that passes no `tripCards` renders a map with no panel at all, and
-     * a marker promising a dialog nobody can open is the same lie as announcing
-     * one before this script has mounted.
+     * Only markers whose own trip really has a panel are announced as opening
+     * one. A caller that passes no `tripPanels` renders a map with no panel at
+     * all, and a marker promising a dialog nobody can open is the same lie as
+     * announcing one before this script has mounted.
      */
-    const openable = new Set(zones.map((zone) => zone.id));
+    const openable = new Set(panels.map((panel) => panel.trip));
 
     for (const marker of canvas.querySelectorAll<HTMLElement>("a[data-trip]")) {
-      const zone = marker.dataset.zone;
+      const trip = marker.dataset.trip;
 
-      if (zone !== undefined && openable.has(zone)) {
+      if (trip !== undefined && openable.has(trip)) {
         marker.setAttribute("aria-haspopup", "dialog");
       } else {
         marker.removeAttribute("aria-haspopup");
       }
 
-      if (marker.dataset.trip === selection?.trip) {
+      if (trip === selection) {
         marker.setAttribute("aria-expanded", "true");
       } else {
         marker.removeAttribute("aria-expanded");
       }
     }
-  }, [selection, overlay, zones]);
+
+    /**
+     * **The panel's own rows get the same treatment, and an audit is why.**
+     *
+     * A row under « Aussi à cet endroit » is an `<a href>` whose plain activation
+     * does not navigate — it swaps the panel. That is the same bargain a marker
+     * makes, and a marker says so: `aria-haspopup="dialog"`. The rows said
+     * nothing, because this sweep reads `canvasRef` and the panel is portalled to
+     * `document.body`, outside it. Measured on the served page: 14 links carrying
+     * `data-trip`, 13 carrying `aria-haspopup` — the missing one was the row.
+     *
+     * No `aria-expanded` here, unlike the markers: that attribute says a control
+     * owns an expanded region, and a row does not own the panel it replaces.
+     *
+     * Server-rendered nowhere, like the markers': without this script the row is
+     * a plain link that really does navigate, and promising a dialog then would
+     * be the lie this effect exists to avoid.
+     */
+    for (const row of panelRef.current?.querySelectorAll<HTMLElement>(
+      `a[${PANEL_SWITCH_ATTRIBUTE}]`
+    ) ?? []) {
+      const trip = row.dataset.trip;
+
+      if (trip !== undefined && openable.has(trip)) {
+        row.setAttribute("aria-haspopup", "dialog");
+      } else {
+        row.removeAttribute("aria-haspopup");
+      }
+    }
+  }, [selection, overlay, panels]);
 
   /** The focus goes into the panel the reader just opened, and only then. */
   useEffect(() => {
@@ -556,7 +704,13 @@ export function MapViewport({
         return;
       }
       if (selection !== null) {
-        close(true);
+        /*
+          `focusWouldBeLost()` and not `true`: this listener is on `document`, so
+          Escape reaches it from anywhere on the page. Measured before the guard —
+          focus in the header's search field, Escape to clear it, and the focus
+          landed on a marker.
+        */
+        close(focusWouldBeLost());
         return;
       }
       setTipsHidden(true);
@@ -567,7 +721,7 @@ export function MapViewport({
     return () => {
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [close, selection]);
+  }, [close, focusWouldBeLost, selection]);
 
   /**
    * The wheel and the two-finger gestures, as **native** listeners with
@@ -747,19 +901,60 @@ export function MapViewport({
     }
 
     const trip = marker.dataset.trip;
-    const zone = marker.dataset.zone;
     /**
-     * No zone, no interception. `preventDefault()` before knowing a panel can
+     * No panel, no interception. `preventDefault()` before knowing a panel can
      * open would turn a working link into a marker that answers nothing — the
      * exact regression this whole design refuses — and it is reachable: a caller
-     * that passes no `tripCards` renders the map with an empty `zones`.
+     * that passes no `tripPanels` renders the map with an empty `panels`.
      */
-    if (trip === undefined || zone === undefined || !zones.some((entry) => entry.id === zone)) {
+    if (trip === undefined || !panels.some((panel) => panel.trip === trip)) {
       return;
     }
 
     event.preventDefault();
-    select(trip, zone, marker, true);
+    select(trip, marker, true);
+  };
+
+  /**
+   * The second delegated handler, on the panel's own root — and it needs to
+   * exist because the panel is **portalled to `document.body`**, outside the
+   * `canvasRef` element the marker handler listens on. Without it a row under
+   * « Aussi à cet endroit » would leave the map for a trip page, which is a
+   * heavier answer than the reader asked for when they only mis-aimed by twenty
+   * pixels.
+   *
+   * It intercepts links carrying {@link PANEL_SWITCH_ATTRIBUTE} and nothing else,
+   * so a trip body's own links — a photo, a stage, a country — stay ordinary
+   * navigation.
+   *
+   * **The trigger registered is the new trip's MARKER, never the link that was
+   * clicked**, and that is the whole subtlety of this handler. The link lives
+   * inside the block the swap replaces, so it is unmounted the moment the
+   * selection changes; a `triggerRef` pointing at it would find
+   * `isConnected === false` in `close()`, skip the `focus()` and drop the reader
+   * on `<body>` — WCAG 2.4.3 lost, with nothing on screen to explain it. The
+   * marker outlives every panel.
+   */
+  const onPanelClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    // Same rule as on a marker, restated because this is a second root: a
+    // modified click and the middle button keep their browser meaning.
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+      return;
+    }
+
+    const target = event.target;
+    const link = target instanceof Element ? target.closest(`a[${PANEL_SWITCH_ATTRIBUTE}]`) : null;
+    if (!(link instanceof HTMLElement)) {
+      return;
+    }
+
+    const trip = link.dataset.trip;
+    if (trip === undefined || !panels.some((panel) => panel.trip === trip)) {
+      return;
+    }
+
+    event.preventDefault();
+    select(trip, markerOf(trip), true);
   };
 
   /** The sheet's grab handle: a downward pull closes it on a touch screen. */
@@ -800,7 +995,13 @@ export function MapViewport({
     const shift = sheetShift;
     sheetRef.current = null;
     if (shift > SHEET_CLOSE_PX) {
-      close(false);
+      /*
+        `false` was a literal here, and a reader who had explored the sheet with
+        VoiceOver before pulling it shut lost the focus to `<body>`. A pull is a
+        pointer gesture, so the focus is usually elsewhere — hence the question
+        rather than an unconditional restore.
+      */
+      close(focusWouldBeLost());
       return;
     }
     setSheetShift(0);
@@ -1017,8 +1218,19 @@ export function MapViewport({
         to: the panel is behind `ready`, which is false until this component has
         mounted in a browser.
       */}
-      {ready && activeZone !== null && selection !== null
+      {ready && activePanel !== null
         ? createPortal(
+            /*
+              The same two rules the canvas disables, disabled here for the same
+              reason and measured the same way: this `onClick` is a **delegation
+              surface** over the real `<a href>` elements the server rendered
+              inside the panel, not a control pretending to be one. Pressing Enter
+              on a focused row runs the link's own activation, which dispatches a
+              `click` that bubbles to exactly this handler — so the keyboard path
+              is complete and native, and an `onKeyDown` here would be a second
+              path leading to the same place.
+            */
+            /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- delegation surface over real links; see above. */
             <div
               ref={panelRef}
               className={styles.panel}
@@ -1026,6 +1238,7 @@ export function MapViewport({
               role="dialog"
               aria-labelledby={headingId}
               tabIndex={-1}
+              onClick={onPanelClick}
             >
               {/*
             The header is the sheet's grab handle on a touch screen: a downward
@@ -1042,7 +1255,7 @@ export function MapViewport({
               >
                 <span className={styles.panelGrip} aria-hidden="true" />
                 <h2 id={headingId} className={styles.panelTitle}>
-                  {activeZone.heading}
+                  {activePanel.heading}
                 </h2>
                 <button
                   type="button"
@@ -1056,12 +1269,13 @@ export function MapViewport({
                 </button>
               </div>
               {/*
-            The cards, rendered by the server: covers, dates and durations
-            already formatted, and one `<a href>` per trip. A vertical column, so
-            "all reachable without horizontal scrolling" is a property of the
-            layout rather than of a scroll position.
+            The trip's own body, rendered by the server — its description, its
+            photos, and the « Aussi à cet endroit » block when its marker overlaps
+            another. A vertical column, so "all reachable without horizontal
+            scrolling" is a property of the layout rather than of a scroll
+            position.
           */}
-              <div className={styles.panelBody}>{activeZone.body}</div>
+              <div className={styles.panelBody}>{activePanel.body}</div>
             </div>,
             document.body
           )
