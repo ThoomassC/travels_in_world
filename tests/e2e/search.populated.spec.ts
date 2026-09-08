@@ -305,3 +305,52 @@ test("the open panel has no WCAG 2.2 AA violation, in either theme", async ({ pa
     expect(report.passes).toBeGreaterThan(10);
   }
 });
+
+/**
+ * **The focus ring is on the pill and not inside it**, which is a defect the owner
+ * reported by looking at it: *« quand on clique sur la barre de recherche on a un
+ * carré noir qui apparaît »*. The library's recipe was landing on the bare
+ * `<input>` — a sharp-cornered black rectangle inside a rounded teal pill.
+ *
+ * Only a browser can answer this: `:focus-visible` and `:has()` are both pseudo-
+ * classes jsdom does not evaluate, and the whole question is which of two nested
+ * elements the ring is painted on.
+ *
+ * The ring is *moved*, never removed — 2.4.7 — so both halves are asserted here.
+ *
+ * PROVEN BY DELIBERATE FAILURE, by restoring the rule that produced the report:
+ *
+ *   // src/components/search/site-search.module.css
+ *   -.searchField:focus,
+ *   -.searchField:focus-visible { outline: none; box-shadow: none; }
+ *   +.searchField:focus { outline: none; }
+ *   +.searchField:focus-visible { outline: 3px solid var(--focus-outer); outline-offset: 4px; }
+ *
+ *   npx playwright test --config playwright.content.config.ts search.populated
+ *     -> 1 failed | 12 passed
+ *        "the input still draws its own ring: expected 'solid' to be 'none'"
+ */
+test("clicking the field rings the pill and never the input inside it", async ({ page }) => {
+  await page.goto("/fr");
+
+  await page.getByLabel(S.field).click();
+
+  const field = page.getByLabel(S.field);
+  const frame = field.locator("xpath=ancestor::label[1]");
+
+  const inputRing = await field.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return { outline: style.outlineStyle, shadow: style.boxShadow };
+  });
+  const frameRing = await frame.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return { outline: style.outlineStyle, width: style.outlineWidth, shadow: style.boxShadow };
+  });
+
+  expect(inputRing.outline, "the input still draws its own ring").toBe("none");
+  expect(inputRing.shadow).toBe("none");
+
+  expect(frameRing.outline, "the pill has no focus ring at all").toBe("solid");
+  expect(Number.parseFloat(frameRing.width)).toBeGreaterThanOrEqual(2);
+  expect(frameRing.shadow).not.toBe("none");
+});

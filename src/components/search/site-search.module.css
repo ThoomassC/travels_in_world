@@ -115,18 +115,41 @@
 }
 
 /**
- * The caret's own ring is enough: the frame already lights up on `:focus-within`,
- * and a second outline around a control whose border has just changed reads as
- * two states rather than one. The focus ring itself is untouched — this only
- * stops the browser's default *inner* outline on the bare input.
+ * **THE FOCUS RING BELONGS TO THE PILL, NOT TO THE BARE INPUT** — and the owner
+ * saw what happens when it does not: *« quand on clique sur la barre de recherche
+ * on a un carré noir qui apparaît, cela ne fait pas propre »*.
+ *
+ * The library's recipe is an `outline` plus two rings in the `box-shadow`, and it
+ * is applied globally to `:focus-visible`. On the bare `<input>` that draws it
+ * around the *text box* — a low, sharp-cornered rectangle sitting inside a rounded
+ * teal pill, in `--focus-outer`, which is black in the light theme. A black square
+ * inside the control, exactly as reported.
+ *
+ * So the input's own ring is suppressed and the same recipe is put on the frame,
+ * where it follows the pill's `999px` radius and surrounds the thing a reader
+ * thinks of as the control. **Suppressed and re-drawn, never suppressed** — 2.4.7
+ * is not negotiable, and a text input matches `:focus-visible` on a *click* too
+ * (typing follows a click, so browsers show the ring either way), which is the
+ * exact case the owner was looking at.
+ *
+ * `:has()` rather than `:focus-within` for the ring: `:focus-within` is also true
+ * when the reader arrowed down into the suggestions, and a ring around an empty
+ * field while the focus is three rows below it points at the wrong thing. The
+ * border below is what `:focus-within` drives, and that one *should* stay lit for
+ * the whole interaction.
  */
-.searchField:focus {
+.searchField:focus,
+.searchField:focus-visible {
   outline: none;
+  box-shadow: none;
 }
 
-.searchField:focus-visible {
+.searchFrame:has(.searchField:focus-visible) {
   outline: 3px solid var(--focus-outer);
-  outline-offset: 4px;
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 2px var(--focus-inner),
+    0 0 0 5px var(--focus-outer);
 }
 
 /* -----------------------------------------------------------------------------
