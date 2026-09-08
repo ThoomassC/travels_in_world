@@ -205,6 +205,50 @@ Ce que ce relevé a en revanche mis au jour, et qui est **antérieur** à ce tic
   Son travail n'est pas de se lire contre la carte mais de séparer le point de la teinte
   sous lui, et point contre anneau vaut 5,44:1 — c'est cette paire-là qui porte la charge.
 
+### Ce que ce dépôt prend de `@thomascaron/ui`, et ce qu'il n'en prend pas
+
+Question posée assez souvent pour mériter une réponse écrite : **la matière est
+partagée, les pièces ne le sont pas.**
+
+Ce qui est pris, et c'est le gros :
+
+- **`tokens.css`**, en un `@import` — la palette, mais aussi le reset, la recette
+  `:focus-visible` et le bloc `prefers-reduced-motion`. C'est pourquoi la feuille
+  locale ne doit redéclarer aucun des trois.
+- **`@thomascaron/ui/contract`**, importé par `tests/styles/colour-contract.test.ts` :
+  le calcul de contraste et la lecture d'une feuille de jetons. Dépendance de
+  développement, zéro octet côté client.
+
+Ce qui n'est **pas** pris — les onze composants — et la raison de chacun, vérifiée
+plutôt que supposée :
+
+| Composant | Pourquoi il ne va pas ici |
+| --- | --- |
+| `Pill`, `Tag` | `tone` et `variant` sont **requis** et sémantiques (succès / alerte / danger ; mesuré / proposé / ouvert), chacun avec son glyphe ✓ ▲ ✕ ◆ ◇ ○. Les pastilles de ce site sont des **boutons radio de filtre** : « France, 7 voyages » n'est pas un état, et le glyphe y serait un contresens. |
+| `Field`, `Input`, `Select`, `Textarea`, `Checkbox` | Ce site n'a aucun formulaire. Sa seule saisie est la recherche de l'en-tête, dont toute la conception consiste à déplacer l'anneau de focus **hors** de l'`<input>`, sur la pilule qui l'entoure — ce que `.tc-input` défait. |
+| `Button` | Les deux seuls boutons sont la croix du panneau (icône seule, 44 × 44) et un `<summary>`. `tc-btn` est dimensionné pour du texte. |
+| `Card` | Un `<div>` avec fond, liseré et rayon. Les fiches d'ici sont des `<article>` qui portent déjà tout ça **plus** une couverture, un recouvrement de lien et un badge. L'enveloppe ajouterait un `<div>` et rien d'autre. |
+| `Message` | **Il code son préfixe de ton en français** — « Attention : », posé en dur dans la librairie et lu par les technologies d'assistance. Sur un site en trois langues, un lecteur anglophone l'entendrait avant sa phrase anglaise. |
+
+Et le coût qui décide du reste : **`ui.css` pèse 7 700 octets brotli, dont 3 467
+de `.tc-doc-*`** — la feuille de la page de démonstration de la librairie, que ce
+site ne rendra jamais. La payer sur chaque document de chaque locale pour
+atteindre une classe utilitaire n'est pas un échange que les budgets d'ici font.
+
+**Conséquence, et c'est là qu'est le garde** : la recette « masqué visuellement »
+est recopiée **neuf fois** dans les modules CSS de `src/`. Recopier est le bon
+choix ici, et c'est aussi exactement comme ça qu'une palette dérive — l'en-tête du
+contrat raconte que six jetons ont divergé sous un commentaire qui promettait le
+contraire. `tests/styles/shared-recipes.test.ts` fait donc de la librairie
+l'autorité sur ces neuf copies : il lit `.tc-visually-hidden` dans `ui.css`, exige
+que chacune déclare exactement la même chose, et refuse en particulier
+`display: none` ou `visibility: hidden` à la place de `clip-path`, qui sortiraient
+le texte de l'arbre d'accessibilité. Prouvé par échec délibéré dans les deux sens.
+
+Ce qui rendrait plus de choses possibles, du côté de la **librairie** et non
+d'ici : des libellés de ton localisables sur `Message`, et `ui.css` livré sans les
+styles de sa documentation.
+
 **Le garde, c'est `tests/styles/colour-contract.test.ts`**, et il a deux moitiés. Il
 recalcule 25 paires depuis la feuille assemblée, sur le support **composé** où chaque encre
 vit vraiment ; et il exige que tout `N.NN:1` écrit dans `src/**` soit enregistré dans sa
