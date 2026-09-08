@@ -1,0 +1,120 @@
+/* =============================================================================
+   The list of visited countries — one row per country, its silhouette beside its
+   name.
+
+   No colour is declared here: every value comes from `src/styles/tokens.css`,
+   which imports the shared palette. The ink-on-surface pairs this file uses are
+   the ones `src/app/[locale]/villes/page.module.css` and
+   `src/components/trips/trip-card.module.css` already measure and register in
+   `tests/styles/colour-contract.test.ts` — the rows are the same control, at a
+   different grain, so they reuse the pairs rather than restating their numbers.
+
+   The land and its coast are `--surface` on `--control-border`, which is what
+   `world-map.module.css` paints the planisphere with and what the search's
+   vignette copies. Copying the *tokens* and not the colours is what keeps the
+   three drawings in step, and what keeps a fourth colour out of the contract.
+   ============================================================================ */
+
+/**
+ * The same grid as the places listing, and deliberately: the two are sibling
+ * indexes of the same collection at two grains, and a reader moving between them
+ * should meet the same row.
+ *
+ * `minmax(15rem, 1fr)` in `rem` so the floor grows with a reader's larger default
+ * size: at 200 % zoom the grid collapses to one column instead of clipping a
+ * name.
+ */
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/**
+ * The whole row is the target — drawing, name and counts together.
+ *
+ * `min-block-size: 2.75rem` — 44 px at the root size — the number the map's
+ * markers, the country pills and the rows of `/villes` already carry. WCAG 2.2
+ * level AA asks 24 px of 2.5.8 and these are not exempt as inline text links,
+ * being laid out as blocks; matching what the rest of the site spends costs
+ * nothing and keeps one number in the project.
+ *
+ * `text-decoration: none` is paid for: the border and the fill make the row read
+ * as a control rather than as running text. `--control-border` and not
+ * `--border-subtle`, whose declaration in the shared sheet marks it
+ * decorative-only — this border is the row's only boundary.
+ */
+.link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-block-size: 2.75rem;
+  block-size: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-accent);
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+/**
+ * Hover changes the fill and never the border — a decision taken once for this
+ * whole site and recorded on the rows of `/villes`: swapping the border to
+ * `--accent-quiet-border` took a row's only visible boundary below the 3:1 of
+ * 1.4.11 in both themes, so pointing at it made the row *less* delimitable.
+ */
+.link:hover {
+  background: var(--accent-quiet);
+}
+
+/**
+ * The silhouette, at the size the vignette of a suggestion is drawn at plus a
+ * little: 2.5 rem is a row's height and this sits beside a name and two counts.
+ *
+ * `flex: none` so it never shrinks under a long country name, and the `1`
+ * stroke-width with `non-scaling-stroke` for the reason the map records — the
+ * outline is drawn in a forty-unit box and a reader with a larger default type
+ * size renders it bigger; without this the coastline thickens with the drawing
+ * instead of staying a hairline.
+ */
+.tile {
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  flex: none;
+}
+
+.tile path {
+  fill: var(--panel-surface);
+  stroke: var(--control-border);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.name {
+  font-weight: var(--weight-medium);
+}
+
+/**
+ * The two counts. `--text-muted` on the surface the row actually sits on — the
+ * pair `/villes` measures and the colour contract recomputes from the shipped
+ * sheet. `--text-sm` and not `--text-xs`, which at 12 px would be the one thing
+ * on this page a reader has to lean in for.
+ *
+ * `margin-inline-start: auto` is deliberately absent, for the reason the places
+ * listing gives: pushing the number to the right edge of a grid cell looks tidy
+ * and puts a variable gap between a name and its own count, which is the pair a
+ * reader compares across rows.
+ */
+.counts {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}

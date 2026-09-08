@@ -769,16 +769,24 @@ test.describe("the tooltip", () => {
      * inline axis with `overflow-x: clip` and an `overflow-clip-margin` wide
      * enough for a marker's own overhang.
      */
-    await page.setViewportSize({ width: 320, height: 800 });
+    /**
+     * **769 px and not 320, since the marker layer became a desktop layer.**
+     * Below 768 px there are no markers to hover and therefore no tooltip to
+     * overflow — `world-map.module.css` carries the measurement. 769 is now the
+     * narrowest width at which this can go wrong, which makes it the right one to
+     * check: the tooltip is still centred on its marker and a marker near the
+     * frame's edge still pushes it outward.
+     */
+    await page.setViewportSize({ width: 769, height: 800 });
     await page.goto("/fr");
 
     /**
-     * `force: true`, and the reason is the overlap this ticket inherits: at 320 px
-     * a 44 px target is 16 % of the map's width, so the markers cover each other
-     * and Playwright's hit-target check refuses to aim at a specific one. Forcing
-     * still moves the real pointer to the real coordinates, which is all this test
-     * needs — some tooltip is shown, and the question is only whether the document
-     * got wider.
+     * `force: true`, and the reason is the overlap this ticket inherits: a 44 px
+     * target is a large fraction of a narrow map's width, so the markers cover
+     * each other and Playwright's hit-target check refuses to aim at a specific
+     * one. Forcing still moves the real pointer to the real coordinates, which is
+     * all this test needs — some tooltip is shown, and the question is only
+     * whether the document got wider.
      */
     const markers = page.locator("a[data-trip]");
     const count = await markers.count();
@@ -914,17 +922,34 @@ test.describe("zoom and pan", () => {
    * this test. `page.setViewportSize` is enough: no second Playwright project,
    * so the rest of the suite keeps running once against one build.
    */
+  /**
+   * **`marks` is how many markers the width is expected to paint, and zero is a
+   * real expectation rather than a skip.**
+   *
+   * Below 768 px the marker layer is hidden — `world-map.module.css` carries the
+   * measurement: thirteen 44 px targets inside 130 × 98 px on a 390 px screen is
+   * not a map a finger can use, so the drawing goes back to being the inert
+   * illustration `docs/adr/0003` describes and the countries list under it
+   * carries the navigation. The ratio invariant above is untouched by that and is
+   * still the subject of this case at a phone's width; the marker arithmetic
+   * simply has nothing to measure there, and `0` pins that instead of hiding it.
+   *
+   * 769 px is the narrowest width that still paints them, so it is where the
+   * marker half of this case now lives — one pixel above the breakpoint, which is
+   * exactly where a regression in either direction would show.
+   */
   const NARROW_VIEWPORTS = [
-    // The phone the ticket's manual checks use, and the size the `touch` block
-    // at the bottom of this file already runs at.
-    { label: "390 x 844", width: 390, height: 844 },
+    // The phone the ticket's manual checks use.
+    { label: "390 x 844", width: 390, height: 844, marks: 0 },
     // The floor this file already keeps for the tooltip's overflow, at the same
     // height, so a failure here means the width and not a second variable.
-    { label: "320 x 844", width: 320, height: 844 },
+    { label: "320 x 844", width: 320, height: 844, marks: 0 },
+    // One pixel above the breakpoint: the narrowest layout that still has markers.
+    { label: "769 x 844", width: 769, height: 844, marks: 5 },
   ] as const;
 
   for (const viewport of NARROW_VIEWPORTS) {
-    test(`the canvas keeps the frame's exact ratio at ${viewport.label}, so no marker leaves the drawing`, async ({
+    test(`the canvas keeps the frame's exact ratio at ${viewport.label}`, async ({
       page,
     }) => {
       // The viewport before the navigation: `block-size` is a `dvh` calculation,
@@ -970,6 +995,11 @@ test.describe("zoom and pan", () => {
         );
 
         const marks = [...document.querySelectorAll<HTMLElement>("a[data-trip]")]
+          // Painted ones only: below the breakpoint the layer is `display: none`,
+          // and a hidden element's box is 0 × 0 at the origin — which would read
+          // as a marker hundreds of pixels off its country rather than as one
+          // that is not drawn at all.
+          .filter((link) => link.getClientRects().length > 0)
           .map((link) => {
             const item = link.closest("li") ?? link;
             const markBox = item.getBoundingClientRect();
@@ -1015,10 +1045,13 @@ test.describe("zoom and pan", () => {
       }, MAP_DRAWING);
 
       expect(measured).not.toBeNull();
-      // Five markers since TIW-18, the untold trip's included — the same count
-      // the tooltip's overflow test walks, and the guard that an empty list is
-      // not what makes the loop below pass.
-      expect(measured?.marks ?? []).toHaveLength(5);
+      /**
+       * Five above the breakpoint — the untold trip's marker included, which is
+       * the whole point of TIW-18's state — and none below it. Asserted either
+       * way, so an empty list is never what makes the loop below pass, and a
+       * marker layer that came back on a phone fails here rather than silently.
+       */
+      expect(measured?.marks ?? []).toHaveLength(viewport.marks);
 
       /**
        * Carried into every message below, because the number that explains the
@@ -1282,8 +1315,21 @@ test.describe("the state a shared address restores", () => {
   });
 });
 
+/**
+ * **A touch screen wide enough to still carry markers.**
+ *
+ * This block ran at 390 × 844 until the marker layer became a desktop layer:
+ * below 768 px the markers are hidden, because thirteen 44 px targets inside
+ * 130 × 98 px is not a map a finger can use — the measurement is in
+ * `world-map.module.css`. A tap on a marker is therefore a tablet gesture now,
+ * and 834 × 1112 is one. The pan and pinch cases move with it: they are about the
+ * drawing, which a phone still has, but keeping the block at one viewport keeps
+ * one `test.use` and one reason to read.
+ *
+ * What a phone does instead is asserted below, at 390.
+ */
 test.describe("touch", () => {
-  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test.use({ hasTouch: true, viewport: { width: 834, height: 1112 } });
 
   test("one finger leaves the map alone; two move it", async ({ page }) => {
     /**
@@ -1436,4 +1482,77 @@ test("the interactive map has no WCAG 2.2 AA violation, panel open, in either th
       expect(report.passes).toBeGreaterThan(10);
     }
   }
+});
+
+/**
+ * **What a phone gets instead of markers**, and it is the half of the change that
+ * would otherwise be guarded by nothing.
+ *
+ * Hiding the marker layer below 768 px is only defensible because something else
+ * carries the navigation there. If the countries list ever stopped rendering — a
+ * media query edited, a wrapper removed, the assembly throwing — the home page on
+ * a phone would become a tinted drawing with no way into the journal at all, and
+ * every case above would still be green: they measure widths where the markers
+ * are.
+ */
+test.describe("the phone's map", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("hides the markers and hands the navigation to the countries list", async ({ page }) => {
+    await page.goto("/fr");
+
+    // The drawing is still there — it is an illustration now, not an interface.
+    await expect(page.locator(MAP_DRAWING)).toBeVisible();
+
+    /**
+     * **The markers stay in the document and stop being painted**, and the
+     * difference is worth asserting both ways rather than counting nodes.
+     * `toHaveCount` is a DOM count: `display: none` elements match a locator just
+     * as well as visible ones, so a naive `toHaveCount(0)` here fails against
+     * correct code — measured, it received 5.
+     *
+     * That they remain in the DOM is not an accident either: it is why a shared
+     * `/fr?voyage=<slug>` address still restores that trip's panel on a phone,
+     * the one path `world-map.module.css` calls out as left open.
+     */
+    const markers = page.locator("figure a[data-trip]");
+    await expect(markers).toHaveCount(5);
+    const painted = await markers.evaluateAll(
+      (nodes) => nodes.filter((node) => node.getClientRects().length > 0).length
+    );
+    expect(painted, "no marker is painted at a phone's width").toBe(0);
+
+    /**
+     * One row per country the fixture reaches, each one a real link to that
+     * country's own page. Counted rather than sampled: a list that rendered one
+     * row would pass a "some link exists" assertion while having lost four.
+     */
+    const rows = page.locator('main a[href^="/fr/pays/"]');
+    await expect(rows).toHaveCount(5);
+    await expect(rows.first()).toBeVisible();
+
+    /**
+     * WCAG 2.5.8 — these are the only targets a finger has on this screen now, so
+     * the floor matters more here than anywhere else on the page.
+     */
+    for (let index = 0; index < (await rows.count()); index += 1) {
+      const box = await rows.nth(index).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+
+    // And it leads somewhere real, followed rather than assumed.
+    await rows.first().click();
+    await expect(page).toHaveURL(/\/fr\/pays\/[a-z-]+$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  });
+
+  test("gives the page no horizontal scrollbar", async ({ page }) => {
+    await page.goto("/fr");
+
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+    );
+
+    expect(overflows).toBe(false);
+  });
 });

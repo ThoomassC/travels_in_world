@@ -208,28 +208,39 @@ describe("the header carries both the brand and the nav", () => {
     expect(home).toHaveLength(3);
   });
 
-  it("names the two grains of the collection, and only one of them is a new URL", () => {
+  it("sends each grain of the collection to the page that bears its name", () => {
     renderBrand(<SiteNav locale={defaultLocale} searchEntries={[]} searchCountries={[]} />);
 
     /**
-     * TIW-38 replaced « Tous les voyages » with two entries. The pair is pinned
-     * together because the interesting fact is not that either exists — it is
-     * that they point at two different pages while only ONE address was created.
+     * TIW-38 replaced « Tous les voyages » with two entries, and « Pays » then
+     * pointed at `/voyages` — the catalogue grouped by country. This case pinned
+     * that, with the argument that the label had changed and the address had
+     * not.
      *
-     * « Pays » is the catalogue, at the URL it has always had: every marker on
-     * the map and every card in the journal links into `/voyages`, and
-     * `src/i18n/paths.ts` records why renaming that segment was refused. A
-     * regression that "renamed the page" by moving its URL shows up here as a
-     * changed href under an unchanged label.
+     * **The country pages ended it.** `/pays` is a page now: an index of the
+     * countries the journal has reached, each row opening that country's own
+     * page. A tab reading « Pays » that led anywhere else would be the third
+     * name for one thing the whole change set out to remove.
+     *
+     * What the pair still pins is the property worth pinning: each label leads to
+     * the page that bears its name, so a regression that reconnects the tab to
+     * the catalogue shows up as a changed href under an unchanged label.
+     *
+     * `/voyages` keeps its own address and every link into it — the home
+     * listing's « voir tous les voyages », every city row, every country page —
+     * it simply has no tab of its own, which is what four destinations on a
+     * 360 px phone allows.
      */
     const nav = screen.getByRole("navigation");
 
-    expect(nav.querySelector(`a[href="/${defaultLocale}/voyages"]`)).toHaveTextContent(
+    expect(nav.querySelector(`a[href="/${defaultLocale}/pays"]`)).toHaveTextContent(
       frMessages.trips.navCountries
     );
     expect(nav.querySelector(`a[href="/${defaultLocale}/villes"]`)).toHaveTextContent(
       frMessages.trips.navPlaces
     );
+    // And the tab really left the catalogue behind, rather than both existing.
+    expect(nav.querySelector(`a[href="/${defaultLocale}/voyages"]`)).toBeNull();
   });
 
   it("carries the colophon on every page, because the layout renders this nav", () => {

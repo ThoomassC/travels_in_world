@@ -1,6 +1,8 @@
 import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
 import type { Continent } from "@/domain/continent";
+import { localePathname } from "@/i18n/pathname";
+import { countryPath, countrySlugsByCode } from "@/i18n/paths";
 import type { Locale } from "@/i18n/routing";
 import { buildCatalogue } from "./catalogue";
 import type { TripEntry } from "./entry";
@@ -118,6 +120,53 @@ export function TripCatalogue({
   const singleGroup = groups.length === 1;
   const tripHeadingLevel = singleGroup ? 3 : 4;
 
+  /**
+   * **The one door this listing opens onto the country pages** (TIW-39).
+   *
+   * Every country here already has a heading and a section; a page about that
+   * country is what a reader who scrolled to « Belgique » is looking for, so the
+   * heading becomes the link and nothing else on the site does. The map, the cards
+   * and `/villes` are deliberately left alone — one door, in the place a reader is
+   * already looking.
+   *
+   * Resolved once for the whole listing rather than per heading, because
+   * `countrySlugsByCode` is also where two countries claiming one address, and a
+   * published address ICU has moved, are refused — asking it once per country
+   * would mean sixty chances to catch the collision and none to see it.
+   *
+   * **The FRENCH name feeds the slug in every locale**, which is why this resolver
+   * is pinned to `"fr"` while the heading above reads `countryName(locale)`: one
+   * address per page, like every segment of this site. See `@/i18n/paths`.
+   */
+  const countrySlugs = countrySlugsByCode(
+    groups.flatMap((group) => group.countries.map((country) => country.countryCode)),
+    (code) => countryNameOf("fr", code)
+  );
+
+  /**
+   * The heading's content: the country's name, wrapped in a link to its page.
+   *
+   * A link *inside* the heading and not a heading inside a link: the accessible
+   * name of the heading has to stay the country's name — that is what a reader
+   * navigating by heading hears — and wrapping the other way round would announce
+   * the same string twice, once as a link and once as a heading.
+   *
+   * The unlinked branch is unreachable, the map having been built from these very
+   * codes; the bare name is the honest answer to a lookup that failed rather than
+   * an `href` reading `/fr/pays/undefined`.
+   */
+  const countryLabel = (countryCode: string, countryName: string) => {
+    const slug = countrySlugs.get(countryCode);
+
+    return slug === undefined ? (
+      countryName
+    ) : (
+      <a className={styles.countryLink} href={localePathname({ href: countryPath(slug), locale })}>
+        {countryName}
+      </a>
+    );
+  };
+
   return (
     <div className={styles.catalogue}>
       {groups.map((group) => (
@@ -190,10 +239,12 @@ export function TripCatalogue({
               >
                 {singleGroup ? (
                   <h2 className={`${styles.countryHeading} ${styles.countryHeadingTop}`}>
-                    {country.countryName}
+                    {countryLabel(country.countryCode, country.countryName)}
                   </h2>
                 ) : (
-                  <h3 className={styles.countryHeading}>{country.countryName}</h3>
+                  <h3 className={styles.countryHeading}>
+                    {countryLabel(country.countryCode, country.countryName)}
+                  </h3>
                 )}
 
                 {/*

@@ -52,10 +52,20 @@ const START = "/fr";
 /**
  * A hard stop on the crawl, so a cycle or an unexpected route explosion fails as
  * a number rather than as a timeout. The fixture holds five trips, four of which
- * have a récit, so the real count is seven documents per locale — and the
- * language menu links the three locales to each other, which makes twenty-one.
+ * have a récit, so the real count was seven documents per locale — and the
+ * language menu links the three locales to each other, which made twenty-one.
+ *
+ * **The country pages added six per locale** — the `/pays` index and one page per
+ * country the fixture reaches (Bolivie, Islande, Japon, Maroc, Pérou) — which
+ * takes the real count to thirteen per locale and thirty-nine in all. The old
+ * ceiling of 40 was one document away from the truth, so it fired as « the crawl
+ * found more documents than this fixture can hold » before any dead link could be
+ * reported: a guard that hides the thing it guards.
+ *
+ * Raised to leave the same kind of room it had before rather than to just clear
+ * today's number.
  */
-const MAX_PAGES = 40;
+const MAX_PAGES = 60;
 
 type Reference = {
   /** The page the link was found on, so a failure names where to look. */
@@ -217,10 +227,23 @@ test("no rendered link on any page leads to an address that does not exist", asy
    *
    * Written out rather than counted, so the day a route or a locale arrives
    * somebody has to decide whether a reader should reach it from `/fr` at all.
+   *
+   * **The country pages are that day.** Six per locale — the `/pays` index the
+   * « Pays » tab now leads to, and one page per country the fixture reaches — and
+   * the decision is yes: the index is a tab, so every reader meets it from the
+   * first screen, and each of its rows is the way into a country. They are
+   * reachable from `/fr` by design and not by accident, which is exactly what
+   * this list is here to make somebody say out loud.
    */
   expect([...crawled].sort()).toEqual([
     "/en",
     "/en/a-propos",
+    "/en/pays",
+    "/en/pays/bolivie",
+    "/en/pays/islande",
+    "/en/pays/japon",
+    "/en/pays/maroc",
+    "/en/pays/perou",
     "/en/villes",
     "/en/voyages",
     "/en/voyages/islande-2022",
@@ -229,6 +252,12 @@ test("no rendered link on any page leads to an address that does not exist", asy
     "/en/voyages/perou-bolivie-2023",
     "/es",
     "/es/a-propos",
+    "/es/pays",
+    "/es/pays/bolivie",
+    "/es/pays/islande",
+    "/es/pays/japon",
+    "/es/pays/maroc",
+    "/es/pays/perou",
     "/es/villes",
     "/es/voyages",
     "/es/voyages/islande-2022",
@@ -237,6 +266,12 @@ test("no rendered link on any page leads to an address that does not exist", asy
     "/es/voyages/perou-bolivie-2023",
     "/fr",
     "/fr/a-propos",
+    "/fr/pays",
+    "/fr/pays/bolivie",
+    "/fr/pays/islande",
+    "/fr/pays/japon",
+    "/fr/pays/maroc",
+    "/fr/pays/perou",
     "/fr/villes",
     "/fr/voyages",
     "/fr/voyages/islande-2022",

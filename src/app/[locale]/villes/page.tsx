@@ -4,7 +4,7 @@ import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { FacetFilter } from "@/components/filters/facet-filter";
 import { buildFacetIndex, byLabel } from "@/components/filters/facets";
-import { placeIdentity, tallyVisitedPlaces } from "@/components/places/places";
+import { placeIdentity, repeatedStayCount, tallyVisitedPlaces } from "@/components/places/places";
 import { PAGE_MARK } from "@/components/site/site-nav";
 import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { loadTrips } from "@/content/trips";
@@ -248,6 +248,11 @@ export default async function PlacesPage({ params }: { params: Promise<LocalePar
                   ? `${tripsPath()}#voyage-${onlyTrip}`
                   : tripsPath();
 
+              // `null` for a place visited once, which is thirteen of the
+              // fourteen: see `repeatedStayCount` for why the number is dropped
+              // rather than repeated down the page.
+              const stays = repeatedStayCount(place);
+
               return (
                 /*
                 The key is the row's identity and not the place's name: two
@@ -272,10 +277,29 @@ export default async function PlacesPage({ params }: { params: Promise<LocalePar
                 */}
                   <a className={styles.link} href={localePathname({ href, locale })}>
                     <span className={styles.name}>{place.name}</span>{" "}
-                    <span className={styles.country}>{place.countryName}</span>{" "}
-                    <span className={styles.trips}>
-                      {t("placeTrips", { count: place.tripSlugs.length })}
-                    </span>
+                    <span className={styles.country}>{place.countryName}</span>
+                    {/*
+                      **The count is printed only when it is above one**, and that
+                      is a reading of what a column says rather than a saving of
+                      pixels. Thirteen of the fourteen places in this journal hold
+                      exactly one stay, so « 1 séjour » was set thirteen times down
+                      the page: a value that never varies carries no information,
+                      it only teaches the eye to skip the line it sits on. Left
+                      only where it differs, the number becomes what it always
+                      meant — *this* place, you went back to.
+
+                      The plural branch of `places.placeTrips` therefore stays and
+                      its singular branch stops being rendered. The key keeps both:
+                      the message is what the language does with a count, and a
+                      catalogue that dropped the singular would be a catalogue
+                      lying about French.
+                    */}
+                    {stays === null ? null : (
+                      <>
+                        {" "}
+                        <span className={styles.trips}>{t("placeTrips", { count: stays })}</span>
+                      </>
+                    )}
                   </a>
                 </li>
               );

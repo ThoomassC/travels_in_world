@@ -96,21 +96,23 @@
  * The stacked bar's real height, from 26rem to 58rem. See the token's own
  * comment above for why this exists and what it cost before it did.
  *
- * **10.75 rem since 7 September 2026, and it was 12.5.** The medallion — a 6.5 rem
- * disc hanging past the bar's lower edge — went with the "Deux temps" lock-up the
- * owner chose, and the stacked bar lost 28 px with it: measured at 900 px and at
- * 640 px, 172 px against the 200 the token still claimed. Nothing looked wrong,
- * because over-claiming makes the map *shorter* rather than cropped — it simply
- * gave away 28 px of the one thing the home page is for.
+ * **7 rem since 8 September 2026.** It was 12.5, then 10.75, and each drop is the
+ * same lesson: over-claiming makes the map *shorter* rather than cropped, so it
+ * gives away viewport from the one thing the home page is for, and nothing looks
+ * wrong. 12.5 → 10.75 was the medallion leaving with the "Deux temps" lock-up;
+ * 10.75 → 7 is the bar going from three rows to two — the mark and the toolbar
+ * now share the first line and the links have the second, because the three-row
+ * bar took 228 px of a 390 × 844 phone, 27 % of the screen, before a word of the
+ * page. Measured at 900 px and 640 px: 112 px against the 172 the token claimed.
  *
- * The guard is what noticed, on the first run after the change, and it is the
- * whole reason this token has one: `tests/e2e/map-interaction.spec.ts` measures
- * the real bar against this value at four widths and fails if they disagree by
- * more than a pixel.
+ * The guard is what noticed, on the first run after each of those changes, and it
+ * is the whole reason this token has one: `tests/e2e/map-interaction.spec.ts`
+ * measures the real bar against this value at four widths and fails if they
+ * disagree by more than a pixel.
  */
 @media (max-width: 58rem) {
   :root {
-    --chrome-height: 10.75rem;
+    --chrome-height: 7rem;
   }
 }
 

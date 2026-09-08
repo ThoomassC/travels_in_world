@@ -345,6 +345,15 @@
  * never underlines its own entry.
  */
 :global(body:has(main[data-page="carte"])) .link[data-nav="carte"],
+/*
+  `pays` is the countries index; the tab that used to point at `/voyages` points
+  here now. The `voyages` line below it stays and matches nothing, on purpose:
+  `/voyages` is still a page — reached from the home listing, from every city row
+  and from every country page — it simply has no tab of its own any more, and a
+  page with no tab underlines nothing. Marking « Pays » current there would say
+  the reader is on the countries index when they are not.
+*/
+:global(body:has(main[data-page="pays"])) .link[data-nav="pays"],
 :global(body:has(main[data-page="voyages"])) .link[data-nav="voyages"],
 :global(body:has(main[data-page="villes"])) .link[data-nav="villes"],
 :global(body:has(main[data-page="a-propos"])) .link[data-nav="a-propos"] {
@@ -670,5 +679,104 @@
      entry under the middle of the ones above it. */
   .list {
     justify-content: center;
+  }
+}
+
+/**
+ * **Two rows instead of three, everywhere the bar is not wide.**
+ *
+ * Same `58rem` as the block above, and deliberately so. Scoped to `48rem` first —
+ * phones only — this left a discontinuity a reader would meet by resizing a
+ * window: 768 px gave a 112 px bar and 769 px gave 172, so a *wider* window was
+ * served the worse layout. 58 rem is where this sheet already decides the bar is
+ * not wide; above it, at 960 px and beyond, nothing here applies and the desktop
+ * bar stays the 64 px it has always been. Measured at 769, 800 and 928.
+ *
+ * The block above stacks the bar into three rows under 58 rem: the mark on its
+ * own line, then the links, then the language menu. Measured on a phone, that
+ * came to **228 px, 27 % of a 390 × 844 screen**, before a single word of the
+ * page — and it pushed the map, which is the whole point of this site, down to a
+ * 170 px strip.
+ *
+ * Two rows instead of three. The mark and the toolbar share the first line: they
+ * are on overlapping grid areas — the arrangement the wide layout already uses —
+ * so the mark sits at the inline start and the search and language controls at
+ * the inline end, with nothing between them to wrap. The links take the second.
+ */
+@media (max-width: 58rem) {
+  /* Back onto one another, undoing the `grid-area: auto` of the 58 rem block. */
+  .brandZone,
+  .inner {
+    grid-area: 1 / 1;
+  }
+
+  .bar {
+    row-gap: 0;
+    padding-block: var(--space-2);
+  }
+
+  .brandZone {
+    justify-self: start;
+    align-self: start;
+    /* The wide rule reserves a gutter wide enough to line the mark up with the
+       page's measure. There is no measure to line up with at this width. */
+    padding-inline: var(--space-3);
+  }
+
+  .inner {
+    min-block-size: 0;
+    padding-inline: var(--space-3);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "language" "links";
+    gap: var(--space-2);
+  }
+
+  /* The toolbar keeps the inline end of the first row; the links get the whole
+     of the second. Set per area rather than through `justify-items`, which would
+     shrink the nav to its content and un-centre it. */
+  .chromeEnd,
+  .language {
+    justify-self: end;
+  }
+
+  .inner > nav {
+    justify-self: stretch;
+  }
+
+  /**
+   * `--space-3` is the rhythm the wide bar uses, and it is what made the four
+   * entries wrap onto two lines here — « À PROPOS » alone on the second, under
+   * the left edge of a centred block. `--space-2` fits the four on one line at
+   * 360 px, which is the narrowest phone this sheet is measured at, and each
+   * label keeps the 12 px of padding that makes its target.
+   */
+  .list {
+    justify-content: center;
+    gap: var(--space-2);
+  }
+
+  /**
+   * **Eleven pixels, and they are the whole difference between one line and
+   * two.** Phones only — above 30 rem the four labels have room to spare, and a
+   * padding trimmed where it is not needed is a target shrunk for nothing.
+   * Measured at 360 px, the narrowest common phone: the four labels come
+   * to 323 px and three `--space-2` gaps to 24, against 336 px of room. Trimming
+   * two pixels of padding from each side of each label gives back 16 and the row
+   * fits.
+   *
+   * The padding is trimmed and never the tracking or the size: 0.08em is already
+   * the smallest tracking that keeps a short upper-case string from reading as
+   * one block, and `--text-sm` is the floor for a label. What is left — 10 px
+   * each side on a 14 px line — still gives every entry a target taller and wider
+   * than the 24 px WCAG 2.5.8 asks of it, which is checked below.
+   *
+   * At 320 px the four still wrap, and that is accepted rather than fixed: the
+   * room is not there without shrinking the type, and a wrapped second line
+   * centred under the first costs 52 px on a layout that has just given back 116.
+   */
+  @media (max-width: 30rem) {
+    .link {
+      padding-inline: calc(var(--space-2) + 2px);
+    }
   }
 }

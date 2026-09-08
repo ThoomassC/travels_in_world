@@ -7,6 +7,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 // strings and cannot tell `src/components/map` from a relative spelling of
 // `src/map`. See the header of `src/components/map/index.ts`.
 import { untoldOnlyCountryCodes, WorldMap, type TripMark } from "@/components/map";
+import { CountryList } from "@/components/countries/country-list";
 import { panelPhotos } from "@/components/photos/collection";
 import { FreshTripBanner } from "@/components/trips/fresh-trip-banner";
 import { ProjectPurpose } from "@/components/site/project-purpose";
@@ -17,6 +18,7 @@ import { loadTrips, listWishedCountries } from "@/content/trips";
 import { freshestTrip } from "@/domain/freshness";
 import { hasStory, visitedPlaces } from "@/domain/trip";
 import { buildWorldGeometry, projectPoint } from "@/map";
+import { countryEntries } from "./pays/entries";
 import { localePathname } from "@/i18n/pathname";
 import { tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
@@ -336,6 +338,25 @@ export default async function HomePage({ params }: HomePageProps) {
           world={{ width: world.width, height: world.height }}
           tripPanels={tripPanels}
         />
+      </div>
+
+      {/*
+        **The map's index on a phone, and only on a phone.**
+
+        Below 768 px the drawing carries no markers — measured, thirteen 44 px
+        targets inside 130 × 98 px on a 390 px screen, and `world-map.module.css`
+        holds the numbers and the argument. What replaces them is not a smaller
+        map but words: one row per country, its silhouette beside its name and its
+        counts, each opening that country's own page. Above the breakpoint this
+        block is `display: none` and leaves the document's accessibility tree, so
+        a desktop reader gains no duplicate of the navigation the map already is.
+
+        The rows are the very ones `/{locale}/pays` renders, through
+        `countryEntries` — one assembly, so the two pages cannot come to order or
+        count the same countries differently.
+      */}
+      <div className={styles.phoneCountries}>
+        <CountryList countries={countryEntries(trips, locale)} locale={locale} />
       </div>
 
       {/*

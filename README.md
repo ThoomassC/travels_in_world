@@ -155,8 +155,12 @@ pages (3/3)`, et le HTML servi est identique — seul `.next/server/app/fr.html`
 `.next/prerender-manifest.json` et exige `/fr` et `/_not-found`. Elle exige un build avant
 elle et ne le fait pas à votre place (branchée en CI par TIW-22). Le même fichier porte le
 budget de charge utile, désormais appliqué aux **deux** routes prérendues et non à `/fr`
-seule : 37,3 Ko brotli de HTML sur `/fr` — les tracés du planisphère, en ligne dans le
-document — et 1,3 Ko sur `/_not-found`, pour un plafond de 100 Ko ; et pour un plafond de 150 Ko de JS
+seule : les tracés du planisphère, en ligne dans le document. Ce chiffre annonçait 37,3 Ko
+sur `/fr` pour un plafond de 100 Ko ; les deux ont changé avec le passage au millésime 50m et
+la valeur est aujourd'hui de **181,6 Kio de tracés dans un document de 196,0 Kio**, pour un
+plafond de 240 Kio réservé aux trois routes qui portent la carte (`MAP_HTML_BUDGET_BYTES`).
+`AGENTS.md` porte le détail et l'histoire de ce budget. `/_not-found` reste à 1,3 Ko sous son
+plafond de 100 Ko ; et pour un plafond de 150 Ko de JS
 initial, 123,2 Ko sur `/fr` (7 chunks) et 111,2 Ko sur `/_not-found` (5 chunks) — chunk
 `noModule` exclu, c'est le bundle de compatibilité que jamais aucun navigateur moderne
 n'exécute et il vaut 34 Ko à lui seul. Chiffres relevés sur `develop` @ `5c5bf34`, après

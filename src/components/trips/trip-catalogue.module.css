@@ -123,6 +123,26 @@
   overflow-wrap: break-word;
 }
 
+/**
+ * The country heading as a link to that country's page (TIW-39).
+ *
+ * `color: inherit`, so a chapter title stays a chapter title: the accent would
+ * make twelve headings read as twelve calls to action down a sixty-entry page,
+ * and the heading's own weight and size already tell a reader what it is. The
+ * underline is what says it is a link, and it is the only such signal — hence
+ * `text-decoration` declared here rather than removed: this one IS running text,
+ * unlike the rows of `/villes`, which are laid out as blocks with a border of
+ * their own.
+ *
+ * `text-underline-offset` so the underline clears the descenders of a name like
+ * « Belgique » at heading size, where the default sits on top of them.
+ */
+.countryLink {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
 .countries {
   display: flex;
   flex-direction: column;

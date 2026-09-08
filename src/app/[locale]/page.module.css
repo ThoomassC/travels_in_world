@@ -37,3 +37,24 @@
   business — and this page no longer has to compute a ratio for a stylesheet it
   does not own, nor pass it through an inline style.
 */
+
+/**
+ * The countries list under the map, and it exists **only** below 768 px.
+ *
+ * Above that the map itself is the index: thirteen markers a pointer can hit,
+ * each opening its trip's panel. Below it the markers are hidden — see
+ * `world-map.module.css` for the measurement that decided it — and this list is
+ * how a reader gets from the home page into the journal. `display: none` above
+ * the breakpoint keeps it out of the desktop document's accessibility tree
+ * entirely, so nothing there gains a duplicate of navigation it already has.
+ */
+.phoneCountries {
+  display: none;
+}
+
+@media (max-width: 48rem) {
+  .phoneCountries {
+    display: block;
+    margin-block-start: var(--space-4);
+  }
+}

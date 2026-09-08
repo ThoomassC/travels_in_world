@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
 import { localePathname } from "@/i18n/pathname";
-import { aboutPath, placesPath, tripsPath } from "@/i18n/paths";
+import { aboutPath, countriesPath, placesPath } from "@/i18n/paths";
 import { locales } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
 import type { SearchEntry } from "@/components/search/entries";
@@ -28,12 +28,20 @@ import styles from "./site-nav.module.css";
  *
  * **`trips` still reads `voyages`, and the entry above it now says « Pays ».**
  * The label of that destination changed with the places listing; its URL did not,
- * and this constant follows the URL. Renaming the key to `countries` would have
- * been a third spelling of one page — the folder is `voyages`, the mark is
- * `voyages`, and only the word a reader clicks is new.
+ * and this constant follows the URL.
+ *
+ * **`countries` joined it when the country pages landed, and `trips` stayed.**
+ * The « Pays » tab used to point at `/voyages`, which is why its key was `trips`
+ * and why the comment above argued against renaming it — one page, one mark. That
+ * argument ended the day `/pays` became a page of its own: the tab now leads
+ * where its word says, and `/voyages` keeps its own mark because it is still a
+ * page, still linked from the home listing, from every city row and from every
+ * country page. It simply no longer has a tab, which is what four destinations
+ * on a phone allows.
  */
 export const PAGE_MARK = {
   map: "carte",
+  countries: "pays",
   trips: "voyages",
   places: "villes",
   about: "a-propos",
@@ -247,17 +255,24 @@ export function SiteNav({ locale, searchEntries, searchCountries }: SiteNavProps
               </a>
             </li>
             {/*
-              « Pays », and it is the same page « Tous les voyages » was: the
-              catalogue groups continent → country → trips, so the label now names
-              what the page has always done rather than restating the site. The
-              URL is untouched — `tripsPath()` is still `/voyages`, which is what
-              every marker on the map and every card links into.
+              « Pays », and it now leads to countries: `/pays`, an index of the
+              countries the journal has reached, each row opening that country's
+              own page. It used to lead to `/voyages`, the full catalogue grouped
+              by country — one page wearing three names, the tab saying « Pays »,
+              the heading « Voyages par pays » and the address `/voyages`.
+
+              **Renaming the tab was the other way out, and it was measured and
+              refused.** « Voyages » is 36 px wider than « Pays » at
+              `--text-sm` upper-cased, and the four labels already fit a 360 px
+              phone with 11 px to spare — the wider word puts the row back onto two
+              lines on every phone, which is the defect `site-nav.module.css` has
+              just spent a media query removing.
             */}
             <li>
               <a
                 className={styles.link}
-                data-nav={PAGE_MARK.trips}
-                href={localePathname({ href: tripsPath(), locale })}
+                data-nav={PAGE_MARK.countries}
+                href={localePathname({ href: countriesPath(), locale })}
               >
                 {t("navCountries")}
               </a>

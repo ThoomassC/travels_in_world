@@ -292,14 +292,45 @@ fichier au build. `npm run test:build` reste ce qui le constate : les cinq route
 toujours prérendues, aucune n'est passée en `ƒ`.
 
 Depuis TIW-12 il y a un **second** budget, que ce paragraphe est le seul endroit à réunir
-avec le premier : les tracés du planisphère sont plafonnés à **34 Ko brotli**, mesurés à
-30,1 Ko avec le millésime `world-atlas` 110m. Ce n'est pas du JS — c'est de la donnée de
-chemin dans le HTML — donc les deux plafonds ne se financent pas l'un l'autre. Le garde est
-`tests/map/world.test.ts` : passer au millésime 50m ferait 182,5 Ko et le rougirait, ce qui
-est voulu.
+avec le premier : les tracés du planisphère. Ce n'est pas du JS — c'est de la donnée de chemin
+dans le HTML — donc les deux plafonds ne se financent pas l'un l'autre.
 
-Une variante qu'on croit hors budget et qui ne l'est pas, mesurée par TIW-30 parce que
-l'ignorer aurait fait rejeter une option pour une mauvaise raison : composer le 110m avec les
+**Ce paragraphe a dit le contraire de la vérité pendant plusieurs tickets, et c'est la raison
+de le lire en entier.** Il annonçait un plafond de 34 Ko, une mesure de 30,1 Ko au millésime
+`world-atlas` 110m, et que « passer au millésime 50m ferait 182,5 Ko et le rougirait, ce qui
+est voulu ». Or le dépôt **est** passé au 50m, le plafond de `tests/map/world.test.ts` a été
+relevé à **200 Kio** en connaissance de cause, et l'en-tête de ce cas porte l'argument. Le
+fichier que tout agent lit en premier décrivait donc un garde qui n'existait plus, et
+promettait un échec qui avait déjà été délibérément levé.
+
+Les chiffres réels, remesurés sur un build de ce dépôt, brotli qualité 11 :
+
+```
+/fr  document 196,0 Kio · tracés 181,6 Kio · 93 % du document · 205 tracés
+/en  document 195,6 Kio · tracés 181,6 Kio · 93 %
+/es  document 197,7 Kio · tracés 181,6 Kio · 92 %
+```
+
+**Le planisphère EST le document d'accueil.** Tout le reste — la navigation, la recherche, la
+carte des balises, les treize fiches de panneau, le pied de page — tient dans les 7 % qui
+restent. C'est le fait le plus important à connaître avant de discuter du poids d'une page de
+ce site, et il ne se devine pas.
+
+Ce que le garde à 200 Kio garde encore, parce qu'un plafond six fois plus haut ne vaut rien
+s'il ne garde rien : **l'arrondi** — au même millésime, à trois décimales, on dépasse
+largement les 200 Kio, donc perdre `createRoundingPathContext` reste un test rouge — et **un
+troisième bump silencieux de millésime**, le 10m mesurant 512,6 Kio. Le relever encore est une
+décision qui porte un nom, pas une réparation.
+
+Ce que ce poids coûte, et l'ordre de grandeur d'un éventuel gain, mesuré par simplification de
+Douglas-Peucker sur les tracés servis : à un epsilon qui reste invisible au zoom maximal du
+lecteur (25×, `MAX_ZOOM_WIDTH_FRACTION = 0.04`), on récupère **14 à 16 %** ; il faut descendre
+le zoom maximal vers 8× pour atteindre −32 %. Personne n'a tranché cet arbitrage : il est
+écrit ici pour qu'il soit tranché sur des chiffres le jour où quelqu'un s'en saisit.
+
+Une variante qu'on croit hors budget et qui ne l'est pas, mesurée par TIW-30 **contre le
+plafond de 34 Ko de l'époque** — la mesure reste vraie, c'est sa référence qui a bougé, et
+elle est conservée telle quelle parce que c'est ce qui la rend lisible : composer le 110m avec les
 **seuls** micro-États du 50m donne **33,0 Ko brotli** (238 tracés), donc _sous_ le plafond. Ce
 n'est pas ce qui a été retenu, et le chiffre est là pour que le prochain lecteur écarte cette
 voie sur ses vrais défauts — il ne resterait que 1,0 Ko de marge sur 34, il faudrait charger

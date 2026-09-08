@@ -1533,3 +1533,40 @@
     border-color: CanvasText;
   }
 }
+
+/**
+ * **On a phone the drawing carries no markers, and that is the honest reading of
+ * a measurement rather than a retreat.**
+ *
+ * Measured on the served page at 390 × 844: the figure is 170 px tall and the
+ * thirteen markers — 44 px targets, WCAG 2.5.8's minimum — all fall inside
+ * 130 × 98 px. Thirteen targets in an area barely three targets wide is not a map
+ * a finger can use; it is a smudge that *looks* like one. At 360 × 780 it is
+ * worse, and the country pins that were the first idea do not fix it either:
+ * Belgium's and Switzerland's own centres are 16 px apart at that width.
+ *
+ * So below 768 px the drawing goes back to being exactly what
+ * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` already says it is — an
+ * inert, `aria-hidden` illustration — and the navigation moves *under* it, into
+ * the list of countries the home page renders there. A country's name set at a
+ * comfortable target beats five pins on a 170 px drawing, and it needs no
+ * collision arithmetic at all.
+ *
+ * `display: none` and not `visibility` or an opacity: the markers must leave the
+ * accessibility tree and the tab order too. A link a screen reader announces and
+ * a finger cannot hit is worse than no link, and the list below carries the same
+ * destinations in words.
+ *
+ * **The one edge this leaves**, written down rather than discovered later: a
+ * shared `/fr?voyage=<slug>` address opened on a phone still restores that trip's
+ * panel, because `applyUrl` finds the marker in the DOM whether or not it is
+ * painted. The panel itself works — it is the trip's description — but Escape
+ * then hands the focus back to a marker that is not rendered, so it lands on the
+ * body. The alternative is teaching the client component about a media query,
+ * which is a worse trade than a narrow path with a known end.
+ */
+@media (max-width: 48rem) {
+  .marks {
+    display: none;
+  }
+}

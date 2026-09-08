@@ -126,6 +126,29 @@ export type PlaceLabels = {
  * row would be filtered by another row's country. Spelled out at the call site
  * it was a third copy of a rule this module owns.
  */
+/**
+ * The number a place's row prints, or `null` when it prints none.
+ *
+ * **A column whose every cell says the same thing is not a column.** Thirteen of
+ * the fourteen places in this journal hold exactly one stay, so the listing set
+ * « 1 séjour » thirteen times down the page — a value that never varies teaches
+ * the eye to skip the line it sits on, and it took the one place worth noticing
+ * down with it. Printed only above one, the number recovers the meaning it always
+ * had: *this* is a place the journal went back to.
+ *
+ * A function here rather than a `length > 1` in the page, for one reason: the
+ * content of this repository — and of the end-to-end fixture, checked — holds no
+ * place visited twice, so a test driven through the rendered page could only ever
+ * exercise the branch that hides the number. Both branches are reachable from
+ * here.
+ *
+ * The plural message keeps its singular branch. What is dropped is the *rendering*
+ * of a count of one, never the language's ability to say it.
+ */
+export function repeatedStayCount(place: { readonly tripSlugs: readonly string[] }): number | null {
+  return place.tripSlugs.length > 1 ? place.tripSlugs.length : null;
+}
+
 export function placeIdentity(place: {
   readonly name: string;
   readonly countryCode: string;

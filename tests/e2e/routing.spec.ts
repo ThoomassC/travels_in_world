@@ -103,17 +103,16 @@ test("the main navigation reaches the full listing, at the same level as the map
 
   await nav.getByRole("link", { name: frMessages.trips.navCountries }).click();
 
-  // The listing is the index of the collection the trip pages are items of, so
-  // its URL is `tripsPath()` — built on the same segment as `tripPath()`.
+  // **« Pays » leads to countries.** It led to `/fr/voyages` — the catalogue
+  // grouped by country — for as long as there was no country page to lead to,
+  // and this pair of assertions used to pin that on the argument that the label
+  // had changed and the address had not. `/fr/pays` ended it: the index is a page
+  // now, and each of its rows opens that country's own page.
   //
-  // **The label changed with TIW-38 and the URL deliberately did not**, which is
-  // exactly what this pair of assertions is now worth: « Pays » is the entry a
-  // reader clicks, `/fr/voyages` is the address every marker and every card
-  // already links into, and `src/i18n/paths.ts` records why moving the second to
-  // match the first was refused.
-  await expect(page).toHaveURL(/\/fr\/voyages$/);
+  // `/fr/voyages` keeps its address and every link into it; it simply has no tab.
+  await expect(page).toHaveURL(/\/fr\/pays$/);
   await expect(
-    page.getByRole("heading", { level: 1, name: frMessages.trips.allHeading })
+    page.getByRole("heading", { level: 1, name: frMessages.country.heading })
   ).toBeVisible();
 });
 

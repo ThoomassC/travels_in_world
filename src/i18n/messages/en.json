@@ -59,9 +59,9 @@
   },
   "places": {
     "metaTitle": "Cities",
-    "metaDescription": "The cities and places of the journal, with the number of stays in each.",
+    "metaDescription": "The cities and places of the journal, in alphabetical order.",
     "heading": "Cities",
-    "intro": "{count, plural, one {# city or place visited, in alphabetical order, with its number of stays.} other {# cities and places visited, in alphabetical order, with their number of stays.}}",
+    "intro": "{count, plural, one {# city or place visited, in alphabetical order.} other {# cities and places visited, in alphabetical order.}}",
     "placeTrips": "{count, plural, one {# stay} other {# stays}}",
     "emptyHeading": "No place on the map yet",
     "emptyBody": "The journal is still empty. The cities and places travelled through will appear here, in alphabetical order, from the first published trip on.",
@@ -72,10 +72,25 @@
     "filterCount": "{count, plural, one {# place} other {# places}}",
     "filterShowing": "{count, plural, one {# place shown} other {# places shown}}"
   },
+  "country": {
+    "metaTitle": "Countries",
+    "metaDescription": "The countries this journal has been to, with the number of trips and cities in each.",
+    "heading": "Countries",
+    "intro": "{count, plural, one {# country visited, in alphabetical order.} other {# countries visited, in alphabetical order.}}",
+    "counts": "{trips, plural, one {# trip} other {# trips}}, {places, plural, one {# city} other {# cities}}",
+    "emptyHeading": "No country on the map yet",
+    "emptyBody": "The journal is still empty. The countries it crosses will appear here, in alphabetical order, as soon as the first trip is published.",
+    "emptyBackHome": "Back to the map",
+    "pageMetaDescription": "{country} in the journal: {trips, plural, one {# trip} other {# trips}}, {places, plural, one {# city} other {# cities}}.",
+    "tripsHeading": "The trips",
+    "placesHeading": "The cities",
+    "inCatalogue": "See {country} in the list of trips",
+    "allCountries": "All countries"
+  },
   "map": {
     "summary": "World map: {trips, plural, =0 {no trip published} one {# trip} other {# trips}}, {countries, plural, =0 {no country} one {# country} other {# countries}}",
     "summaryCropped": "World map, cropped to the published trips: {trips, plural, =0 {no trip published} one {# trip} other {# trips}}, {countries, plural, =0 {no country} one {# country} other {# countries}}",
-    "unavailable": "The map could not be drawn. The trips are still listed on the Countries tab.",
+    "unavailable": "The map could not be drawn. The countries visited and their trips are still listed on the Countries tab.",
     "markListLabel": "Trips on the map, newest first",
     "wishedNote": "{country}: to come",
     "wishedListLabel": "Countries to come on the map",

@@ -59,9 +59,9 @@
   },
   "places": {
     "metaTitle": "Villes",
-    "metaDescription": "Les villes et les lieux du carnet, avec le nombre de séjours dans chacun.",
+    "metaDescription": "Les villes et les lieux du carnet, par ordre alphabétique.",
     "heading": "Villes",
-    "intro": "{count, plural, one {# ville ou lieu visité, par ordre alphabétique, avec son nombre de séjours.} other {# villes et lieux visités, par ordre alphabétique, avec leur nombre de séjours.}}",
+    "intro": "{count, plural, one {# ville ou lieu visité, par ordre alphabétique.} other {# villes et lieux visités, par ordre alphabétique.}}",
     "placeTrips": "{count, plural, one {# séjour} other {# séjours}}",
     "emptyHeading": "Aucun lieu sur la carte",
     "emptyBody": "Le carnet est encore vide. Les villes et les lieux traversés apparaîtront ici, par ordre alphabétique, dès le premier voyage publié.",
@@ -72,10 +72,25 @@
     "filterCount": "{count, plural, one {# lieu} other {# lieux}}",
     "filterShowing": "{count, plural, one {# lieu affiché} other {# lieux affichés}}"
   },
+  "country": {
+    "metaTitle": "Pays",
+    "metaDescription": "Les pays où ce carnet est allé, avec le nombre de voyages et de villes dans chacun.",
+    "heading": "Pays",
+    "intro": "{count, plural, one {# pays visité, par ordre alphabétique.} other {# pays visités, par ordre alphabétique.}}",
+    "counts": "{trips, plural, one {# voyage} other {# voyages}}, {places, plural, one {# ville} other {# villes}}",
+    "emptyHeading": "Aucun pays sur la carte",
+    "emptyBody": "Le carnet est encore vide. Les pays traversés apparaîtront ici, par ordre alphabétique, dès le premier voyage publié.",
+    "emptyBackHome": "Retour à la carte",
+    "pageMetaDescription": "{country} dans le carnet : {trips, plural, one {# voyage} other {# voyages}}, {places, plural, one {# ville} other {# villes}}.",
+    "tripsHeading": "Les voyages",
+    "placesHeading": "Les villes",
+    "inCatalogue": "Voir {country} dans la liste des voyages",
+    "allCountries": "Tous les pays"
+  },
   "map": {
     "summary": "Carte du monde : {trips, plural, =0 {aucun voyage publié} one {# voyage} other {# voyages}}, {countries, plural, =0 {aucun pays} one {# pays} other {# pays}}",
     "summaryCropped": "Carte du monde, recadrée sur les voyages publiés : {trips, plural, =0 {aucun voyage publié} one {# voyage} other {# voyages}}, {countries, plural, =0 {aucun pays} one {# pays} other {# pays}}",
-    "unavailable": "La carte n’a pas pu être dessinée. Les voyages restent listés sur l’onglet Pays.",
+    "unavailable": "La carte n’a pas pu être dessinée. Les pays visités et leurs voyages restent listés sur l’onglet Pays.",
     "markListLabel": "Voyages sur la carte, du plus récent au plus ancien",
     "wishedNote": "{country} : à venir",
     "wishedListLabel": "Pays à venir sur la carte",

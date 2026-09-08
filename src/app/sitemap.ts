@@ -1,8 +1,17 @@
 import type { MetadataRoute } from "next";
+import { countryNameOf } from "@/components/trips/format";
 import { listTripSummaries } from "@/content/trips";
 import { hasStory } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
-import { aboutPath, placesPath, tripPath, tripsPath } from "@/i18n/paths";
+import {
+  aboutPath,
+  countriesPath,
+  countryPath,
+  countrySlugsByCode,
+  placesPath,
+  tripPath,
+  tripsPath,
+} from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
 import { absoluteUrl } from "./site-url";
@@ -93,6 +102,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
    */
   const mostRecentEnd = trips[0]?.endDate;
 
+  /**
+   * The countries the carnet has been to (TIW-39), addressed exactly as the pages
+   * address themselves: `countrySlugsByCode` is the single derivation this file,
+   * `/pays` and `/pays/[slug]` all read, so a URL advertised here cannot be one
+   * that `generateStaticParams` did not build. It also throws — on a country whose
+   * published slug ICU has moved, and on two countries claiming one address —
+   * which fails `next build` here rather than shipping a sitemap full of 404s.
+   *
+   * **Every country the trips *reach*, not the ones they are filed under.** The
+   * pages take the same reading, and the sitemap has to agree with the pages: a
+   * country crossed by one journey has a page, so it has an entry.
+   *
+   * Sorted by slug, so two builds of the same carnet write the same file.
+   */
+  const countrySlugs = [
+    ...countrySlugsByCode(
+      trips.flatMap((trip) => trip.countryCodes),
+      (code) => countryNameOf("fr", code)
+    ).values(),
+  ].sort();
+
   return [
     ...localisedEntry("/", mostRecentEnd),
     ...localisedEntry(tripsPath(), mostRecentEnd),
@@ -117,6 +147,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
      * surely as it adds its card to the catalogue.
      */
     ...localisedEntry(placesPath(), mostRecentEnd),
+    /**
+     * The countries index and its five pages (TIW-39). They take the most recent
+     * trip's end date for the reason the three entries above do: they are lists,
+     * and what changes a list is a trip arriving — a new journey adds a country to
+     * the index, or a town to a country's page, as surely as it adds a card to the
+     * catalogue.
+     *
+     * **A country page is here although not one of its trips has a récit**, which
+     * is the same call `/voyages` and `/villes` already embody and NOT the one
+     * `hasStory` governs below. That filter is about a *story* being advertised at
+     * an address `tripStaticParams` never built; these pages are lists, they are
+     * built, and they are the answer to "where has he been" that a crawler should
+     * find.
+     */
+    ...localisedEntry(countriesPath(), mostRecentEnd),
+    ...countrySlugs.flatMap((slug) => localisedEntry(countryPath(slug), mostRecentEnd)),
     ...localisedEntry(aboutPath(), undefined),
     /**
      * **The trips that have a page, and not every trip in the list** (TIW-18).

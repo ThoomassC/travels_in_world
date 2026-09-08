@@ -35,6 +35,7 @@ import { MAP_DRAWING_IN_FIGURE } from "./support/map";
  */
 
 const NAV = frMessages.trips;
+const COUNTRY = frMessages.country;
 const TRIP = { slug: "japon-2024", title: "Japon, printemps 2024" } as const;
 
 /** The map's own figure, the one holding the drawing. */
@@ -105,15 +106,28 @@ test("the whole journey works with JavaScript disabled", async ({ browser, baseU
 
     // ---- 3. Navigation: a link in the site's nav, followed with no script. ----
     await page.getByRole("navigation", { name: NAV.navLabel }).getByText(NAV.navCountries).click();
-    await expect(page).toHaveURL(/\/fr\/voyages$/);
-    await expect(page.getByRole("heading", { level: 1, name: NAV.allHeading })).toBeVisible();
+    await expect(page).toHaveURL(/\/fr\/pays$/);
+    await expect(page.getByRole("heading", { level: 1, name: COUNTRY.heading })).toBeVisible();
     /**
-     * The catalogue, not an empty block: five trips, announced as five — the
-     * untold one included, which is the whole point of the state. It is listed
-     * with its dates and its countries; only its own page is missing.
+     * The index, not an empty block: the fixture's five trips fall in five
+     * countries, each row naming its counts. Followed with no script at all, so
+     * the country pages are as reachable without JavaScript as everything else.
      */
-    await expect(page.getByText("5 voyages", { exact: false }).first()).toBeVisible();
+    const japan = page.getByRole("link", { name: /Japon/ }).first();
+    await expect(japan).toBeVisible();
+
+    /**
+     * And one hop further, because the index is only worth reaching if what it
+     * leads to works too: a country page with no script at all, carrying its
+     * name and the trips filed under it. This replaces the assertion that used to
+     * stand here — a trip card on `/voyages`, which is where this tab led before
+     * the country pages existed and which the catalogue's own specs still cover.
+     */
+    await japan.click();
+    await expect(page).toHaveURL(/\/fr\/pays\/japon$/);
+    await expect(page.getByRole("heading", { level: 1, name: /Japon/ })).toBeVisible();
     await expect(page.getByRole("link", { name: new RegExp(TRIP.title) }).first()).toBeVisible();
+    await page.goBack();
 
     /**
      * ---- 3b. The places listing (TIW-38), and a row that leads back into the

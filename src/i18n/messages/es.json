@@ -59,9 +59,9 @@
   },
   "places": {
     "metaTitle": "Ciudades",
-    "metaDescription": "Las ciudades y los lugares del cuaderno, con el número de estancias en cada uno.",
+    "metaDescription": "Las ciudades y los lugares del cuaderno, por orden alfabético.",
     "heading": "Ciudades",
-    "intro": "{count, plural, one {# ciudad o lugar visitado, por orden alfabético, con su número de estancias.} other {# ciudades y lugares visitados, por orden alfabético, con su número de estancias.}}",
+    "intro": "{count, plural, one {# ciudad o lugar visitado, por orden alfabético.} other {# ciudades y lugares visitados, por orden alfabético.}}",
     "placeTrips": "{count, plural, one {# estancia} other {# estancias}}",
     "emptyHeading": "Ningún lugar en el mapa",
     "emptyBody": "El cuaderno todavía está vacío. Las ciudades y los lugares recorridos aparecerán aquí, por orden alfabético, desde el primer viaje publicado.",
@@ -72,10 +72,25 @@
     "filterCount": "{count, plural, one {# lugar} other {# lugares}}",
     "filterShowing": "{count, plural, one {# lugar mostrado} other {# lugares mostrados}}"
   },
+  "country": {
+    "metaTitle": "Países",
+    "metaDescription": "Los países que ha recorrido este cuaderno, con el número de viajes y de ciudades en cada uno.",
+    "heading": "Países",
+    "intro": "{count, plural, one {# país visitado, por orden alfabético.} other {# países visitados, por orden alfabético.}}",
+    "counts": "{trips, plural, one {# viaje} other {# viajes}}, {places, plural, one {# ciudad} other {# ciudades}}",
+    "emptyHeading": "Ningún país en el mapa",
+    "emptyBody": "El cuaderno todavía está vacío. Los países recorridos aparecerán aquí, por orden alfabético, en cuanto se publique el primer viaje.",
+    "emptyBackHome": "Volver al mapa",
+    "pageMetaDescription": "{country} en el cuaderno: {trips, plural, one {# viaje} other {# viajes}}, {places, plural, one {# ciudad} other {# ciudades}}.",
+    "tripsHeading": "Los viajes",
+    "placesHeading": "Las ciudades",
+    "inCatalogue": "Ver {country} en la lista de viajes",
+    "allCountries": "Todos los países"
+  },
   "map": {
     "summary": "Mapa del mundo: {trips, plural, =0 {ningún viaje publicado} one {# viaje} other {# viajes}}, {countries, plural, =0 {ningún país} one {# país} other {# países}}",
     "summaryCropped": "Mapa del mundo, recortado sobre los viajes publicados: {trips, plural, =0 {ningún viaje publicado} one {# viaje} other {# viajes}}, {countries, plural, =0 {ningún país} one {# país} other {# países}}",
-    "unavailable": "El mapa no se ha podido dibujar. Los viajes siguen listados en la pestaña Países.",
+    "unavailable": "El mapa no se ha podido dibujar. Los países visitados y sus viajes siguen listados en la pestaña Países.",
     "markListLabel": "Viajes en el mapa, del más reciente al más antiguo",
     "wishedNote": "{country}: por venir",
     "wishedListLabel": "Países por venir en el mapa",

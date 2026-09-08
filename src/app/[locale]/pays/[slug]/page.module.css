@@ -1,0 +1,143 @@
+/* =============================================================================
+   One country's page — its trips, its cities, and its own silhouette.
+
+   No colour is declared here: every value comes from `src/styles/tokens.css`,
+   which imports the shared palette. Three drawings on this site paint land and
+   coast, and all three speak the same two tokens — `world-map.module.css` for the
+   planisphere, `site-search.module.css` for the suggestion vignette, and this
+   file. Copying the *tokens* rather than the colours is what keeps them in step
+   and what keeps a fourth ink out of `tests/styles/colour-contract.test.ts`.
+   ============================================================================ */
+
+/**
+ * **There is no rule on `<main>` here, and that is the fix rather than an
+ * omission.**
+ *
+ * This file used to carry `.page { display: flex; flex-direction: column }` on
+ * the `<main>` element itself. `src/styles/tokens.css` makes every `main` a
+ * three-column grid — gutter, measure, gutter — so replacing its `display`
+ * replaced the gutters too: measured at 1440 px, the `<h1>` and the trip cards
+ * started at x = 0, flush against the glass, while every other page of the site
+ * began at 144. The page looked deliberate and was not.
+ *
+ * The sections stack on the shared `row-gap` now, like `/villes` and `/voyages`,
+ * which is also what makes a reader moving between the three index pages meet the
+ * same rhythm.
+ */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.title {
+  font-size: var(--text-display-sm);
+}
+
+/**
+ * "7 voyages, 7 villes" — the page's whole inventory in one line, so a reader
+ * knows what is below before scrolling to it. `--text-muted` on the page ground,
+ * the pair the two other indexes already measure.
+ */
+.counts {
+  color: var(--text-muted);
+}
+
+/**
+ * The frame around the silhouette.
+ *
+ * A width and not a height, and `aspect-ratio` from the `viewBox`: the drawing is
+ * square by construction (`TILE_BOX` × `TILE_BOX`), so the container's ratio must
+ * equal the box's exactly or the country would be letterboxed and its dots would
+ * drift off the coast — the same trap `trip-mini-map.module.css` records.
+ *
+ * `min()` so it is 15 rem on a desktop and never wider than the column on a
+ * phone. In `rem` and not `px`, so it grows with a reader's larger default type
+ * size instead of staying a stamp beside text that has doubled.
+ */
+.figure {
+  inline-size: min(100%, 15rem);
+}
+
+.silhouette {
+  inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: 1;
+  display: block;
+}
+
+/**
+ * Land and coast, the map's own pair. `non-scaling-stroke` for the reason the map
+ * records: the outline is drawn in a forty-unit box rendered at 240 px here and
+ * at 40 px in a suggestion, and without this the coastline would be six times
+ * thicker on this page than in the panel.
+ */
+.land {
+  fill: var(--panel-surface);
+  stroke: var(--control-border);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/**
+ * A city.
+ *
+ * The accent for the dot and `--text-on-accent` for the ring around it — the
+ * map's own marker, and the ring is not decoration: its job is to separate the
+ * dot from the land under it and from a neighbouring dot, which is the pair that
+ * carries the contrast (the map's header records the measurement). `stroke-width`
+ * is in tile units like the radius, so the ring scales with the drawing.
+ */
+.dot {
+  fill: var(--accent);
+  stroke: var(--text-on-accent);
+  stroke-width: 0.5;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sectionHeading {
+  font-size: var(--text-lg);
+}
+
+/**
+ * The cities, as a wrapping row of names rather than a column: they are the
+ * legend of the drawing above and each one is two or three words, so a column of
+ * seven would be a lot of vertical space for very little text.
+ *
+ * `list-style: none` with `role="list"` on the element, for the Safari/VoiceOver
+ * reason recorded across this project.
+ */
+.places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-body);
+}
+
+/**
+ * The two ways out. A row of links, wrapping on a narrow screen, with 44 px of
+ * target each (WCAG 2.2, 2.5.8) in `rem` so they grow with a reader's default
+ * size.
+ */
+.ways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+}
+
+.way {
+  min-block-size: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  font-weight: var(--weight-medium);
+}

@@ -12,7 +12,7 @@ import { SiteNav } from "@/components/site/site-nav";
 import { listTripSummaries, loadTrips } from "@/content/trips";
 import { holdsNoStory } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
-import { aboutPath, placesPath, tripPath, tripsPath } from "@/i18n/paths";
+import { aboutPath, countriesPath, placesPath, tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import "@/styles/tokens.css";
 import { shareMetadata } from "../share";
@@ -188,11 +188,11 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
       per code, so thirteen trips over five countries build five projections.
     */
     tilePointOf: (place) => countryTile(place.countryCode)?.place(place.coordinates),
-    countriesHref: localePathname({ href: tripsPath(), locale }),
+    countriesHref: localePathname({ href: countriesPath(), locale }),
     placesHref: localePathname({ href: placesPath(), locale }),
     pages: [
       { label: t("navMap"), href: localePathname({ href: "/", locale }) },
-      { label: t("navCountries"), href: localePathname({ href: tripsPath(), locale }) },
+      { label: t("navCountries"), href: localePathname({ href: countriesPath(), locale }) },
       { label: t("navPlaces"), href: localePathname({ href: placesPath(), locale }) },
       { label: t("navAbout"), href: localePathname({ href: aboutPath(), locale }) },
     ],

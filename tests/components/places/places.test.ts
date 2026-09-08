@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  repeatedStayCount,
   tallyVisitedPlaces,
   type PlaceLabels,
   type VisitedPlaceTally,
@@ -241,5 +242,32 @@ describe("tallyVisitedPlaces", () => {
       expect(declared.has(row.name)).toBe(true);
       expect(row.tripSlugs.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("repeatedStayCount", () => {
+  /**
+   * **The number is dropped, not the fact.** Thirteen of the fourteen places in
+   * this journal hold one stay, so the listing printed « 1 séjour » thirteen
+   * times: a column whose every cell reads the same teaches the eye to skip it,
+   * and it took the one row worth noticing down with it.
+   *
+   * Tested here rather than through the rendered page, and that is the reason
+   * this function exists at all: neither the repository's content nor the
+   * end-to-end fixture holds a place visited twice — checked, every place slug of
+   * `tests/fixtures/content/home-map` appears exactly once — so a test driven
+   * through `/villes` could only ever exercise the branch that hides the number.
+   */
+  it("says nothing for a place the journal reached once", () => {
+    expect(repeatedStayCount({ tripSlugs: ["annecy"] })).toBeNull();
+  });
+
+  it("says nothing for a place no trip reaches", () => {
+    expect(repeatedStayCount({ tripSlugs: [] })).toBeNull();
+  });
+
+  it("answers the count for a place the journal went back to", () => {
+    expect(repeatedStayCount({ tripSlugs: ["japon-2024", "japon-2025"] })).toBe(2);
+    expect(repeatedStayCount({ tripSlugs: ["a", "b", "c"] })).toBe(3);
   });
 });

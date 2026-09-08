@@ -69,16 +69,28 @@ const describeOutline = (outline: readonly Heading[]): string =>
  * two `<h1>`s has no title, and a jump from `<h2>` to `<h4>` tells a reader
  * navigating by heading that a section is missing.
  */
+/**
+ * How many headings a screen must at least carry for the check below to mean
+ * anything.
+ *
+ * **Three, because a selector that matched nothing would pass every assertion
+ * below on an empty array** — that is the whole purpose of the floor, and every
+ * screen of this site did carry a title and two sections when it was written.
+ *
+ * `/pays` is the first that does not, and it is right not to: an index of five
+ * links has a title and five links, and inventing a section heading to sit above
+ * them would be markup written for a test. One heading is still enough to prove
+ * the selector works, which is what the floor is for.
+ */
+const LEAST_HEADINGS: Readonly<Record<string, number>> = { "/fr/pays": 1 };
+
 function expectWellFormed(outline: readonly Heading[], where: string): void {
   const printed = `\n${describeOutline(outline)}`;
 
-  // Guards the guard: a selector that matched nothing would pass every assertion
-  // below on an empty array. Every screen of this site has at least a title and
-  // two sections.
   expect(
     outline.length,
     `Aucun titre trouvé sur ${where} : le sélecteur n'a rien vu, donc les assertions suivantes porteraient sur une liste vide.`
-  ).toBeGreaterThanOrEqual(3);
+  ).toBeGreaterThanOrEqual(LEAST_HEADINGS[where] ?? 3);
 
   const firstLevels = outline.filter((heading) => heading.level === 1);
   expect(firstLevels, `${where} doit porter exactement un h1.${printed}`).toHaveLength(1);
@@ -95,7 +107,21 @@ function expectWellFormed(outline: readonly Heading[], where: string): void {
   }
 }
 
-for (const route of ["/fr", "/fr/voyages", "/fr/voyages/japon-2024", "/fr/a-propos"] as const) {
+/**
+ * `/fr/pays` and one country page joined the list with TIW-39, and the second is
+ * the interesting one: its outline is `h1` country → `h2` « Les voyages » → `h3`
+ * cards → `h2` « Les villes », and `TripCard` types `headingLevel` as `3 | 4`, so
+ * a card that came out at `h4` under a single `h2` would be a skipped level
+ * nothing else on this site would show.
+ */
+for (const route of [
+  "/fr",
+  "/fr/voyages",
+  "/fr/voyages/japon-2024",
+  "/fr/pays",
+  "/fr/pays/japon",
+  "/fr/a-propos",
+] as const) {
   test(`${route} has a well-formed heading outline`, async ({ page }) => {
     await page.goto(route);
 
