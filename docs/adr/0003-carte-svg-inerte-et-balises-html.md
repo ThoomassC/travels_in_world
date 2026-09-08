@@ -467,8 +467,8 @@ quel que soit leur recouvrement, ce qui fait du pointeur le seul mode dégradé.
 >    que la section « la légende compte, les balises nomment » consigne déjà.
 > 3. **La teinte ne porte pas l'état toute seule.** Un pays souhaité est le seul
 >    état de cette carte qui ne soit pas un fait du passé ; il est tireté, donc la
->    différence survit au niveau de gris et aux deux thèmes. Même règle que le
->    fanion creux d'un récit à venir.
+>    différence survit au niveau de gris et aux deux thèmes. Même règle que la
+>    balise creuse d'un récit à venir.
 >
 > WCAG 1.4.13 est tenu et mesuré plutôt qu'affirmé : *survolable* (l'étiquette est
 > dans la boîte survolée), *persistant*, et *rejetable* par exemption — elle ne
@@ -479,6 +479,34 @@ quel que soit leur recouvrement, ce qui fait du pointeur le seul mode dégradé.
 > une page « à venir », par exemple. Elle deviendrait une cible de 44 px, un arrêt
 > de tabulation par pays, et il faudrait alors trancher son rang dans le parcours
 > avant les balises. Ce jour-là c'est une balise, pas une note.
+
+> **Note (2026-09-08, deux retours du propriétaire sur la même carte).**
+>
+> *« Dans les pays à venir enlève les balises. »* L'anneau creux posé sur chaque
+> pays souhaité était une marque de la famille des balises, debout sur un pays qui
+> ne porte aucun voyage — la confusion que le retour désigne. Il est parti. Ce qui
+> reste est la cible seule : un carré de rien de 1,25 rem centré sur l'ancre, plus
+> large que l'anneau parce qu'une cible invisible doit se *trouver*, et pas plus,
+> parce que ce calque est **au-dessus** des balises et qu'une boîte invisible qui
+> avalerait un clic de balise serait un défaut bien pire que celui qu'elle corrige.
+> `tests/e2e/wished.populated.spec.ts` mesure les deux moitiés.
+>
+> *« Les balises actuelles ne sont pas précises. Tu peux utiliser un ping plus
+> pointu ? »* — et la critique est exacte. Un fanion est un mât surmonté d'un
+> drapeau : son contact avec le sol est **l'extrémité d'un trait vertical**, large
+> de deux unités, et tout le reste du dessin pend d'un seul côté. Rien n'y dit
+> « ici » ; l'œil lit le drapeau, qui est précisément la partie qui n'est pas le
+> lieu. Le pied était en outre à x = 3 d'une boîte de 18, donc la feuille de style
+> devait le rattraper latéralement et le dessin penchait quand même.
+>
+> C'est une **épingle** maintenant : un contour fermé qui s'effile en un seul point,
+> sur l'axe médian de sa propre boîte, angle de pointe d'environ 50°. Trois
+> conséquences, et aucune n'est cosmétique. La pointe **est** le lieu, donc l'ancrage
+> se réduit à une translation verticale. La forme est **symétrique**, donc deux
+> balises voisines se recouvrent de la même façon quel que soit leur ordre — ce que
+> `src/components/map/marks.ts` reprochait au fanion. Et le grossissement au survol
+> part de la pointe, donc le point ne bouge pas pendant l'animation.
+> `tests/components/map/mark-art.test.ts` tient les trois propriétés.
 
 **Ce qui invaliderait cette décision.**
 

@@ -36,8 +36,9 @@ test("the caption names every country still to come, with nothing hovered", asyn
   /*
     **The line that closes the gap the hover leaves.** A sighted reader with a
     keyboard or a touch screen has no hover state; without this they would see two
-    hatched countries carrying a dot and no name. Asserted first because it is the
-    channel that owes nothing to a pointer.
+    hatched countries and no name anywhere — the mark that used to stand on them
+    is gone too, at the owner's request. Asserted first because it is the channel
+    that owes nothing to a pointer.
   */
   const caption = page.locator("figcaption");
 
@@ -157,5 +158,53 @@ test("the map has no WCAG 2.2 AA violation with a note revealed, in either theme
       []
     );
     expect(report.passes).toBeGreaterThan(10);
+  }
+});
+
+/**
+ * **The marks on the wished countries are gone, and what is left must not eat a
+ * click.** The owner asked for them: *« dans les pays à venir enlève les balises
+ * »* — a hollow ring standing on a country that holds no trip read as a marker
+ * that was not one.
+ *
+ * What replaced it is the target with nothing drawn in it, which creates a defect
+ * of its own if it is careless: this layer sits *over* the markers, so an
+ * invisible box wide enough to be findable is also wide enough to swallow a
+ * marker's click. Both halves are asserted here, and the second is the one that
+ * would be silent.
+ */
+test("a wished country carries no mark, and its hover zone steals no marker", async ({ page }) => {
+  await page.goto("/fr");
+
+  const zone = noteFor(page, "Croatie").locator("span").first();
+
+  // Nothing is painted: no border, no background, no ink of its own.
+  const paint = await zone.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return {
+      border: style.borderTopWidth,
+      background: style.backgroundImage === "none" ? style.backgroundColor : "image",
+    };
+  });
+
+  expect(paint.border).toBe("0px");
+  expect(["rgba(0, 0, 0, 0)", "transparent"]).toContain(paint.background);
+
+  // And it overlaps no marker's 44 px target.
+  const zoneBox = await zone.boundingBox();
+  const markers = page.locator("figure a[data-trip]");
+
+  for (let index = 0; index < (await markers.count()); index += 1) {
+    const markerBox = await markers.nth(index).boundingBox();
+    if (markerBox === null || zoneBox === null) {
+      continue;
+    }
+    const overlaps =
+      zoneBox.x < markerBox.x + markerBox.width &&
+      markerBox.x < zoneBox.x + zoneBox.width &&
+      zoneBox.y < markerBox.y + markerBox.height &&
+      markerBox.y < zoneBox.y + zoneBox.height;
+
+    expect(overlaps, `the hover zone covers the marker at index ${index}`).toBe(false);
   }
 });

@@ -162,17 +162,29 @@
 .inner {
   grid-area: 1 / 1;
   /**
-   * `main`'s measure and `main`'s inline padding, so the language menu's right
-   * edge lands on the page's right edge rather than floating.
+   * **The bar's row spans the window, not `main`'s measure** — and that changed
+   * with the owner's report: *« le sélecteur de langue doit être bien à droite »*.
+   *
+   * It used to be capped at `--content-max-width` so the language menu landed on
+   * the page's right edge. On a wide screen that is 168 px short of the bar's own
+   * edge (measured at 1440), and the bar is a full-width band of colour: a control
+   * floating 168 px inside a coloured strip reads as misplaced, not as aligned.
+   * The row is the window now, less one gutter.
+   *
+   * **The mark keeps the measure and that asymmetry is the decision, not an
+   * oversight.** `.brandZone` above aligns the lock-up with the page's text,
+   * because the owner asked for exactly that and a mark belongs with what it
+   * names. The right end is a toolbar, and a toolbar belongs to the window. Below
+   * `--content-max-width` the two coincide anyway: at 1280 both gutters measure
+   * 88 px, at 1100 both measure 24.
    *
    * `justify-self: center` plus `inline-size: 100%`, and NOT `margin-inline:
-   * auto`: an auto margin on a grid item suppresses the stretch that would have
-   * given it the measure, so the box shrank to its content — measured at 873 px
-   * instead of 1152 — and the language menu drifted 400 px inside the page.
+   * auto`: an auto margin on a grid item suppresses the stretch, so the box shrank
+   * to its content — measured at 873 px instead of 1152 — and the language menu
+   * drifted 400 px inside the page.
    */
   justify-self: center;
   inline-size: 100%;
-  max-width: var(--content-max-width);
   padding-inline: var(--space-5);
   /**
    * A height rather than block padding: the medallion is taller than the bar and
@@ -218,13 +230,23 @@
   grid-area: links;
 }
 
+/**
+ * **The four destinations, with room between them** — 4 px was what the owner
+ * read as cramped, and they were right: each label already carries 12 px of its
+ * own padding, so a 4 px gap put two 44 px targets 28 px apart edge to edge and
+ * the four read as one long word.
+ *
+ * `--space-3` puts 36 px between two labels, which is the same rhythm the pills of
+ * the listings' filters use. The room comes from the bar spanning the window now
+ * rather than the measure: 144 px of it appeared on each side at 1440.
+ */
 .list {
   margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: var(--space-3);
 }
 
 /**
@@ -368,12 +390,22 @@
  * first column is empty by design, and the search's panel opened under the
  * lock-up.
  *
- * `justify-self: end` puts the pair against the measure's right edge, where the
- * language menu already was; the search simply arrives to its left.
+ * **`stretch` and not `end`, which is a bug fix and not a preference.** With
+ * `justify-self: end` this box is sized by its content, so the 20 rem field could
+ * not be asked to shrink and simply overflowed its column *leftwards*, into the
+ * navigation: measured at 1100 px, the nav ended at 717 and the field began at
+ * 702 — fifteen pixels of overlap, on a real page. Stretched to the column and
+ * pushed right by `justify-content`, the pair sits exactly where `end` put it and
+ * the field shrinks when the column does.
+ *
+ * `min-inline-size: 0` is the other half: a flex item's floor is its content, so
+ * without it the field refuses to shrink however narrow the column gets.
  */
 .chromeEnd {
   grid-area: language;
-  justify-self: end;
+  justify-self: stretch;
+  justify-content: flex-end;
+  min-inline-size: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);

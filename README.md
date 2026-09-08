@@ -583,18 +583,23 @@ Tab pour passer outre ; sans script, une liste entièrement tabulable. Les flèc
 ce *sont* des liens.
 
 **Les suggestions d'un voyage sont illustrées** — la seconde moitié du choix du propriétaire.
-Une vignette, une seconde ligne « pays · N étapes · année », et le **fanion du planisphère**,
-plein en accent pour un récit écrit, creux et cerné de secondaire pour un récit à venir : la
-même paire que les balises de la carte, choisie là-bas parce qu'elle survit au niveau de gris.
-La vignette est un rectangle en plate carrée avec un graticule et **aucune côte** : la maquette
-en dessinait une, différente par ligne, sous un point posé à la vraie longitude — un dessin qui
-trompe précisément le lecteur qui le regarde de près. Le point est la seule chose qui informe.
-Les deux dessins sont des `<symbol>` définis **une fois par document** et référencés par
-`<use>` : soixante bytes la ligne au lieu de la donnée de tracé répétée. Le fanion est une
-copie du chemin de `src/components/map/mark-art.ts` — la règle ESLint qui garde `src/map`
-derrière sa façade refuse tout spécificateur ayant un segment après `map`, et le seul autorisé
-est un baril qui tirerait `WorldMap` dans le graphe de chaque document pour lire deux chaînes ;
-`tests/components/search/search-art.test.ts` compare les deux orthographes et refuse la dérive.
+Une vignette et une seconde ligne « pays · N étapes · année ». **La vignette est le vrai pays**,
+au 50m, ajusté à son propre cadre par `src/map/country-tile.ts`, avec le point sur la ville de
+départ — le point même où la carte ancre sa balise.
+
+Deux pièges valaient d'être mesurés. Le premier ajustement prenait **tout** le tracé : la
+France du 50m porte la Guyane, la Réunion, la Martinique et Mayotte, si bien que la métropole
+sortait à huit unités de large dans une boîte de quarante, Rouen et la Corse à 3,8 unités l'un
+de l'autre. L'ajustement se fait donc en deux passes — sur la plus grande masse, puis sur elle
+plus les anneaux qui tombent près du cadre : la Corse, les Baléares et la Crète entrent, la
+Guyane et les Canaries restent dehors. Et le tracé brut pesait 23,6 Ko pour cinq pays :
+Douglas-Peucker à un tiers de pixel, puis grille au demi-pixel, le ramène à **3,3 Ko** — trois
+fois moins qu'une grille seule, pour un écart que personne ne voit. Un `<symbol>` par pays,
+donc neuf voyages français coûtent une France.
+
+Un fanion volait au bout de chaque ligne ; le propriétaire l'a fait retirer. Rien n'est perdu
+pour un lecteur qui ne voit pas la couleur, et c'est la seule raison qui l'autorisait : la
+seconde ligne finit déjà par les mots « récit à venir ».
 
 **La complétion en ligne** est native et non un fantôme posé à côté du champ : l'entrée porte
 le libellé entier et la part au-delà de ce qui a été tapé est **sélectionnée**, donc la frappe

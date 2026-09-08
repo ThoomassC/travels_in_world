@@ -282,3 +282,85 @@ for (const locale of ["fr", "en", "es"] as const) {
     expect(name.length).toBeGreaterThan(0);
   });
 }
+
+/**
+ * **THE BAR'S GEOMETRY, and it is here because only a browser lays a grid out.**
+ *
+ * Three defects the owner read off the screen in one sentence — *« le sélecteur de
+ * langue doit être bien à droite et la barre de recherche juste à gauche du
+ * sélecteur. Les onglets au centre du header doivent avoir de l'espace. »* — and
+ * one of them was a genuine collision rather than a matter of taste.
+ *
+ * Measured on the dev server at three widths before the fix:
+ *
+ *   width | nav ends | field starts | language's right gutter
+ *   ------|----------|--------------|------------------------
+ *    1440 |      887 |          898 | 168 px
+ *    1280 |      807 |          818 |  88 px
+ *    1100 |      717 |          702 |  24 px   ← fifteen pixels of overlap
+ *
+ * The overlap is what a stretched right zone fixes: with `justify-self: end` that
+ * box is sized by its content, so the 20 rem field could not be asked to shrink
+ * and overflowed leftwards into the navigation. The gutter is what the bar's row
+ * spanning the window fixes. Both are asserted below, at the width where each
+ * failed.
+ *
+ * PROVEN BY DELIBERATE FAILURE — `git checkout src/components/site/site-nav.module.css`
+ * with these cases in place:
+ *
+ *   npx playwright test brand.spec -> 4 failed | 9 passed
+ *     1440: "expected <= 25, received 168"   (the gutter)
+ *     1280: "expected <= 25, received  88"   (the gutter)
+ *     1100: "the search field overlaps the navigation"
+ *     and the tabs, 4 px apart instead of 12
+ */
+for (const width of [1440, 1280, 1100]) {
+  test(`the header's three zones do not collide at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/fr");
+
+    const boxOf = async (locator: import("@playwright/test").Locator) => {
+      const box = await locator.boundingBox();
+      expect(box, "an element of the bar has no box at all").not.toBeNull();
+      return box as NonNullable<typeof box>;
+    };
+
+    const nav = await boxOf(page.locator("header nav"));
+    const field = await boxOf(page.getByLabel(frMessages.search.field).locator("xpath=ancestor::label[1]"));
+    const language = await boxOf(page.locator("header details").first());
+
+    // 1. The tabs and the search never share a pixel — the defect at 1100.
+    expect(field.x, "the search field overlaps the navigation").toBeGreaterThan(nav.x + nav.width);
+
+    // 2. The search is immediately to the left of the language menu, and nothing
+    //    is between them.
+    expect(field.x + field.width).toBeLessThanOrEqual(language.x);
+    expect(language.x - (field.x + field.width)).toBeLessThan(24);
+
+    /*
+      3. The language menu is against the window's edge — one gutter, whatever the
+         width. It used to be pinned to `main`'s measure, which on a wide screen
+         left it 168 px inside a bar that is a full-width band of colour.
+    */
+    expect(width - (language.x + language.width)).toBeLessThanOrEqual(24 + 1);
+  });
+}
+
+/**
+ * And the tabs themselves. Asserted as the distance between two labels rather
+ * than as a `gap`, because what was read as cramped is what the eye measures:
+ * each label already carries 12 px of its own padding, so a 4 px gap left two
+ * 44 px targets 28 px apart edge to edge.
+ */
+test("the four destinations have room between them", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/fr");
+
+  const links = page.locator("header nav a");
+  const first = await links.nth(0).boundingBox();
+  const second = await links.nth(1).boundingBox();
+
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  expect((second?.x ?? 0) - ((first?.x ?? 0) + (first?.width ?? 0))).toBeGreaterThanOrEqual(8);
+});

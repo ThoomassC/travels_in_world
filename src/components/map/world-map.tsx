@@ -5,7 +5,7 @@ import { MapViewport, type MapViewportZone } from "./map-viewport";
 import { ZOOM_VALUE_TOKEN } from "./viewport";
 import { placeMarks, spreadCoincident, type TripMark } from "./marks";
 import { worldPointOf, zonesOf } from "./zones";
-import { MARK_PENNANT_PATH, MARK_VIEWBOX } from "./mark-art";
+import { MARK_PIN_PATH, MARK_VIEWBOX } from "./mark-art";
 import styles from "./world-map.module.css";
 
 /**
@@ -482,7 +482,7 @@ export function WorldMap({
                   aria-hidden="true"
                   focusable="false"
                 >
-                  <path d={MARK_PENNANT_PATH} />
+                  <path d={MARK_PIN_PATH} />
                 </svg>
                 {/*
                   The halo, and **only** the halo: it is decoration on top of a

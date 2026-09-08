@@ -544,42 +544,52 @@
 }
 
 /**
- * The pennant — `src/components/map/mark-art.ts` holds its geometry and the
- * reason it is one closed contour.
- *
- * **The foot of the mast sits on the projected point, and that is the whole of
- * this rule.** `.mark` above places the 44 px box centred on the point; the glyph
- * is centred inside it by `place-items`, so its own centre lands there too. The
- * translate below moves it by half its box in each axis, which puts its
- * bottom-left corner — the foot, at (3, 23) of a 18 x 26 viewBox — on the point,
- * and hangs the flag above and to the right of it.
+ * The pin — `src/components/map/mark-art.ts` holds its geometry, the reason it is
+ * one closed contour, and why it replaced a pennant.
  *
  * A disc was anchored by its middle, which is correct for a disc and meaningless
- * for a mast. This is the one behavioural difference between the two markers, and
- * it is why the change is not only a new `d`.
+ * for a pin. That is the one behavioural difference between the two markers, and
+ * it is why the change was never only a new `d`.
  *
  * **The target box does not move.** `inline-size`/`block-size` on `.link` are
  * untouched: the 44 px the reader aims at is still centred on the point, and the
- * flag drawn above it is paint. A pennant whose 44 px box followed the flag would
+ * pin drawn above it is paint. A marker whose 44 px box followed the head would
  * put the target where the place is not.
  *
  * `paint-order: stroke` is the ring, and it replaces the `box-shadow` a round dot
- * could use: a shadow is a rectangle around an SVG box, so on a pennant it would
+ * could use: a shadow is a rectangle around an SVG box, so on a pin it would
  * outline the air. Stroking the contour first and filling over it leaves the
  * stroke showing as an even outline on the shape itself, which is what separates
  * the marker from tinted land, neutral land and sea alike.
  */
 .dot {
-  inline-size: 1.125rem;
-  block-size: 1.625rem;
-  translate: 0.5625rem -0.8125rem;
+  /* 16 x 24 units at the root size, so one unit is one pixel and every number in
+     `mark-art.ts` is a pixel here. */
+  inline-size: 1rem;
+  block-size: 1.5rem;
+  /**
+   * **The tip lands on the point, and this is the whole rule.**
+   *
+   * `.mark` places the 44 px box centred on the projected point and `place-items`
+   * centres the glyph inside it, so the glyph's own centre — (8, 12) of a 16 x 24
+   * box — is on the point. The tip is at (8, 23). Moving the glyph up by the
+   * difference, 11 px, puts the tip there instead, and leaves the pin hanging
+   * straight above the place.
+   *
+   * No horizontal component, unlike the pennant this replaces: its foot was at
+   * x = 3 of an 18-unit box, so it needed a nudge sideways as well and the drawing
+   * still hung to one side. A tip on the centre line needs no such correction, and
+   * that absence is the improvement.
+   */
+  translate: 0 -0.6875rem;
   fill: var(--accent);
   stroke: var(--text-on-accent);
   stroke-width: 2.2;
   stroke-linejoin: round;
   paint-order: stroke;
   transition: transform 120ms ease;
-  transform-origin: 3px 23px;
+  /* Grows from its own tip, so the point stays on the place while the head swells. */
+  transform-origin: 8px 23px;
 }
 
 .link:hover .dot,
@@ -1317,24 +1327,25 @@
 }
 
 /**
- * What the pointer aims at: a small hollow ring in the wished ink, so the country
- * carries a mark of the same family as a marker without pretending to be one.
+ * **THE HOVER ZONE, AND IT DRAWS NOTHING.** The owner asked for the marks on the
+ * wished countries to go: *« dans les pays à venir enlève les balises »*.
  *
- * 0.75 rem drawn inside a 1.75 rem box — smaller than a marker's 2.75 rem on
- * purpose. WCAG 2.5.8's target-size minimum applies to what a reader must
- * *operate*, and this operates nothing: it reveals a label that a screen reader
- * already reads and that the caption below the map repeats. Undersizing a target
- * that does nothing is not the failure the criterion is about — and making it 44 px
- * would put four dead 44 px boxes over the markers of a map whose whole point is
- * the markers.
+ * A hollow ring used to be painted here, so the pointer had something to aim at.
+ * It was also a mark of the marker family standing on a country that holds no
+ * trip, which is the confusion the request is about — and the hatched tint is
+ * already what makes the country findable by eye.
+ *
+ * What is left is the target itself: a square of nothing, centred on the anchor,
+ * that reveals the label when a pointer crosses it. 1.25 rem rather than the
+ * 0.75 rem the ring measured, because an invisible target has to be *found*; and
+ * not larger, because this layer sits over the markers and an invisible box that
+ * swallowed a marker's click would be a far worse defect than the one it fixes.
+ * `tests/e2e/wished.populated.spec.ts` measures both halves.
  */
 .noteDot {
-  inline-size: 0.75rem;
-  block-size: 0.75rem;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
   flex: none;
-  border: 2px solid var(--text-accent);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
 }
 
 /**
