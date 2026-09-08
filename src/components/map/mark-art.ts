@@ -15,10 +15,10 @@
  * part that is not the place. Worse, it is asymmetric, so two markers a few pixels
  * apart overlap differently depending on which is on the left.
  *
- * A pin tapers to **one point**, at the horizontal centre of its own box, and the
- * point is the place. Symmetric, so the overlap of two neighbours no longer
- * depends on their order; and the tip is a genuine corner rather than the end of a
- * stroke, so it survives being drawn at twelve pixels.
+ * A pin points **at the horizontal centre of its own box**, and that point is the
+ * place. Symmetric, so the overlap of two neighbours no longer depends on their
+ * order; and the tip is a genuine corner rather than the end of a stroke, so it
+ * survives being drawn at twelve pixels.
  *
  * **What it kept from the pennant.** One closed contour, for the outline: the ring
  * that separates a marker from whatever tint it lands on is painted with
@@ -48,23 +48,51 @@ export const MARK_VIEWBOX = "0 0 16 24";
 export const MARK_TIP = Object.freeze({ x: 8, y: 23 });
 
 /**
- * The pin — head and taper as **one closed path**, not a circle plus a triangle.
+ * The pin — **the map pin**: a teardrop with an eyelet, tapering to its point.
  *
- * Read as a walk: from the tip, up the left flank to the widest point of the head,
- * over the head, and back down the right flank to the tip.
+ * The owner's third pass on this marker, and the request was *« utilise un icon
+ * plus jolie ou fais plus réaliste »*. The two shapes before it were each right
+ * about something and wrong as a drawing. A **pennant** hung entirely to one side
+ * of its own anchor, so nothing in it said "here". A **rod with a ball on top**
+ * pointed correctly, kept the head clear of the place, and looked like a
+ * lollipop — a diagram of a marker rather than a marker.
  *
- * The two flanks are cubics rather than straight lines, and each control point is
- * doing one job. The first — (6.4, 19.6) from the tip — sets the **tip angle**:
- * about 50° between the two flanks, which is sharp enough to point and blunt
- * enough to survive a 2.2-unit stroke without the outline swallowing the corner.
- * The second — (2.5, 12.5) — is directly below the head's widest point, which
- * makes the tangent vertical there and the join with the arc invisible.
+ * This is the shape every reader already knows, and knowing it is most of what
+ * "plus joli" means at twenty pixels: there is no room to be original and be read.
  *
- * The head is a true semicircle: centre (8, 7.5), radius 5.5, so the chord from
- * (2.5, 7.5) to (13.5, 7.5) is exactly the diameter.
+ * **The eyelet is what makes it a pin rather than a drop**, and it costs one extra
+ * subpath. Filled solid, a teardrop at this size is a blob whose only feature is
+ * its outline; the hole gives it an interior, and `paint-order: stroke` rings that
+ * hole in the same ink as the silhouette, so it reads as a punched eyelet rather
+ * than as a gap. It is also what carries the *told / still to come* distinction
+ * without a second hue: the hollow variant inverts fill and stroke and the eyelet
+ * inverts with it.
  *
- * Symmetric about x = 8 by construction — the right flank's controls are the
- * left's mirrored — which is what the pennant could not be.
+ * The numbers, and each is a consequence rather than a taste:
+ *
+ * - **the head is r = 6 centred on (8, 8)**, and the point is at (8, 23) — the
+ *   horizontal centre of the box, which is what makes the anchoring one vertical
+ *   translation;
+ * - **the flanks are the two tangents** from the point to that circle, computed
+ *   rather than eyeballed: `√(15² − 6²)` gives the tangent length, and the contact
+ *   points fall at (2.5, 10.4) and (13.5, 10.4). A tangent meets a circle with
+ *   matching direction, so the straight flank flows into the arc with no visible
+ *   join — which a hand-picked pair of endpoints does not;
+ * - **the tip closes at 47°**, blunt enough that a 1.6-unit stroke does not swallow
+ *   the corner and sharp enough to point;
+ * - **the eyelet is r = 2.4**, two fifths of the head. Larger and the pin becomes a
+ *   ring on a stalk; smaller and it fills in at the size this actually renders.
+ *
+ * **Two subpaths and `fill-rule: evenodd`**, which is a departure from the two
+ * shapes before it — both were one contour precisely so that `paint-order: stroke`
+ * would not draw a seam. Here the second contour is *supposed* to be outlined, so
+ * the rule that forbade it does not apply. `src/components/site/brand-art.ts` uses
+ * the same technique for the aeroplane's needle, and the stylesheet carries the
+ * `fill-rule` for the same reason it does there.
+ *
+ * Symmetric about x = 8 by construction — which the pennant could not be, and
+ * which is what stops two neighbouring markers from overlapping differently
+ * depending on which one is on the left.
  */
 export const MARK_PIN_PATH =
-  "M8 23 C6.4 19.6 2.5 12.5 2.5 7.5 A5.5 5.5 0 1 1 13.5 7.5 C13.5 12.5 9.6 19.6 8 23 Z";
+  "M8 23 L2.5 10.4 A6 6 0 1 1 13.5 10.4 Z M10.4 8 A2.4 2.4 0 1 1 5.6 8 A2.4 2.4 0 1 1 10.4 8 Z";

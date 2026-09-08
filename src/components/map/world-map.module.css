@@ -583,8 +583,20 @@
    */
   translate: 0 -0.6875rem;
   fill: var(--accent);
+  /**
+   * The eyelet is a second contour inside the first, so the winding rule is what
+   * turns it into a hole rather than into a disc painted over the pin.
+   * `src/components/map/mark-art.ts` says why the pin has one at all.
+   */
+  fill-rule: evenodd;
   stroke: var(--text-on-accent);
-  stroke-width: 2.2;
+  /**
+   * 1.6 and no longer 2.2, and the rod is what set the ceiling: the stroke sits
+   * astride the contour, so 0.8 of it eats into each flank of a 3.6-unit rod and
+   * leaves 2 of fill down the middle. At 2.2 the outline met itself and the rod
+   * rendered as a white line with no accent in it at all.
+   */
+  stroke-width: 1.6;
   stroke-linejoin: round;
   paint-order: stroke;
   transition: transform 120ms ease;

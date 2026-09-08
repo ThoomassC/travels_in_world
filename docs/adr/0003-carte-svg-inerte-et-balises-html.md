@@ -499,14 +499,42 @@ quel que soit leur recouvrement, ce qui fait du pointeur le seul mode dégradé.
 > lieu. Le pied était en outre à x = 3 d'une boîte de 18, donc la feuille de style
 > devait le rattraper latéralement et le dessin penchait quand même.
 >
-> C'est une **épingle** maintenant : un contour fermé qui s'effile en un seul point,
-> sur l'axe médian de sa propre boîte, angle de pointe d'environ 50°. Trois
-> conséquences, et aucune n'est cosmétique. La pointe **est** le lieu, donc l'ancrage
-> se réduit à une translation verticale. La forme est **symétrique**, donc deux
-> balises voisines se recouvrent de la même façon quel que soit leur ordre — ce que
-> `src/components/map/marks.ts` reprochait au fanion. Et le grossissement au survol
-> part de la pointe, donc le point ne bouge pas pendant l'animation.
-> `tests/components/map/mark-art.test.ts` tient les trois propriétés.
+> **Trois formes ont été essayées, et il vaut mieux garder les deux ratées que la
+> conclusion seule.** Le fanion pendait tout entier d'un côté de son ancre : rien
+> dans le dessin ne disait « ici », l'œil lisait le drapeau, qui est précisément la
+> partie qui n'est pas le lieu. Une **goutte pleine** a suivi ; elle pointait juste
+> et se lisait comme un pâté à douze pixels, sa plus grande largeur faisant les deux
+> tiers de sa hauteur — sur un pays de la taille de la Belgique, la balise **était**
+> le pays. Puis un **bâton surmonté d'un rond**, demandé mot pour mot : il pointait,
+> il écartait la tête du lieu, et il ressemblait à une sucette. Un schéma de balise
+> plutôt qu'une balise. *« Utilise un icon plus jolie ou fais plus réaliste. »*
+>
+> C'est **la** balise de carte maintenant : une goutte percée d'un œillet. À vingt
+> pixels il n'y a pas de place pour être original et être lu, et la reconnaissance
+> immédiate est l'essentiel de ce que « plus joli » veut dire ici.
+>
+> L'œillet n'est pas un ornement. Pleine, une goutte de cette taille n'a pour tout
+> détail que sa silhouette ; le trou lui donne un intérieur, et `paint-order: stroke`
+> le cercle de la même encre que le contour, si bien qu'il se lit comme un œillet
+> poinçonné et non comme un manque. C'est aussi lui qui porte la distinction
+> *raconté / à venir* sans seconde teinte : la variante creuse échange le remplissage
+> et le contour, et l'œillet s'inverse avec elle.
+>
+> **Deux contours et `fill-rule: evenodd`**, ce qui rompt avec les deux formes
+> précédentes — toutes deux d'un seul contour, justement pour que `paint-order` ne
+> dessine pas de couture. Ici le second contour *doit* être cerné, donc la règle qui
+> l'interdisait ne s'applique pas ; `src/components/site/brand-art.ts` emploie la
+> même technique pour l'aiguille de l'avion.
+>
+> Ce que les trois essais partagent et qui n'est pas négociable : la pointe **est**
+> le lieu, sur l'axe médian de la boîte, donc l'ancrage se réduit à une translation
+> verticale ; la forme est **symétrique**, donc deux balises voisines se recouvrent
+> de la même façon quel que soit leur ordre — ce que `marks.ts` reprochait au
+> fanion ; et le grossissement au survol part de la pointe.
+> `tests/components/map/mark-art.test.ts` tient les quatre propriétés, et son cas de
+> symétrie compare des **points** et non des abscisses : une liste d'abscisses passe
+> sur un dessin faux, puisqu'elle ne vérifie jamais que l'abscisse miroir a gardé
+> son ordonnée.
 
 **Ce qui invaliderait cette décision.**
 
