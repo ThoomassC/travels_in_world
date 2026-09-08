@@ -183,7 +183,6 @@ export function tripMark(overrides: Partial<TripMark> = {}): TripMark {
   return {
     slug: "japon-2024",
     title: "Japon, printemps 2024",
-    startDate: "2024-04-12",
     placeName: "Tokyo",
     href: "/fr/voyages/japon-2024",
     point: { x: 800, y: 150 },
@@ -206,7 +205,6 @@ export function manyTripMarks(count: number, extent: Extent): readonly TripMark[
       title: `Voyage ${index}`,
       // Descending, like the content façade's own order, so a zone's sort has
       // something to preserve rather than a single repeated date.
-      startDate: `20${String(24 - (index % 20)).padStart(2, "0")}-06-01`,
       href: `/fr/voyages/voyage-${index}`,
       point,
     })

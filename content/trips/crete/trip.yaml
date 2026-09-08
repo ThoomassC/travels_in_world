@@ -1,0 +1,41 @@
+# Crète — un des voyages réels de Thomas, préparé par TIW-24.
+#
+# LES DATES DE CE FICHIER SONT FICTIVES, ET C'EST DÉLIBÉRÉ. Thomas n'a fourni
+# aucune date ; il a demandé des dates provisoires pour que le carnet tourne en
+# attendant les vraies. Elles sont donc inventées de bout en bout — début, fin,
+# publication et chaque étape — et elles ne disent RIEN de quand ce voyage a eu
+# lieu.
+#
+# COMMENT LES RECONNAÎTRE SANS LIRE CE COMMENTAIRE : les neuf voyages provisoires
+# commencent tous le PREMIER du mois, et portent tous la même date de publication
+# (2026-09-07). Neuf départs le 1er est une coïncidence que la réalité ne produit pas :
+# c'est le marqueur, et il disparaît au fur et à mesure que les vraies dates
+# arrivent. La liste complète est dans content/DATES-FICTIVES.md.
+#
+# Le récit n'est pas écrit : « story: unwritten » en fin de fichier. Le voyage est
+# donc sur la carte et dans les listes, sa fiche dit « Récit à venir », et il n'a
+# pas de page. Aucune photo n'a été fournie : photos est vide.
+
+slug: crete
+title: Crète
+startDate: 2025-08-01  # FICTIF — à remplacer
+endDate: 2025-08-12  # FICTIF — à remplacer
+publishedAt: 2026-09-07  # FICTIF — à remplacer
+
+places:
+  - slug: heraklion
+    name: Héraklion
+    countryCode: GR
+    coordinates:
+      lat: 35.32787
+      lon: 25.14341
+
+steps:
+  - kind: stay
+    placeSlug: heraklion
+    startDate: 2025-08-01  # FICTIF — à remplacer
+    endDate: 2025-08-12  # FICTIF — à remplacer
+
+photos: []
+
+story: unwritten

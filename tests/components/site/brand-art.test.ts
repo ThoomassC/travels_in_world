@@ -2,10 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  BRAND_COMET_PATH,
-  BRAND_LOCKUP_COMET_TRANSFORM,
-  BRAND_LOCKUP_TRACK_PATH,
-  BRAND_LOCKUP_VIEWBOX,
+  BRAND_PLANE_PATH,
+  BRAND_MARK_PLANE_TRANSFORM,
   BRAND_MARK_VIEWBOX,
 } from "@/components/site/brand-art";
 import { siteToken, type MeasuredTheme } from "../../styles/sheet";
@@ -110,21 +108,21 @@ describe("the favicon is a document a browser can parse", () => {
     expect(opens, "icon.svg should open exactly one CDATA section").toBe(1);
     expect(closes, "a CDATA terminator was written more than once — check the prose").toBe(1);
     expect(icon.indexOf("]]" + ">")).toBeGreaterThan(icon.indexOf("<![CDATA["));
-    // The `.comet` rule is the last thing inside the section: if the terminator
+    // The `.plane` rule is the last thing inside the section: if the terminator
     // moved above it, the fill declaration would be parsed as markup.
     expect(icon.indexOf("fill: var(--logo-ink)")).toBeLessThan(icon.indexOf("]]" + ">"));
   });
 });
 
-describe("the favicon draws the same comet as the header", () => {
-  it("carries exactly one path, and it is BRAND_COMET_PATH", () => {
+describe("the favicon draws the same aeroplane as the header", () => {
+  it("carries exactly one path, and it is BRAND_PLANE_PATH", () => {
     /**
-     * Exactly one, which is the "welded comet" cut itself: a single connected
+     * Exactly one, which is the banked-aeroplane cut itself: a single connected
      * mass. A second path would mean the favicon had grown a detached element —
      * the thing the 16 px raster cannot keep, and the reason the trajectory lives
      * in the lock-up only.
      */
-    expect(pathData(icon)).toEqual([BRAND_COMET_PATH]);
+    expect(pathData(icon)).toEqual([BRAND_PLANE_PATH]);
   });
 
   it("is drawn in the same box", () => {
@@ -173,43 +171,94 @@ describe("the favicon names no unconditioned colour", () => {
   });
 });
 
-describe("the lock-up reuses the mark instead of redrawing it", () => {
-  it("places the same path with a transform", () => {
+describe("the square placements reuse the mark instead of redrawing it", () => {
+  it("sets the aeroplane in the favicon's square with a transform", () => {
     /**
      * Two hand-placed copies of a logo are two logos, and the day one is nudged
-     * the other stays put. The lock-up therefore carries no coordinates of its
-     * own for the comet — only a `translate`/`scale`.
+     * the other stays put. The favicon therefore carries no coordinates of its
+     * own for the aeroplane — only a `translate`/`scale` around the one path.
+     *
+     * **This assertion changed side on 7 September 2026.** It used to check the
+     * header's transform, because the header drew the mark inside a wide lock-up
+     * box alongside a trajectory. The trajectory is gone with the old mark, so the
+     * header now draws the aeroplane in its own box with no transform at all, and
+     * the square that needs one is the favicon's.
      */
-    expect(BRAND_LOCKUP_COMET_TRANSFORM).toMatch(
-      /^translate\(-?[\d.]+ -?[\d.]+\) scale\([\d.]+\)$/
-    );
+    expect(BRAND_MARK_PLANE_TRANSFORM).toMatch(/^translate\(-?[\d.]+ -?[\d.]+\) scale\([\d.]+\)$/);
+
+    const icon = readFileSync(ICON_PATH, "utf8");
+    expect(icon).toContain(`transform="${BRAND_MARK_PLANE_TRANSFORM}"`);
   });
 
-  it("keeps the trajectory clear of the comet's ink", () => {
+  it("keeps the whole aeroplane inside that square, with margin to spare", () => {
     /**
-     * The load-bearing number of this mark, checked arithmetically because no
-     * rendered test can see it: ink against accent measures 1.99:1 in light and
-     * 1.35:1 in dark, so the two must never share an edge.
+     * A transform that overflows its box clips the mark, and a favicon is the one
+     * place nobody looks closely enough to notice. Checked arithmetically because
+     * no rendered test in this suite can see a 48-unit box.
      *
-     * The comet's lowest point in the lock-up box is its tail tip — the first
-     * coordinate of `BRAND_COMET_PATH`, put through the lock-up transform. The
-     * trajectory's own start is `BRAND_LOCKUP_TRACK_PATH`'s first coordinate.
-     * Below ~5 units of clearance in a 32-unit box the accent starts touching the
-     * ink at header size, and the mark collapses into one flat silhouette.
+     * The ordinates are taken over EVERY number of the path, control points
+     * included. That can only over-state the drawing's extent — a Bézier stays
+     * inside the convex hull of its control polygon — so a box this computes as
+     * fitting really does fit.
      */
-    const [, scale] = /scale\(([\d.]+)\)/.exec(BRAND_LOCKUP_COMET_TRANSFORM) ?? [];
-    const [, , translateY] =
-      /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(BRAND_LOCKUP_COMET_TRANSFORM) ?? [];
-    const [, tipY] = /^M[\d.]+ ([\d.]+)/.exec(BRAND_COMET_PATH) ?? [];
-    const [, trackY] = /^M[\d.]+ ([\d.]+)/.exec(BRAND_LOCKUP_TRACK_PATH) ?? [];
+    const [, scale = "0"] = /scale\(([\d.]+)\)/.exec(BRAND_MARK_PLANE_TRANSFORM) ?? [];
+    const [, translateX = "0", translateY = "0"] =
+      /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(BRAND_MARK_PLANE_TRANSFORM) ?? [];
 
-    const cometTip = Number(tipY) * Number(scale) + Number(translateY);
-    const clearance = Number(trackY) - cometTip;
+    const numbers = [...BRAND_PLANE_PATH.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) =>
+      Number(match[0])
+    );
+    const abscissae = numbers.filter((_, index) => index % 2 === 0);
+    const ordinates = numbers.filter((_, index) => index % 2 === 1);
 
-    expect(clearance).toBeGreaterThan(5);
-    // …and inside the box, so the clearance is not bought by pushing the
-    // trajectory off the bottom edge where it would be clipped.
-    const boxHeight = Number(BRAND_LOCKUP_VIEWBOX.split(" ")[3]);
-    expect(Number(trackY)).toBeLessThan(boxHeight);
+    const place = (value: number, offset: string) => value * Number(scale) + Number(offset);
+    const side = Number(BRAND_MARK_VIEWBOX.split(" ")[3]);
+
+    expect(place(Math.min(...abscissae), translateX)).toBeGreaterThanOrEqual(0);
+    expect(place(Math.max(...abscissae), translateX)).toBeLessThanOrEqual(side);
+    expect(place(Math.min(...ordinates), translateY)).toBeGreaterThanOrEqual(0);
+    expect(place(Math.max(...ordinates), translateY)).toBeLessThanOrEqual(side);
+
+    // And it is set, not merely fitted: a mark filling its box edge to edge reads
+    // as clipped on a tab bar that adds no padding of its own.
+    expect(place(Math.max(...ordinates), translateY)).toBeLessThan(side - 2);
+  });
+
+  it("draws the header mark in the aeroplane's own box, with no transform", () => {
+    /**
+     * The other half of the same decision, and the reason it is asserted rather
+     * than left to the component: a square viewBox in the header would spend a
+     * fifth of the medallion on empty margin, and the temptation to reuse
+     * {@link BRAND_MARK_VIEWBOX} there is exactly the kind of tidy-looking edit
+     * that would do it.
+     */
+    const brand = readFileSync(
+      path.join(REPOSITORY_ROOT, "src/components/site/site-brand.tsx"),
+      "utf8"
+    );
+
+    expect(brand).toContain("viewBox={BRAND_PLANE_VIEWBOX}");
+    expect(brand).not.toContain("BRAND_MARK_PLANE_TRANSFORM");
+  });
+
+  it("cuts the needle out rather than filling it, everywhere the mark is drawn", () => {
+    /**
+     * `fill-rule: evenodd` is the difference between a compass needle and a solid
+     * fuselage, and it fails **silently**: the default non-zero rule paints the
+     * second contour solid, no error, no warning, a mark that has simply lost its
+     * only detail. Two files draw this path and both are checked, because getting
+     * it right in one of them is how a favicon and a header stop matching.
+     */
+    const icon = readFileSync(ICON_PATH, "utf8");
+    const brand = readFileSync(
+      path.join(REPOSITORY_ROOT, "src/components/site/site-brand.tsx"),
+      "utf8"
+    );
+
+    expect(icon).toContain('fill-rule="evenodd"');
+    expect(brand).toContain('fillRule="evenodd"');
+
+    // The rule only means something if there is a second contour to cut out.
+    expect(BRAND_PLANE_PATH.match(/M /g) ?? []).toHaveLength(2);
   });
 });

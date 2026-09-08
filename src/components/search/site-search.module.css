@@ -1,0 +1,515 @@
+/* =============================================================================
+   The header's search — no colour of its own, like every module here.
+
+   It reads the shared tokens and no literal. The one thing to know before
+   editing: the FIELD sits on the accent bar and the PANEL is a surface of its
+   own. Two grounds, two ink sets — `--text-on-accent` above, the ordinary page
+   inks below — and mixing them is the classic way to get white text on cream.
+   ============================================================================ */
+
+/**
+ * The control, in the header's grid. `position: relative` so the panel can hang
+ * beneath the bar without widening it: laid out in flow it would push the whole
+ * header down by 400 px.
+ *
+ * **20 rem, taken from the bar for good** — that is the price of the always-open
+ * field the owner chose, and it is a price rather than a detail: the bar's middle
+ * column still centres the navigation on the page, so what shrinks is the empty
+ * space on either side of it, and below `--content-max-width` the flex shrink
+ * below takes over before anything overflows.
+ */
+.search {
+  position: relative;
+  flex: 0 1 20rem;
+  inline-size: 20rem;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}
+
+/**
+ * The field's frame, and it is a `<label>` rather than a `<div>`.
+ *
+ * That is what makes the whole pill clickable without a single line of script:
+ * clicking a label focuses its control, natively. It matters most in the
+ * collapsed state at the bottom of this file, where the input itself is zero
+ * pixels wide and the pill is all there is to aim at.
+ *
+ * **The ground is the bar's own, and only the border draws the control** — the
+ * same decision `site-nav.module.css` records for the language panel, and for the
+ * same reason: every ink in this box is then the pair the colour contract has
+ * already measured on the accent bar, and the field introduces no substrate that
+ * has not been measured.
+ */
+.searchFrame {
+  /**
+   * The quiet ink of the bar, declared again here rather than read from the
+   * `--nav-ink-quiet` the bar sets on itself. A custom property inherited across
+   * a module boundary is a contract nothing states and nothing checks; the mix is
+   * one line, and this one says out loud that it must stay equal to the nav's.
+   *
+   * `color-mix` and emphatically not `opacity`: opacity dims the element and
+   * everything in it, so the glyph, the caret and the focus ring would fade with
+   * the placeholder.
+   */
+  --search-ink-quiet: color-mix(in srgb, var(--text-on-accent) 80%, transparent);
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 2.75rem;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--search-ink-quiet);
+  border-radius: var(--radius-pill);
+  color: var(--text-on-accent);
+  cursor: text;
+  transition:
+    border-color var(--motion-color) var(--motion-ease),
+    inline-size var(--motion-move) var(--motion-ease);
+}
+
+.searchFrame:hover,
+.search:focus-within .searchFrame {
+  border-color: var(--text-on-accent);
+}
+
+.searchGlyph {
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
+  flex: none;
+  color: var(--search-ink-quiet);
+}
+
+/** The field's own name: announced, never drawn. A placeholder is not a label. */
+.searchLabel {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/**
+ * The input itself: no frame of its own — the `<label>` around it is the frame —
+ * and no background, so it is the bar that shows through.
+ *
+ * `appearance: none` is not cosmetic here: without it Chrome paints its own clear
+ * cross on a `type="search"`, in its own colour, over the accent bar.
+ */
+.searchField {
+  flex: 1;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  background: transparent;
+  color: var(--text-on-accent);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.searchField::placeholder {
+  color: var(--search-ink-quiet);
+}
+
+/**
+ * **THE FOCUS RING BELONGS TO THE PILL, NOT TO THE BARE INPUT** — and the owner
+ * saw what happens when it does not: *« quand on clique sur la barre de recherche
+ * on a un carré noir qui apparaît, cela ne fait pas propre »*.
+ *
+ * The library's recipe is an `outline` plus two rings in the `box-shadow`, and it
+ * is applied globally to `:focus-visible`. On the bare `<input>` that draws it
+ * around the *text box* — a low, sharp-cornered rectangle sitting inside a rounded
+ * teal pill, in `--focus-outer`, which is black in the light theme. A black square
+ * inside the control, exactly as reported.
+ *
+ * So the input's own ring is suppressed and the same recipe is put on the frame,
+ * where it follows the pill's `999px` radius and surrounds the thing a reader
+ * thinks of as the control. **Suppressed and re-drawn, never suppressed** — 2.4.7
+ * is not negotiable, and a text input matches `:focus-visible` on a *click* too
+ * (typing follows a click, so browsers show the ring either way), which is the
+ * exact case the owner was looking at.
+ *
+ * `:has()` rather than `:focus-within` for the ring: `:focus-within` is also true
+ * when the reader arrowed down into the suggestions, and a ring around an empty
+ * field while the focus is three rows below it points at the wrong thing. The
+ * border below is what `:focus-within` drives, and that one *should* stay lit for
+ * the whole interaction.
+ */
+.searchField:focus,
+.searchField:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.searchFrame:has(.searchField:focus-visible) {
+  outline: 3px solid var(--focus-outer);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 2px var(--focus-inner),
+    0 0 0 5px var(--focus-outer);
+}
+
+/* -----------------------------------------------------------------------------
+   The panel — a CSS disclosure, which is the whole architecture of this control
+   -------------------------------------------------------------------------- */
+
+/**
+ * **THE PANEL OPENS ON FOCUS, IN CSS, WITH NO SCRIPT INVOLVED.**
+ *
+ * This is what replaced the `<details>` the search used to be, and it is a
+ * straight gain for the reader with no JavaScript: they tab into the field and
+ * the complete index of the site is there, in real links, without a click. The
+ * client component's only say is `[data-dismissed]` below — written on Escape —
+ * so the script can close a panel it never has to open.
+ *
+ * `:focus-within` and not `:focus`, so walking into the list with the arrow keys
+ * keeps it open: the focused link is inside this box.
+ *
+ * Absolutely positioned so opening it never moves the header, capped in height so
+ * a carnet of sixty trips scrolls instead of covering the page, and anchored to
+ * the *end* rather than the start: the control sits at the right of the bar, so
+ * the panel grows leftwards and cannot leave the window. It is wider than the
+ * field on purpose — 26 rem is what an illustrated row needs — and on a narrow
+ * screen the `min` takes over and it spans the viewport less a gutter.
+ */
+.searchPanel {
+  display: none;
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-2));
+  inset-inline-end: 0;
+  z-index: 40;
+  inline-size: min(26rem, calc(100vw - var(--space-5) * 2));
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-body);
+  box-shadow: var(--elevation-2);
+}
+
+.search:focus-within .searchPanel {
+  display: block;
+}
+
+/*
+  Escape. Last of the three rules on purpose: it has the same specificity as the
+  one above, so source order is what makes it win — and that is stated because a
+  rule inserted between them would silently break the keyboard.
+*/
+.search[data-dismissed] .searchPanel {
+  display: none;
+}
+
+/**
+ * **The scrolling region, and it is this element rather than the panel** — which
+ * is not a detail of layout but the answer to a real violation.
+ *
+ * A region that scrolls has to be reachable by keyboard (axe's
+ * `scrollable-region-focusable`, WCAG 2.1.1). While the rows were tabbable it was
+ * satisfied by them; taking them out of the tab order — see
+ * `./site-search.tsx`, and the keyboard journey that forced it — left a scroll
+ * container nothing could reach. Measured, on both themes:
+ *
+ *   scrollable-region-focusable  serious  .searchPanel
+ *
+ * So the scroll, the accessible name and the single `tabindex="0"` are on one
+ * element: one stop, right after the field, that announces the suggestions and
+ * hands the arrows over. The count below it does not scroll away with the list,
+ * which is the second thing this buys.
+ */
+.searchResults {
+  max-block-size: min(60vh, 22rem);
+  overflow-y: auto;
+}
+
+/* -----------------------------------------------------------------------------
+   A note on the selectors below, because they break this project's habit
+   -------------------------------------------------------------------------- */
+
+/**
+ * **The rows are styled by structure and not by class, and that is a measurement
+ * rather than a taste.**
+ *
+ * A CSS-module class name is the module's name, a hash and the local name —
+ * `site-search-module__jJ-ugG__searchLabelText`, forty-three bytes — and this
+ * panel is in the HTML of **every document on the site**. Measured on the built
+ * `/fr/a-propos`, with a class on each row, link, text wrapper, label, detail and
+ * vignette: 10 134 bytes of class attributes in a 23 518-byte index. Forty-three
+ * per cent of the panel was the names of its own classes.
+ *
+ * Styling from `.searchList` down costs nothing per row: one scoped class at the
+ * top, then elements and the two data attributes the markup already carries for
+ * the client — `[data-label]`, which the inline completion reads, and
+ * `[data-illustrated]`, which is the one bit of shape a row varies by. The index
+ * came out at ~17.5 KiB, a quarter smaller, with the same rules.
+ *
+ * The isolation a CSS module buys is not lost: every selector is anchored on a
+ * hashed class, so nothing here can reach a `<span>` outside this panel.
+ */
+
+/**
+ * A group and its heading are one box, so hiding a group whose every row was
+ * filtered out is one decision. `[hidden]` is set by the component; the
+ * `!important` is the standard guard against the `display` this rule would
+ * otherwise win against.
+ */
+.searchGroup[hidden] {
+  display: none !important;
+}
+
+.searchGroupHeading {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.searchGroup:first-child .searchGroupHeading {
+  margin-block-start: 0;
+}
+
+.searchList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.searchList li[hidden] {
+  display: none !important;
+}
+
+/**
+ * A row, and **every row in the panel shares one grid** — a 2.5 rem gutter for the
+ * vignette, then the text.
+ *
+ * That gutter is empty on a place, a country and a page, and keeping it there is
+ * the point: the owner read the panel and saw it, *« le nom des villes et pays
+ * doit être bien aligné les uns aux autres, là certains sont plus à gauche que
+ * d'autres »*. Only trips carry a vignette, so without a shared first column the
+ * four groups started at two different left edges and the eye had to re-find the
+ * text at every heading. Two dozen rows of empty gutter cost nothing; a list that
+ * does not line up costs a reading.
+ *
+ * `2.5rem` written out rather than `auto`: each row is its own grid, so `auto`
+ * would size the column from that row's own content — which is exactly how a
+ * column stops being a column.
+ */
+.searchList a {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 2.75rem;
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-strong);
+  text-decoration: none;
+  transition: background-color var(--motion-color) var(--motion-ease);
+}
+
+/*
+  A plain row has nothing to put in the gutter, so its text is placed by name.
+  Without this it would land in the first column and the alignment above would be
+  exactly inverted.
+*/
+.searchList a:not([data-illustrated]) > span {
+  grid-column: 2;
+}
+
+.searchList a[data-illustrated] {
+  min-block-size: 3.5rem;
+  padding-block: var(--space-1);
+}
+
+.searchList a:hover {
+  background: var(--accent-quiet);
+}
+
+/**
+ * The text column. A plain row keeps its label and detail on one baseline, an
+ * illustrated one stacks them — which is the only difference between the two
+ * shapes that is not a column.
+ */
+.searchList a > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.searchList a[data-illustrated] > span {
+  display: grid;
+  gap: 0;
+}
+
+.searchList [data-label] {
+  min-inline-size: 0;
+  overflow-wrap: break-word;
+}
+
+.searchList [data-label] + span {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/**
+ * The second line of an illustrated row, and it is set in the monospaced face
+ * with tabular figures.
+ *
+ * Not decoration: the line is three fields — country, count, period — and it
+ * repeats down the list. A proportional face makes "6 étapes" and "11 étapes"
+ * two different widths and the column ragged; tabular figures line the numbers
+ * up, which is what lets the eye compare two rows without reading either.
+ */
+.searchList a[data-illustrated] [data-label] + span {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/**
+ * The count. Visible as well as announced: a sighted reader scanning a filtered
+ * list wants the same number a screen reader is given, and one string serves
+ * both — which is also one string to translate rather than two to keep in step.
+ */
+.searchCount {
+  margin: var(--space-3) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* -----------------------------------------------------------------------------
+   The vignette
+   -------------------------------------------------------------------------- */
+
+/**
+ * The definitions block draws nothing. Out of the flow as well as zero-sized:
+ * an `<svg>` is an inline element, so without this it still reserves a line box
+ * and the panel gains a few pixels of nothing at the top.
+ */
+.defs {
+  position: absolute;
+  inline-size: 0;
+  block-size: 0;
+}
+
+.searchList svg {
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  flex: none;
+}
+
+/**
+ * The country's own outline, at the 50m vintage — the same dataset the planisphere
+ * draws, simplified for forty pixels by `src/map/country-tile.ts`.
+ *
+ * It speaks the world map's palette token for token: land is `--surface` and its
+ * coast `--control-border`, exactly as `.land path` paints them in
+ * `world-map.module.css`. Copying the *tokens* rather than the colours is what
+ * keeps the two in step — the day the map's land changes, this changes with it,
+ * and no third colour enters the contrast contract.
+ *
+ * `non-scaling-stroke` for the reason the map records: the outline is drawn in a
+ * forty-unit box rendered at forty pixels today, and a reader with a larger
+ * default type size renders it bigger. Without this the coastline thickens with
+ * the tile instead of staying a hairline.
+ */
+.defs path {
+  fill: var(--surface);
+  stroke: var(--control-border);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/**
+ * The dot, and its two states are the map's two states.
+ *
+ * A told trip is the accent, filled. An untold one is **hollow** — `--surface`
+ * inside, `--accent-secondary` as the contour — which is the treatment
+ * `world-map.module.css` gives an untold marker, chosen there because a
+ * difference of shape survives greyscale, both themes and a reader who sees no
+ * colour at all. The mock-up drew a dashed outline instead; the map's own
+ * vocabulary won, so that a row and a marker say the same thing the same way.
+ *
+ * `--surface` and not `transparent`, for the reason the map records: a
+ * transparent hole shows whatever is behind it, so the same marker would read
+ * differently over the band and over the panel.
+ */
+.searchList svg circle {
+  fill: var(--text-accent);
+}
+
+.searchList svg[data-story="unwritten"] circle {
+  fill: var(--surface);
+  stroke: var(--accent-secondary);
+  stroke-width: 1.4;
+}
+
+/* -----------------------------------------------------------------------------
+   The narrow bar
+   -------------------------------------------------------------------------- */
+
+/**
+ * **Below the nav's own breakpoint the field collapses to its magnifier, and
+ * grows back on focus.**
+ *
+ * At 58 rem the bar stacks and the four nav entries already fill their line;
+ * 20 rem of field there is a third line. The alternative the mock-up proposed was
+ * to fall back to a disclosure — a second control with a second behaviour, to be
+ * held in step with this one for ever. This is the same control, narrower: the
+ * input keeps its place in the tab order at zero width, the `<label>` frame is
+ * what a finger aims at, and `:focus-within` widens it. One behaviour, and the
+ * script knows nothing about any of it.
+ *
+ * The width transition is a `--motion-move`, and `prefers-reduced-motion` is
+ * handled where every other one is, in the token sheet's global rule.
+ */
+@media (max-width: 58rem) {
+  .search {
+    flex: none;
+    inline-size: auto;
+  }
+
+  .searchFrame {
+    inline-size: 2.75rem;
+    padding-inline: 0;
+    justify-content: center;
+  }
+
+  .searchField {
+    inline-size: 0;
+    flex: none;
+  }
+
+  .search:focus-within .searchFrame {
+    inline-size: min(18rem, calc(100vw - var(--space-5) * 4));
+    padding-inline: var(--space-3);
+    justify-content: flex-start;
+  }
+
+  .search:focus-within .searchField {
+    inline-size: auto;
+    flex: 1;
+  }
+}
+
+/**
+ * Windows high-contrast mode replaces author colours on text and borders but not
+ * `background`, so a hovered row would lose its only cue. The forced palette
+ * keeps `Highlight` for exactly this.
+ */
+@media (forced-colors: active) {
+  .searchList a:hover {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

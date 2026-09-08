@@ -1,11 +1,21 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
 import { auditPage, describeViolations, firedOnlyInsideTheMap } from "./support/axe";
+import { MAP_DRAWING } from "./support/map";
 
 /**
  * TIW-14's interaction layer, against a **production build** of
- * `tests/fixtures/content/home-map` — four trips, of which Tokyo and Osaka are
- * about 400 km apart and therefore one zone at any realistic rendered scale.
+ * `tests/fixtures/content/home-map` — five trips, of which Tokyo and Osaka are
+ * about 400 km apart and therefore overlap at any realistic rendered scale.
+ *
+ * **The panel is per-trip, not per-zone, and several cases below were rewritten
+ * for it.** Clicking a marker used to open « Les N voyages à cet endroit » and
+ * stack one card per nearby trip; the owner asked for the opposite. A panel is
+ * now one trip's description — facts, cities, up to three photographs, and one
+ * way out — followed by « Aussi à cet endroit » only when another marker really
+ * covers its own. `zonesOf` gave way to `overlappingMarks`, which pairs markers
+ * directly instead of chaining them, and `map.panelHeading` is gone from all
+ * three catalogues.
  *
  * **This file is the judge of the ticket**, and the reason is that most of what
  * TIW-14 promises cannot be asserted anywhere else. `Escape`, the focus coming
@@ -33,8 +43,6 @@ import { auditPage, describeViolations, firedOnlyInsideTheMap } from "./support/
  * Both are named in the ticket's report as manual, not as covered.
  */
 
-const MAP = "figure";
-
 const marker = (page: Page, title: string, place: string): Locator =>
   page.getByRole("link", {
     name: frMessages.map.markLabel.replace("{title}", title).replace("{place}", place),
@@ -48,23 +56,63 @@ const REYKJAVIK = {
   slug: "islande-2022",
 } as const;
 
+/**
+ * The fixture's one **untold** trip, and the only one whose panel takes the
+ * second branch of `trip-panel.tsx` — « Récit à venir » plus a way into the
+ * listing, where a told trip gets « Lire le récit ».
+ *
+ * Its marker is named by `map.markLabelToCome` rather than by `map.markLabel`,
+ * which is why it cannot be reached through `marker()` above. Marrakech overlaps
+ * nothing on this crop (measured: the only overlapping pair on the whole map is
+ * Tokyo/Osaka), so a pointer really does reach it.
+ */
+const MARRAKECH = { title: "Maroc, sud et Atlas", place: "Marrakech", slug: "maroc-2023" } as const;
+
+const untoldMarker = (page: Page, title: string, place: string): Locator =>
+  page.getByRole("link", {
+    name: frMessages.map.markLabelToCome.replace("{title}", title).replace("{place}", place),
+  });
+
+/**
+ * A row of « Aussi à cet endroit », named by the neighbour's **title alone**.
+ *
+ * Deliberately not `map.markLabel`: the heading above has just said where these
+ * trips are, so `{title}, {place}` would read « Rouen, Rouen » on half of this
+ * journal. Scoped to the panel because a title is also a substring of its own
+ * marker's accessible name out on the drawing.
+ */
+const nearbyLink = (page: Page, title: string): Locator =>
+  page.getByRole("dialog").getByRole("link", { name: title });
+
+/** The panel's list of facts — country, dates, duration — which is its first. */
+const factsOf = (page: Page): Locator => page.getByRole("dialog").getByRole("list").first();
+
 const viewBox = async (page: Page): Promise<readonly number[]> => {
-  const raw = await page.locator(`${MAP} svg`).getAttribute("viewBox");
+  const raw = await page.locator(MAP_DRAWING).getAttribute("viewBox");
 
   return (raw ?? "").split(" ").map(Number);
 };
 
 const frameWidth = async (page: Page): Promise<number> => (await viewBox(page))[2] ?? Number.NaN;
 
-const control = (page: Page, name: string): Locator =>
-  page.locator(MAP).getByRole("button", { name });
+/**
+ * `Ctrl` + wheel over a point of the drawing — the only zoom left since TIW-38
+ * removed the three buttons. `fx`/`fy` place the pointer, because the zoom is
+ * towards the cursor and several cases depend on where it was.
+ */
+async function wheelZoom(page: Page, notches: number, fx = 0.5, fy = 0.5): Promise<void> {
+  await pointAt(page, fx, fy);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, notches);
+  await page.keyboard.up("Control");
+}
 
 /**
  * The pointer surface. NOT the `<svg>`, which carries `pointer-events: none` by
  * the design ADR 0003 records — Playwright refuses to hover it, and that refusal
  * is itself the proof that no country can be hovered or clicked.
  */
-const canvas = (page: Page): Locator => page.locator(`${MAP} svg`).locator("..");
+const canvas = (page: Page): Locator => page.locator(MAP_DRAWING).locator("..");
 
 /**
  * Puts the pointer at a fraction of the canvas, by coordinates.
@@ -138,8 +186,10 @@ test("without JavaScript the map is still drawn and every destination still reac
     expect(html).toContain(trip.title);
   }
 
-  // 3. The textual equivalent under it, untouched by this ticket.
-  expect(html).toContain(frMessages.map.countriesHeading);
+  // 3. The untold trip's marker too, pointing at the listing rather than at a
+  //    page the build never wrote — the half of the equivalent that used to be
+  //    checked here through « Les pays visités », removed on 7 September 2026.
+  expect(html).toContain('href="/fr/voyages#voyage-maroc-2023"');
 
   /**
    * 4. And NOT the controls, nor the panel. A zoom button in the server's HTML
@@ -168,8 +218,8 @@ test.describe("the trip panel", () => {
      * Osaka and not Tokyo, and the reason is the defect this ticket inherits: the
      * two markers overlap at this crop, and Osaka — the more recent trip, so the
      * first tab stop and the last painted — is the one a pointer reaches. Tokyo's
-     * own reachability is asserted below, by keyboard and through the panel,
-     * which is what the zone exists for.
+     * own reachability is asserted below, by keyboard and through the panel's
+     * « Aussi à cet endroit » row, which is what that block exists for.
      */
     await marker(page, OSAKA.title, OSAKA.place).click();
 
@@ -185,54 +235,163 @@ test.describe("the trip panel", () => {
     );
   });
 
-  test("the panel carries a cover, a title, dates, a duration and a way to read", async ({
-    page,
-  }) => {
-    /**
-     * The criterion's own list, on the real `TripCard` the page hands the map.
-     * The fixture has no photos on purpose — its README says why — so the cover
-     * slot is the card's placeholder, which is what a trip without a photo really
-     * renders.
-     */
+  /**
+   * **The descriptif, and it replaces the card this case used to assert on.**
+   *
+   * Until now a marker opened a panel headed « Les N voyages à cet endroit » and
+   * stacked one `TripCard` per nearby trip. The owner asked for the opposite —
+   * « quand je clique sur un voyage je veux le descriptif avec les photos du
+   * voyage, pas les autres voyages du pays » — so the panel is now one trip's
+   * description: facts, cities, photos, and one way out.
+   *
+   * `panel.locator("article")` and the card's `<h3>` are therefore gone, and the
+   * old assertions were not merely stale — they described a grouping the product
+   * no longer has. What is asserted here is what a reader is now promised.
+   *
+   * Two cases and not one, because the way out has two branches and a reader only
+   * ever gets one of them: a told trip is offered its récit, an untold one is
+   * offered its entry in the listing. The second is the branch that was a real
+   * defect — an untold trip's panel used to end on « Récit à venir » with nothing
+   * to activate at all.
+   */
+  test("the panel of a told trip describes it and links to its récit", async ({ page }) => {
     await page.goto("/fr");
     await marker(page, REYKJAVIK.title, REYKJAVIK.place).click();
 
     const panel = page.getByRole("dialog");
-    const card = panel.locator("article");
 
-    await expect(card).toHaveCount(1);
-    await expect(card.getByRole("heading", { name: REYKJAVIK.title })).toBeVisible();
-    // Dates and duration, asserted by shape rather than by a literal: both are
-    // formatted by `Intl` from the trip's own calendar days, and pinning the
-    // exact French wording here would duplicate `tests/components/trips`.
-    await expect(card).toContainText("2022");
-    await expect(card).toContainText(/\d+ jours?/);
-    await expect(card.getByText(frMessages.trips.cardRead)).toBeVisible();
-    await expect(card.getByRole("link", { name: REYKJAVIK.title })).toHaveAttribute(
+    // Named by the trip, not by a count of its neighbours — the whole ticket in
+    // one assertion. `map.panelHeading` no longer exists in any catalogue.
+    await expect(panel).toHaveAccessibleName(REYKJAVIK.title);
+    await expect(panel.getByRole("heading", { level: 2 })).toHaveText(REYKJAVIK.title);
+
+    /**
+     * The three facts, as three list items rather than one run-on sentence — the
+     * shape a screen reader announces one at a time. Dates and duration are
+     * asserted by shape and not by a literal: both are formatted by `Intl` from
+     * the trip's own calendar days, and pinning the French wording here would
+     * duplicate `tests/components/trips`.
+     */
+    await expect(factsOf(page).getByRole("listitem")).toHaveText(["Islande", /2022/, /\d+ jours?/]);
+
+    // The itinerary, as a line of its own.
+    await expect(
+      panel.getByText(frMessages.trips.panelCities.replace("{cities}", REYKJAVIK.place))
+    ).toBeVisible();
+
+    // The way out: the récit is written, so it is offered — and it is a real
+    // `<a href>`, since the panel's own `<h2>` is plain text and links nowhere.
+    await expect(panel.getByRole("link", { name: frMessages.trips.cardRead })).toHaveAttribute(
       "href",
       `/fr/voyages/${REYKJAVIK.slug}`
     );
+    await expect(panel.getByText(frMessages.trips.cardStoryToCome)).toHaveCount(0);
+
+    /**
+     * And it describes **this** trip and no other. Reykjavik overlaps nothing, so
+     * the panel carries no « Aussi à cet endroit » block at all — which is the
+     * negative half of the owner's sentence, and the half a panel that merely
+     * renamed its heading would still fail.
+     */
+    await expect(
+      panel.getByRole("heading", { name: frMessages.map.panelNearbyHeading })
+    ).toHaveCount(0);
+    for (const other of [TOKYO, OSAKA, MARRAKECH]) {
+      await expect(panel).not.toContainText(other.title);
+    }
   });
 
-  test("several trips in one zone are all reachable, newest first, with no sideways scroll", async ({
+  test("the panel of an untold trip says so and still leads somewhere", async ({ page }) => {
+    /**
+     * **A defect this ticket fixed, pinned so it cannot come back.** An untold
+     * trip has no page — `tripStaticParams` never builds one — so its panel
+     * rendered four facts and nothing to activate: a cul-de-sac reached by
+     * clicking a marker, with only Escape for a way out.
+     *
+     * The fragment is the listing's own anchor for this trip, so the reader lands
+     * on the entry they clicked. That it resolves at all is what the last two
+     * assertions check *by following it*, rather than by trusting the href —
+     * `dead-links.populated.spec.ts` cannot see this link, because the panel is
+     * rendered by the interaction layer and is absent from the crawled document.
+     */
+    await page.goto("/fr");
+    await untoldMarker(page, MARRAKECH.title, MARRAKECH.place).click();
+
+    const panel = page.getByRole("dialog");
+
+    await expect(panel).toHaveAccessibleName(MARRAKECH.title);
+    await expect(factsOf(page).getByRole("listitem")).toHaveText(["Maroc", /2023/, /\d+ jours?/]);
+    await expect(
+      panel.getByText(frMessages.trips.panelCities.replace("{cities}", MARRAKECH.place))
+    ).toBeVisible();
+
+    // The notice, and NOT a link to a page the build never wrote.
+    await expect(panel.getByText(frMessages.trips.cardStoryToCome)).toBeVisible();
+    await expect(panel.getByRole("link", { name: frMessages.trips.cardRead })).toHaveCount(0);
+
+    const wayOut = panel.getByRole("link", { name: frMessages.trips.panelSeeInListing });
+    await expect(wayOut).toHaveAttribute("href", `/fr/voyages#voyage-${MARRAKECH.slug}`);
+
+    await wayOut.click();
+
+    await expect(page).toHaveURL(new RegExp(`/fr/voyages#voyage-${MARRAKECH.slug}$`));
+    // The fragment names an element that really exists, so the reader arrives at
+    // their own trip rather than at the top of a listing of sixty.
+    await expect(page.locator(`#voyage-${MARRAKECH.slug}`)).toBeVisible();
+  });
+
+  test("an overlapped marker names its own trip and offers its neighbour as a switch", async ({
     page,
   }) => {
     /**
-     * Tokyo and Osaka. Two 44 px targets a few pixels apart at this crop — the
-     * pair that makes axe's `target-size` rule fire on this map — so a reader
-     * clicking there cannot have meant one of them in particular. The criterion
-     * is that both are listed, date descending, and reachable without horizontal
-     * scrolling.
+     * Tokyo and Osaka: the one overlapping pair on this crop — measured, their
+     * 44 px boxes share 1266 px² — so a reader clicking there cannot have meant
+     * one of them in particular.
+     *
+     * **What the answer to that used to be, and what it is now.** The panel used
+     * to be the *zone's*: « Les 2 voyages à cet endroit », a stack of cards, and
+     * no way to tell which marker had been hit. It is now the *trip's* — Osaka is
+     * the marker a pointer reaches, so the panel describes Osaka — and the trip
+     * the reader may have been aiming at is offered under « Aussi à cet endroit »
+     * as one row that swaps the panel in place.
+     *
+     * Swapping and not navigating is the whole point of the block: leaving the
+     * map for a trip page is a heavier answer than a reader asked for when they
+     * only mis-aimed by twenty pixels.
      */
     await page.goto("/fr");
-    // Osaka is the marker a pointer reaches; the panel is the zone's, not its own.
     await marker(page, OSAKA.title, OSAKA.place).click();
 
     const panel = page.getByRole("dialog");
-    await expect(panel).toHaveAccessibleName("Les 2 voyages à cet endroit");
 
-    const titles = await panel.locator("article h3").allInnerTexts();
-    expect(titles).toEqual([OSAKA.title, TOKYO.title]);
+    // The panel is Osaka's: its name, its heading, its cities.
+    await expect(panel).toHaveAccessibleName(OSAKA.title);
+    await expect(panel.getByRole("heading", { level: 2 })).toHaveText(OSAKA.title);
+    await expect(
+      panel.getByText(frMessages.trips.panelCities.replace("{cities}", OSAKA.place))
+    ).toBeVisible();
+
+    /**
+     * And Tokyo is a neighbour rather than a second subject: under an `<h3>`,
+     * named by its title alone, and it is the ONLY row — `overlappingMarks`
+     * measures overlap pairwise and never chains, so the block cannot grow a
+     * transitive third.
+     */
+    await expect(panel.getByRole("heading", { level: 3 })).toHaveText(
+      frMessages.map.panelNearbyHeading
+    );
+    const neighbours = panel.getByRole("list").last().getByRole("listitem");
+    await expect(neighbours).toHaveText([TOKYO.title]);
+
+    /**
+     * A real `<a href>` first, so the block still works with no script at all —
+     * it then simply navigates to the trip, which is the progressive base. The
+     * two data attributes are what the delegated handler reads to swap instead.
+     */
+    const switchLink = nearbyLink(page, TOKYO.title);
+    await expect(switchLink).toHaveAttribute("href", `/fr/voyages/${TOKYO.slug}`);
+    await expect(switchLink).toHaveAttribute("data-trip", TOKYO.slug);
+    await expect(switchLink).toHaveAttribute("data-panel-switch", "");
 
     // No horizontal scrolling anywhere: not inside the panel, not on the page.
     const overflow = await panel.evaluate((node) => ({
@@ -242,11 +401,177 @@ test.describe("the trip panel", () => {
     expect(overflow.panel).toBeLessThanOrEqual(1);
     expect(overflow.document).toBeLessThanOrEqual(1);
 
-    // And every card's own link is reachable — a scroll container nobody can
-    // scroll would satisfy the sentence above and fail the criterion.
-    for (const trip of [OSAKA, TOKYO]) {
-      await expect(panel.getByRole("link", { name: trip.title })).toBeVisible();
+    await switchLink.click();
+
+    /**
+     * The panel is Tokyo's now, the address says so, and **the page did not
+     * change** — the pathname is still `/fr`. That last assertion is the one that
+     * fails if the interception is ever lost: the link's own href would take the
+     * reader to `/fr/voyages/japon-2024`, which is a green-looking navigation and
+     * the wrong answer.
+     */
+    await expect(panel).toHaveAccessibleName(TOKYO.title);
+    await expect(
+      panel.getByText(frMessages.trips.panelCities.replace("{cities}", "Tokyo et Kyoto"))
+    ).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe("/fr");
+    expect(new URL(page.url()).searchParams.get("voyage")).toBe(TOKYO.slug);
+
+    /**
+     * **And Escape gives the focus to TOKYO's marker, not to Osaka's.**
+     *
+     * The subtle half, and the one a swap breaks by default: the link that was
+     * activated lives inside the block the swap replaces, so it is unmounted the
+     * moment the selection changes. A trigger pointing at it would find
+     * `isConnected === false`, skip the `focus()`, and drop the reader on
+     * `<body>` with nothing on screen to explain it — WCAG 2.4.3 lost silently.
+     * The marker outlives every panel, so the marker is what must take it.
+     */
+    await page.keyboard.press("Escape");
+
+    await expect(panel).toHaveCount(0);
+    await expect(marker(page, TOKYO.title, TOKYO.place)).toBeFocused();
+  });
+
+  test("a modified click on a neighbour row still opens that trip in a new tab", async ({
+    page,
+    context,
+  }) => {
+    /**
+     * The rule the marker already keeps, restated on the panel's own delegation
+     * surface because it is a **second** root and nothing else would notice it
+     * losing the exception: Ctrl/Cmd-click means "open in a new tab" to a browser,
+     * and a row that swallowed it would be a link only in appearance.
+     */
+    await page.goto(`/fr?voyage=${OSAKA.slug}`);
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    const [opened] = await Promise.all([
+      context.waitForEvent("page"),
+      nearbyLink(page, TOKYO.title).click({ modifiers: ["ControlOrMeta"] }),
+    ]);
+
+    // `waitForURL` and not `waitForLoadState()`, for the reason the marker's own
+    // modified-click case records at length: a fresh tab is `about:blank` and
+    // already loaded, so the load state resolves before the navigation commits.
+    await opened.waitForURL(new RegExp(`/fr/voyages/${TOKYO.slug}$`));
+    expect(new URL(opened.url()).pathname).toBe(`/fr/voyages/${TOKYO.slug}`);
+    await opened.close();
+
+    /**
+     * And the tab that stayed behind was left alone: still Osaka's panel, still
+     * Osaka's address. A handler that ran its swap *and* let the browser open the
+     * tab would pass every assertion above and quietly move the reader's map.
+     */
+    await expect(page.getByRole("dialog")).toHaveAccessibleName(OSAKA.title);
+    expect(new URL(page.url()).searchParams.get("voyage")).toBe(OSAKA.slug);
+  });
+
+  test("the panel shows at most three photos of the trip, cover first", async ({ page }) => {
+    /**
+     * **Reached by address rather than by pointer, and that is not a shortcut.**
+     * `japon-2024` is Tokyo, and Tokyo is the marker *underneath* Osaka at this
+     * crop — a pointer aimed at it reaches Osaka, which is the defect the
+     * neighbour block answers rather than one this case should re-discover.
+     * `?voyage=` is the same entry point a shared link uses.
+     *
+     * **Asserted on attributes, never on a painted image.** `next start` serves
+     * the repository's own `public/`, not the fixture's, so every one of these
+     * files answers 404 here — `photo-viewer.populated.spec.ts` states it at
+     * length. `naturalWidth`, a visual check or a `toBeVisible()` on the `<img>`
+     * would therefore be a test of the wrong thing: what this ticket added is a
+     * strip of thumbnails with the right sources, the right count and the right
+     * order, and all three are in the markup.
+     */
+    await page.goto(`/fr?voyage=${TOKYO.slug}`);
+
+    const panel = page.getByRole("dialog");
+    await expect(panel).toHaveAccessibleName(TOKYO.title);
+
+    // The strip names itself, so a screen reader does not meet three unlabelled
+    // links between the cities line and the récit.
+    const strip = panel.getByRole("list", {
+      name: frMessages.trips.panelPhotosLabel.replace("{title}", TOKYO.title),
+    });
+    await expect(strip).toBeVisible();
+
+    /**
+     * **Three, from four declared.** `japon-2024` carries tokyo, kyoto, osaka and
+     * nara; `PANEL_PHOTO_LIMIT` is 3 and the cover leads. So the count is a real
+     * cap rather than "all of them", and `nara` being the one dropped is what
+     * proves the order is cover-then-declaration and not, say, the last three.
+     */
+    const thumbs = strip.locator("img");
+    await expect(thumbs).toHaveCount(3);
+    expect(
+      await thumbs.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("src")))
+    ).toEqual([
+      "/photos/japon-2024/tokyo.jpg",
+      "/photos/japon-2024/kyoto.jpg",
+      "/photos/japon-2024/osaka.jpg",
+    ]);
+
+    /**
+     * Every thumbnail describes its picture. Asserted as "no empty alt" rather
+     * than against the three strings: the alt texts belong to the content file,
+     * and repeating them here would make this case fail the day an author
+     * improves one — a test breaking on a change that is not a regression.
+     */
+    const alts = await thumbs.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("alt") ?? "")
+    );
+    expect(alts).toHaveLength(3);
+    for (const alt of alts) {
+      expect(alt.length, "a panel thumbnail carries an empty alt").toBeGreaterThan(0);
     }
+
+    /**
+     * The AVIF rung, on a `<source>` beside the `<img>` and not on the `<img>`
+     * itself — a `<picture>` commits to the `<source>` it matches and never falls
+     * back to the `<img>`, so the derivative and the original are two different
+     * elements by construction.
+     */
+    const sources = strip.locator("source");
+    await expect(sources).toHaveCount(3);
+    expect(
+      await sources.evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          type: node.getAttribute("type"),
+          srcset: node.getAttribute("srcset"),
+        }))
+      )
+    ).toEqual([
+      { type: "image/avif", srcset: "/photos/japon-2024/tokyo-480.avif 480w" },
+      { type: "image/avif", srcset: "/photos/japon-2024/kyoto-480.avif 480w" },
+      { type: "image/avif", srcset: "/photos/japon-2024/osaka-480.avif 480w" },
+    ]);
+
+    /**
+     * And each thumbnail is a real link to the file, whose accessible name says
+     * what activating it **does** and not only what the picture shows — the alt
+     * describes the photograph, « voir en grand » describes the destination, and
+     * WCAG 2.4.4 is about the second. There is no viewer on the home page, so the
+     * link is the whole of the affordance.
+     *
+     * `exact: false`, because the name is the two of them concatenated: « Une
+     * ruelle de Shinjuku sous la pluie voir en grand ». Asserting the whole string
+     * would pin three alt texts that belong to the content file.
+     */
+    const photoLinks = strip.getByRole("link", {
+      name: frMessages.photos.openFullSize,
+      exact: false,
+    });
+    await expect(photoLinks).toHaveCount(3);
+    await expect(photoLinks.first()).toHaveAttribute("href", "/photos/japon-2024/tokyo.jpg");
+
+    /**
+     * The other branch, and it is the ordinary one on this journal: a trip with
+     * no photograph renders **no strip at all** rather than a « pas encore de
+     * photos » that promises a delivery nobody has committed to.
+     */
+    await page.goto(`/fr?voyage=${REYKJAVIK.slug}`);
+    await expect(page.getByRole("dialog")).toHaveAccessibleName(REYKJAVIK.title);
+    await expect(page.getByRole("dialog").locator("img")).toHaveCount(0);
   });
 
   test("Escape closes the panel and gives the focus back to the marker", async ({ page }) => {
@@ -300,7 +625,13 @@ test.describe("the trip panel", () => {
     await expect(panel).toBeVisible();
     await expect(panel).toBeFocused();
 
-    await panel.getByRole("link", { name: REYKJAVIK.title }).focus();
+    /**
+     * Named « Lire le récit » and no longer by the trip's title: the panel's body
+     * is a description now, not a `TripCard` whose own title was the link. The
+     * href is unchanged, which is what this leg is actually about — the story
+     * stays one activation away from a marker.
+     */
+    await panel.getByRole("link", { name: frMessages.trips.cardRead }).focus();
     await page.keyboard.press("Enter");
 
     await expect(page).toHaveURL(new RegExp(`/fr/voyages/${REYKJAVIK.slug}$`));
@@ -318,21 +649,57 @@ test.describe("the trip panel", () => {
     ]);
 
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await opened.waitForLoadState();
+
+    /**
+     * `waitForURL` and not `waitForLoadState()`, and the difference is why this
+     * case was flaky — it failed two full runs out of four on 7 September 2026,
+     * always with `about:blank` where the trip's path was expected.
+     *
+     * `context.waitForEvent("page")` resolves the moment the tab exists, which is
+     * before it has navigated anywhere. `waitForLoadState()` then waits for the
+     * `load` of whatever is currently there — and `about:blank` is already loaded,
+     * so it returns immediately and the assertion reads the blank URL. Waiting on
+     * the URL waits for the thing the test is actually about.
+     */
+    await opened.waitForURL(new RegExp(`/fr/voyages/${REYKJAVIK.slug}$`));
     expect(new URL(opened.url()).pathname).toBe(`/fr/voyages/${REYKJAVIK.slug}`);
     await opened.close();
   });
 
-  test("the panel is lateral above 768 px and a sheet below", async ({ page }) => {
+  test("the panel is lateral above 768 px and a sheet below, and it hugs its content", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/fr");
 
-    await page.setViewportSize({ width: 1280, height: 900 });
     await marker(page, REYKJAVIK.title, REYKJAVIK.place).click();
     const lateral = await page.getByRole("dialog").boundingBox();
-    // Down the right-hand side: narrower than half the viewport, and tall.
+    // Down the right-hand side: narrower than half the viewport, on its far half.
     expect(lateral?.width ?? 0).toBeLessThan(640);
     expect((lateral?.x ?? 0) + (lateral?.width ?? 0)).toBeGreaterThan(640);
-    expect(lateral?.height ?? 0).toBeGreaterThan(200);
+
+    /**
+     * **`height > 200` used to stand here, and it was a measurement of the old
+     * panel rather than a property of this one.** A stack of cards was tall
+     * whatever it held; a description is as tall as the trip it describes.
+     * Reykjavik — three facts, one city, no photograph, no neighbour — measures
+     * 384 x 198 at this viewport, so the old line would now fail on a panel that
+     * is behaving exactly as asked.
+     *
+     * What is worth pinning instead is the property that replaced it: the panel
+     * **hugs its content**. Asserted as a relation between two real panels rather
+     * than against a pixel count, so it survives a font, a padding or a date
+     * format changing — Tokyo carries three photographs and a neighbour block,
+     * Reykjavik carries neither, and a panel stretched to a fixed column height
+     * would make the two equal.
+     */
+    expect(lateral?.height ?? 0).toBeLessThan(900);
+
+    await page.goto(`/fr?voyage=${TOKYO.slug}`);
+    await expect(page.getByRole("dialog")).toHaveAccessibleName(TOKYO.title);
+    const richer = await page.getByRole("dialog").boundingBox();
+    expect(richer?.width ?? 0).toBeCloseTo(lateral?.width ?? -1, 0);
+    expect(richer?.height ?? 0).toBeGreaterThan(lateral?.height ?? 0);
 
     await page.setViewportSize({ width: 390, height: 844 });
     const sheet = await page.getByRole("dialog").boundingBox();
@@ -402,16 +769,24 @@ test.describe("the tooltip", () => {
      * inline axis with `overflow-x: clip` and an `overflow-clip-margin` wide
      * enough for a marker's own overhang.
      */
-    await page.setViewportSize({ width: 320, height: 800 });
+    /**
+     * **769 px and not 320, since the marker layer became a desktop layer.**
+     * Below 768 px there are no markers to hover and therefore no tooltip to
+     * overflow — `world-map.module.css` carries the measurement. 769 is now the
+     * narrowest width at which this can go wrong, which makes it the right one to
+     * check: the tooltip is still centred on its marker and a marker near the
+     * frame's edge still pushes it outward.
+     */
+    await page.setViewportSize({ width: 769, height: 800 });
     await page.goto("/fr");
 
     /**
-     * `force: true`, and the reason is the overlap this ticket inherits: at 320 px
-     * a 44 px target is 16 % of the map's width, so the markers cover each other
-     * and Playwright's hit-target check refuses to aim at a specific one. Forcing
-     * still moves the real pointer to the real coordinates, which is all this test
-     * needs — some tooltip is shown, and the question is only whether the document
-     * got wider.
+     * `force: true`, and the reason is the overlap this ticket inherits: a 44 px
+     * target is a large fraction of a narrow map's width, so the markers cover
+     * each other and Playwright's hit-target check refuses to aim at a specific
+     * one. Forcing still moves the real pointer to the real coordinates, which is
+     * all this test needs — some tooltip is shown, and the question is only
+     * whether the document got wider.
      */
     const markers = page.locator("a[data-trip]");
     const count = await markers.count();
@@ -433,24 +808,24 @@ test.describe("the tooltip", () => {
 });
 
 test.describe("zoom and pan", () => {
-  test("the buttons zoom, the reset goes back, and the frame never leaves the world", async ({
-    page,
-  }) => {
+  test("the wheel zooms, and the frame never leaves the world", async ({ page }) => {
+    /**
+     * Was "the buttons zoom, the reset goes back, …" until TIW-38 removed the
+     * three controls. The reset went with them and there is no assertion standing
+     * in for it: nothing restores the initial frame any more, and pretending
+     * otherwise here would be the test lying about the product.
+     */
     await page.goto("/fr");
     const initial = await viewBox(page);
 
-    await control(page, frMessages.map.zoomIn).click();
-    expect(await frameWidth(page)).toBeLessThan(initial[2] ?? 0);
+    await wheelZoom(page, -240);
+    await expect.poll(async () => frameWidth(page)).toBeLessThan(initial[2] ?? 0);
 
-    await control(page, frMessages.map.zoomOut).click();
-    await control(page, frMessages.map.zoomOut).click();
+    await wheelZoom(page, 480);
     const wide = await viewBox(page);
     expect(wide[0] ?? -1).toBeGreaterThanOrEqual(0);
     expect((wide[0] ?? 0) + (wide[2] ?? 0)).toBeLessThanOrEqual(960.05);
     expect((wide[1] ?? 0) + (wide[3] ?? 0)).toBeLessThanOrEqual(500.05);
-
-    await control(page, frMessages.map.zoomReset).click();
-    expect(await viewBox(page)).toEqual(initial);
   });
 
   test("a marker stays on the country it names at every zoom level", async ({ page }) => {
@@ -468,8 +843,8 @@ test.describe("zoom and pan", () => {
     await page.goto("/fr");
 
     const drift = async () =>
-      page.evaluate(() => {
-        const svg = document.querySelector("figure svg");
+      page.evaluate((drawing) => {
+        const svg = document.querySelector(drawing);
         const canvas = svg?.parentElement;
         const link = document.querySelector<HTMLElement>('a[data-trip="islande-2022"]');
         const item = link?.closest("li");
@@ -501,16 +876,13 @@ test.describe("zoom and pan", () => {
           ratio: box.width / box.height,
           frameRatio: frame("--frame-w") / frame("--frame-h"),
         };
-      });
+      }, MAP_DRAWING);
 
-    for (const step of [
-      null,
-      frMessages.map.zoomIn,
-      frMessages.map.zoomIn,
-      frMessages.map.zoomOut,
-    ]) {
-      if (step !== null) {
-        await control(page, step).click();
+    // Four levels, driven by the wheel since TIW-38: the initial frame, two
+    // notches in, then one back out.
+    for (const notches of [0, -240, -240, 240]) {
+      if (notches !== 0) {
+        await wheelZoom(page, notches);
       }
       const measured = await drift();
       expect(measured).not.toBeNull();
@@ -520,6 +892,202 @@ test.describe("zoom and pan", () => {
       expect(measured?.ratio ?? 0).toBeCloseTo(measured?.frameRatio ?? -1, 1);
     }
   });
+
+  /**
+   * The same property as the test above, at the widths where it actually breaks.
+   *
+   * **Why the test above never saw it.** Both Playwright configs declare a single
+   * project, `devices["Desktop Chrome"]` — 1280 x 720. At that size the height
+   * `.canvas` asks for (`100dvh` less the chrome and the two block paddings) is
+   * short enough that the width the ratio derives from it fits in the viewport,
+   * so `max-inline-size: 100%` never clips anything and `aspect-ratio` is honoured.
+   * Narrow the viewport and that stops being true — and the CSS then asks for
+   * three incompatible things at once:
+   *
+   *     aspect-ratio: var(--frame-w) / var(--frame-h);
+   *     block-size: calc(100dvh - ...);   inline-size: auto;   max-inline-size: 100%;
+   *
+   * When `max-inline-size` clips the `auto` width, the browser **drops
+   * `aspect-ratio`** rather than reducing the height with it. The box keeps the
+   * full `dvh` height with a clipped width, the `<svg>` — which has no
+   * `preserveAspectRatio` attribute, so `xMidYMid meet` — draws its frame
+   * centred inside that box with empty bands above and below, and the markers,
+   * being HTML positioned in percentages of the **box** (`.mark`, this file's
+   * `--mark-*`/`--frame-*` arithmetic), follow the box rather than the drawing.
+   * Every one of them slides off the country it names.
+   *
+   * The invariant is written three times in the repository — `docs/adr/0003`, the
+   * header of `frameAround` in `src/components/map/frame.ts`, and the `.canvas`
+   * rule itself — and none of the three was executable at a phone's width until
+   * this test. `page.setViewportSize` is enough: no second Playwright project,
+   * so the rest of the suite keeps running once against one build.
+   */
+  /**
+   * **`marks` is how many markers the width is expected to paint, and zero is a
+   * real expectation rather than a skip.**
+   *
+   * Below 768 px the marker layer is hidden — `world-map.module.css` carries the
+   * measurement: thirteen 44 px targets inside 130 × 98 px on a 390 px screen is
+   * not a map a finger can use, so the drawing goes back to being the inert
+   * illustration `docs/adr/0003` describes and the countries list under it
+   * carries the navigation. The ratio invariant above is untouched by that and is
+   * still the subject of this case at a phone's width; the marker arithmetic
+   * simply has nothing to measure there, and `0` pins that instead of hiding it.
+   *
+   * 769 px is the narrowest width that still paints them, so it is where the
+   * marker half of this case now lives — one pixel above the breakpoint, which is
+   * exactly where a regression in either direction would show.
+   */
+  const NARROW_VIEWPORTS = [
+    // The phone the ticket's manual checks use.
+    { label: "390 x 844", width: 390, height: 844, marks: 0 },
+    // The floor this file already keeps for the tooltip's overflow, at the same
+    // height, so a failure here means the width and not a second variable.
+    { label: "320 x 844", width: 320, height: 844, marks: 0 },
+    // One pixel above the breakpoint: the narrowest layout that still has markers.
+    { label: "769 x 844", width: 769, height: 844, marks: 5 },
+  ] as const;
+
+  for (const viewport of NARROW_VIEWPORTS) {
+    test(`the canvas keeps the frame's exact ratio at ${viewport.label}`, async ({
+      page,
+    }) => {
+      // The viewport before the navigation: `block-size` is a `dvh` calculation,
+      // so the box is a function of the window and resizing after the paint would
+      // measure a relayout rather than the rendering a reader gets.
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto("/fr");
+      await expect(page.locator(MAP_DRAWING)).toBeVisible();
+
+      const measured = await page.evaluate((drawing) => {
+        const svg = document.querySelector(drawing);
+        const canvas = svg?.parentElement;
+        if (!(svg instanceof SVGSVGElement) || canvas === null || canvas === undefined) {
+          return null;
+        }
+
+        /**
+         * Same reading as the test above — `--frame-*` on the canvas, `--mark-*`
+         * on each marker's own `<li>`, because custom properties inherit DOWN and
+         * reading both from one element gives `Number("")` and a fiction.
+         */
+        const frame = (name: string) =>
+          Number(getComputedStyle(canvas).getPropertyValue(name).trim());
+        const box = canvas.getBoundingClientRect();
+
+        /**
+         * Where the drawing really is, asked of the browser rather than
+         * re-implemented here: `getScreenCTM()` maps user units to client pixels
+         * through whatever the `viewBox` mapping decided, letterboxing included.
+         * Transforming the frame's two corners with it gives the rectangle the
+         * `<svg>` actually paints — which is the box itself when the ratios
+         * agree, and a band-inset rectangle when they do not.
+         */
+        const ctm = svg.getScreenCTM();
+        if (ctm === null) {
+          return null;
+        }
+        const toScreen = (x: number, y: number) => new DOMPoint(x, y).matrixTransform(ctm);
+        const topLeft = toScreen(frame("--frame-x"), frame("--frame-y"));
+        const bottomRight = toScreen(
+          frame("--frame-x") + frame("--frame-w"),
+          frame("--frame-y") + frame("--frame-h")
+        );
+
+        const marks = [...document.querySelectorAll<HTMLElement>("a[data-trip]")]
+          // Painted ones only: below the breakpoint the layer is `display: none`,
+          // and a hidden element's box is 0 × 0 at the origin — which would read
+          // as a marker hundreds of pixels off its country rather than as one
+          // that is not drawn at all.
+          .filter((link) => link.getClientRects().length > 0)
+          .map((link) => {
+            const item = link.closest("li") ?? link;
+            const markBox = item.getBoundingClientRect();
+            const style = getComputedStyle(item);
+            const mark = (name: string) => Number(style.getPropertyValue(name).trim());
+            const centreX = markBox.left + markBox.width / 2;
+            const centreY = markBox.top + markBox.height / 2;
+            const target = toScreen(mark("--mark-x"), mark("--mark-y"));
+
+            return {
+              slug: link.dataset.trip ?? "?",
+              x: Math.abs(centreX - target.x),
+              y: Math.abs(centreY - target.y),
+              // Zero while the marker's centre is on the painted rectangle; the
+              // number of pixels it stands off it otherwise.
+              outsideBy: Math.max(
+                0,
+                topLeft.x - centreX,
+                centreX - bottomRight.x,
+                topLeft.y - centreY,
+                centreY - bottomRight.y
+              ),
+            };
+          })
+          /**
+           * Worst first, and it is the failure *message* this is for rather than
+           * the verdict — all five are asserted either way. In DOM order the list
+           * starts with the most recent trip (`--mark-order` paints them
+           * inverted), which is an accident of z-index: the first run of this test
+           * reported a marker 12 px off while another was 162 px off the drawing,
+           * and a reader has to be handed the number that shows the size of the
+           * defect, not the first one the document happened to carry.
+           */
+          .sort((a, b) => Math.hypot(b.x, b.y) - Math.hypot(a.x, a.y));
+
+        return {
+          ratio: box.width / box.height,
+          frameRatio: frame("--frame-w") / frame("--frame-h"),
+          box: { width: box.width, height: box.height },
+          drawn: { width: bottomRight.x - topLeft.x, height: bottomRight.y - topLeft.y },
+          marks,
+        };
+      }, MAP_DRAWING);
+
+      expect(measured).not.toBeNull();
+      /**
+       * Five above the breakpoint — the untold trip's marker included, which is
+       * the whole point of TIW-18's state — and none below it. Asserted either
+       * way, so an empty list is never what makes the loop below pass, and a
+       * marker layer that came back on a phone fails here rather than silently.
+       */
+      expect(measured?.marks ?? []).toHaveLength(viewport.marks);
+
+      /**
+       * Carried into every message below, because the number that explains the
+       * failure is not the number that is asserted: a marker 162 px off its
+       * country says nothing on its own, and `canvas 326x684 for a drawing of
+       * 326x170` says the whole of it in one line.
+       */
+      const shape =
+        `canvas ${measured?.box.width.toFixed(1)} x ${measured?.box.height.toFixed(1)} ` +
+        `(ratio ${measured?.ratio.toFixed(3)}) for a frame of ratio ${measured?.frameRatio.toFixed(3)}, ` +
+        `so the SVG paints ${measured?.drawn.width.toFixed(1)} x ${measured?.drawn.height.toFixed(1)}`;
+
+      for (const mark of measured?.marks ?? []) {
+        // The consequence a reader sees, asserted first: a marker outside the
+        // painted rectangle names a country that is not under it at all.
+        expect(
+          mark.outsideBy,
+          `marker ${mark.slug} sits ${mark.outsideBy.toFixed(1)} px outside the rectangle the SVG paints — ${shape}`
+        ).toBeLessThanOrEqual(1);
+        // Then the distance to its own country, with the neighbour test's twelve
+        // pixels: the marker's own centring plus one-decimal rounding.
+        expect(
+          mark.x,
+          `marker ${mark.slug} is ${mark.x.toFixed(1)} px off its country on the x axis — ${shape}`
+        ).toBeLessThan(12);
+        expect(
+          mark.y,
+          `marker ${mark.slug} is ${mark.y.toFixed(1)} px off its country on the y axis — ${shape}`
+        ).toBeLessThan(12);
+      }
+
+      // And the cause, in the shape the test above asserts it: the box IS the
+      // frame's ratio, so `preserveAspectRatio` has nothing to letterbox.
+      expect(measured?.ratio ?? 0, shape).toBeCloseTo(measured?.frameRatio ?? -1, 1);
+    });
+  }
 
   test("the wheel alone scrolls the page and says which combination zooms", async ({ page }) => {
     /**
@@ -567,10 +1135,17 @@ test.describe("zoom and pan", () => {
       )
     ).toEqual([false]);
 
-    // And the message appeared, then went away on its own.
-    const hint = page.getByText(frMessages.map.wheelHint);
-    await expect(hint).toBeVisible();
-    await expect(hint).toHaveCount(0, { timeout: 6000 });
+    /**
+     * There used to be a third assertion here: a message appeared saying to hold
+     * Ctrl, and went away on its own. TIW-38 removed the hint at the owner's
+     * request, so what is left to guard is the behaviour rather than its
+     * explanation — the wheel must still refuse to zoom and must still leave the
+     * scroll to the browser, which is what the two assertions above check.
+     *
+     * The loss is real and is recorded rather than papered over: a sighted mouse
+     * reader now has nothing telling them the modifier exists. The three named
+     * buttons are the discoverable path.
+     */
   });
 
   test("Ctrl and the wheel do zoom, towards the pointer", async ({ page }) => {
@@ -641,8 +1216,8 @@ test.describe("zoom and pan", () => {
     await page.goto("/fr");
     // Zoom in first: at the initial crop there is somewhere to pan to, but the
     // clamp is easier to reach and to assert from a tighter frame.
-    await control(page, frMessages.map.zoomIn).click();
-    await control(page, frMessages.map.zoomIn).click();
+    await wheelZoom(page, -240);
+    await wheelZoom(page, -240);
     const before = await viewBox(page);
 
     const box = await canvas(page).boundingBox();
@@ -675,7 +1250,7 @@ test.describe("the state a shared address restores", () => {
      */
     await page.goto("/fr");
 
-    await control(page, frMessages.map.zoomIn).click();
+    await wheelZoom(page, -240);
     await marker(page, OSAKA.title, OSAKA.place).click();
 
     const shared = page.url();
@@ -687,7 +1262,9 @@ test.describe("the state a shared address restores", () => {
 
     await page.goto(shared);
 
-    await expect(page.getByRole("dialog")).toHaveAccessibleName("Les 2 voyages à cet endroit");
+    // The same panel, which is now named by the trip the reader had selected —
+    // the shared address carries a slug, so it restores one trip and not a zone.
+    await expect(page.getByRole("dialog")).toHaveAccessibleName(OSAKA.title);
     await expect.poll(async () => (await viewBox(page)).join(" ")).toBe(framed.join(" "));
     // Restoring must not steal the focus: the reader has not asked for anything.
     await expect(page.getByRole("dialog")).not.toBeFocused();
@@ -719,7 +1296,7 @@ test.describe("the state a shared address restores", () => {
     await page.goto("/fr?voyage=un-voyage-disparu");
 
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.locator(`${MAP} svg`)).toBeVisible();
+    await expect(page.locator(MAP_DRAWING)).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get("voyage")).toBeNull();
   });
 
@@ -738,8 +1315,21 @@ test.describe("the state a shared address restores", () => {
   });
 });
 
+/**
+ * **A touch screen wide enough to still carry markers.**
+ *
+ * This block ran at 390 × 844 until the marker layer became a desktop layer:
+ * below 768 px the markers are hidden, because thirteen 44 px targets inside
+ * 130 × 98 px is not a map a finger can use — the measurement is in
+ * `world-map.module.css`. A tap on a marker is therefore a tablet gesture now,
+ * and 834 × 1112 is one. The pan and pinch cases move with it: they are about the
+ * drawing, which a phone still has, but keeping the block at one viewport keeps
+ * one `test.use` and one reason to read.
+ *
+ * What a phone does instead is asserted below, at 390.
+ */
 test.describe("touch", () => {
-  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test.use({ hasTouch: true, viewport: { width: 834, height: 1112 } });
 
   test("one finger leaves the map alone; two move it", async ({ page }) => {
     /**
@@ -844,35 +1434,125 @@ test("the interactive map has no WCAG 2.2 AA violation, panel open, in either th
    * `target-size` stays allowed, and only inside the map's own `<figure>`, exactly
    * as `map-equivalent.populated.spec.ts` allows it: Tokyo and Osaka overlap at
    * this crop and the marker underneath keeps less than 24 px of reachable area.
-   * TIW-14 is what makes that reachable rather than what fixes it — the panel now
-   * lists both trips, and zooming in separates the two markers — and the note in
+   * The panel is what makes the covered trip reachable rather than what fixes the
+   * overlap — its « Aussi à cet endroit » row swaps to the neighbour, and zooming
+   * in separates the two markers — and the note in
    * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` should be read alongside
-   * `zonesOf`.
+   * `overlappingMarks`, which replaced `zonesOf`: overlap is measured pairwise
+   * now, so the allowance covers a pair and can no longer be widened by a chain.
    *
-   * Everything the panel itself adds is audited without allowance: the dialog's
-   * name, the cross's contrast, the cards inside it, the zoom controls.
+   * **The allowance does not reach the panel, and that is load-bearing here.**
+   * `firedOnlyInsideTheMap` confines it to the `<figure>` holding the drawing, and
+   * the panel is portalled to `document.body` — outside that figure by
+   * construction. So the two things this ticket added inside it, the photo
+   * thumbnails and the neighbour rows, are audited with no allowance at all and
+   * have to hold the target on their own. Measured on this build: a thumbnail is
+   * 114 x 77 and a neighbour row 358 x 44.
+   *
+   * **Two panels and not one.** Osaka's is the one with a neighbour block;
+   * Tokyo's is the only one on this fixture with photographs, and it is reached
+   * by address because its marker is the one underneath. Auditing Osaka alone
+   * would have left the whole photo strip unaudited.
    */
   for (const colorScheme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme });
-    await page.goto("/fr");
-    await marker(page, OSAKA.title, OSAKA.place).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
+    for (const open of [
+      { label: "neighbour block", go: async () => marker(page, OSAKA.title, OSAKA.place).click() },
+      { label: "photo strip", go: async () => page.goto(`/fr?voyage=${TOKYO.slug}`) },
+    ]) {
+      await page.emulateMedia({ colorScheme });
+      await page.goto("/fr");
+      await open.go();
+      await expect(page.getByRole("dialog")).toBeVisible();
 
-    const report = await auditPage(page);
-    const unexpected = [];
+      const report = await auditPage(page);
+      const unexpected = [];
 
-    for (const violation of report.violations) {
-      const confined =
-        violation.id === "target-size" && (await firedOnlyInsideTheMap(page, violation.targets));
-      if (!confined) {
-        unexpected.push(violation);
+      for (const violation of report.violations) {
+        const confined =
+          violation.id === "target-size" && (await firedOnlyInsideTheMap(page, violation.targets));
+        if (!confined) {
+          unexpected.push(violation);
+        }
       }
+
+      expect(
+        unexpected,
+        `panel open, ${open.label} (${colorScheme}): ${describeViolations({ ...report, violations: unexpected })}`
+      ).toEqual([]);
+      expect(report.passes).toBeGreaterThan(10);
+    }
+  }
+});
+
+/**
+ * **What a phone gets instead of markers**, and it is the half of the change that
+ * would otherwise be guarded by nothing.
+ *
+ * Hiding the marker layer below 768 px is only defensible because something else
+ * carries the navigation there. If the countries list ever stopped rendering — a
+ * media query edited, a wrapper removed, the assembly throwing — the home page on
+ * a phone would become a tinted drawing with no way into the journal at all, and
+ * every case above would still be green: they measure widths where the markers
+ * are.
+ */
+test.describe("the phone's map", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("hides the markers and hands the navigation to the countries list", async ({ page }) => {
+    await page.goto("/fr");
+
+    // The drawing is still there — it is an illustration now, not an interface.
+    await expect(page.locator(MAP_DRAWING)).toBeVisible();
+
+    /**
+     * **The markers stay in the document and stop being painted**, and the
+     * difference is worth asserting both ways rather than counting nodes.
+     * `toHaveCount` is a DOM count: `display: none` elements match a locator just
+     * as well as visible ones, so a naive `toHaveCount(0)` here fails against
+     * correct code — measured, it received 5.
+     *
+     * That they remain in the DOM is not an accident either: it is why a shared
+     * `/fr?voyage=<slug>` address still restores that trip's panel on a phone,
+     * the one path `world-map.module.css` calls out as left open.
+     */
+    const markers = page.locator("figure a[data-trip]");
+    await expect(markers).toHaveCount(5);
+    const painted = await markers.evaluateAll(
+      (nodes) => nodes.filter((node) => node.getClientRects().length > 0).length
+    );
+    expect(painted, "no marker is painted at a phone's width").toBe(0);
+
+    /**
+     * One row per country the fixture reaches, each one a real link to that
+     * country's own page. Counted rather than sampled: a list that rendered one
+     * row would pass a "some link exists" assertion while having lost four.
+     */
+    const rows = page.locator('main a[href^="/fr/pays/"]');
+    await expect(rows).toHaveCount(5);
+    await expect(rows.first()).toBeVisible();
+
+    /**
+     * WCAG 2.5.8 — these are the only targets a finger has on this screen now, so
+     * the floor matters more here than anywhere else on the page.
+     */
+    for (let index = 0; index < (await rows.count()); index += 1) {
+      const box = await rows.nth(index).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
     }
 
-    expect(
-      unexpected,
-      `panel open (${colorScheme}): ${describeViolations({ ...report, violations: unexpected })}`
-    ).toEqual([]);
-    expect(report.passes).toBeGreaterThan(10);
-  }
+    // And it leads somewhere real, followed rather than assumed.
+    await rows.first().click();
+    await expect(page).toHaveURL(/\/fr\/pays\/[a-z-]+$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  });
+
+  test("gives the page no horizontal scrollbar", async ({ page }) => {
+    await page.goto("/fr");
+
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+    );
+
+    expect(overflows).toBe(false);
+  });
 });

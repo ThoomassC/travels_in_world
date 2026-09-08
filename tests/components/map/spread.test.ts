@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { placeMarks, spreadCoincident } from "@/components/map/marks";
+import { worldPointOf } from "@/components/map/zones";
 import { CROPPED_FRAME, tripMark } from "./fixtures";
 
 /**
@@ -22,6 +23,87 @@ import { CROPPED_FRAME, tripMark } from "./fixtures";
  */
 describe("spreadCoincident", () => {
   const AT_TOKYO = { x: 800, y: 150 };
+
+  /**
+   * **THE DEFECT THIS FILE WAS REWRITTEN FOR, and it was visible on the site.**
+   *
+   * The first version moved the two percentages. `worldPointOf` then converted
+   * them back into world units, so the nudge stopped being a screen distance and
+   * became a **geographic** one — a fixed number of kilometres, baked into the
+   * prerendered marker, growing on screen as the reader zoomed in. The note it
+   * replaced in `../zones.ts` called that growth the fix.
+   *
+   * On the journal's own content, measured in the served page against the
+   * projection of the very same coordinates:
+   *
+   *   Annecy   46.20 N  drawn 4.6 world units north of its point  (~150 km)
+   *   Genève   45.91 N  drawn 4.6 world units south of its point  (~150 km)
+   *   La Rochelle / Les Sables-d'Olonne / Noirmoutier — a triangle
+   *            of the same radius, two of the three out in the Atlantic
+   *
+   * The coordinates in `content/trips/**` were right the whole time. What follows
+   * is the invariant that keeps them right: **the spread never moves a marker's
+   * position.** It writes a `nudge`, in rem, which the stylesheet applies as a
+   * screen-space translate — so the separation is a constant number of pixels at
+   * every zoom, and the anchor stays on the town.
+   *
+   * PROVEN BY DELIBERATE FAILURE — restoring the old body of `spreadCoincident`:
+   *
+   *   -leftPercent: entry.leftPercent,
+   *   -topPercent: entry.topPercent,
+   *   +leftPercent: round(entry.leftPercent + 1.6 * Math.cos(angle)),
+   *   +topPercent: round(entry.topPercent + 1.6 * verticalScale * Math.sin(angle)),
+   *
+   *   npm test -> 3 failed | 27 passed
+   *     expected { x: 800, y: 145.39 } to deeply equal { x: 800, y: 150 }
+   *     expected [ 50, 46.93 ] to deeply equal [ 50, 53.07 ]
+   *     expected { x: 499.97, y: 234.65 } to deeply equal { x: 499.97, y: 265.35 }
+   */
+  it("never moves a marker off the point its coordinates project to", () => {
+    const marks = twoAtTokyo();
+    const placed = placeMarks(marks, CROPPED_FRAME);
+    const spread = spreadCoincident(placed, CROPPED_FRAME);
+
+    for (const entry of spread) {
+      expect(worldPointOf(entry, CROPPED_FRAME)).toEqual(AT_TOKYO);
+    }
+  });
+
+  /**
+   * And the separation it writes instead: a screen offset, in rem, opposite for a
+   * pair. `rem` and not a percentage of the frame — a percentage of *which*
+   * frame, when the reader chooses it? The old code answered "the one the build
+   * cropped", which is the whole defect above.
+   */
+  it("separates a pair with opposite screen offsets, in rem", () => {
+    const spread = spreadCoincident(placeMarks(twoAtTokyo(), CROPPED_FRAME), CROPPED_FRAME);
+
+    const [first, second] = spread;
+
+    expect(first?.nudge?.x).toBe(0);
+    expect(second?.nudge?.x).toBe(0);
+    expect(Number(first?.nudge?.y)).toBeLessThan(0);
+    expect(Number(second?.nudge?.y)).toBe(-Number(first?.nudge?.y));
+    // Half a marker's own 2.75rem target: a crescent of each stays exposed.
+    expect(Math.abs(Number(first?.nudge?.y))).toBeCloseTo(0.75, 2);
+  });
+
+  /**
+   * The offsets are a circle **on screen**, which in rem needs no correction at
+   * all. The version this replaces scaled its vertical component by the frame's
+   * 1.92 aspect ratio, because it was working in percentages of two different
+   * lengths; a rem is a rem in both axes.
+   */
+  it("puts three markers on a round circle, with no aspect correction", () => {
+    const marks = Array.from({ length: 3 }, (_unused, index) =>
+      tripMark({ slug: `voyage-${index}`, point: AT_TOKYO })
+    );
+    const spread = spreadCoincident(placeMarks(marks, CROPPED_FRAME), CROPPED_FRAME);
+
+    for (const entry of spread) {
+      expect(Math.hypot(Number(entry.nudge?.x), Number(entry.nudge?.y))).toBeCloseTo(0.75, 2);
+    }
+  });
 
   const twoAtTokyo = () => [
     tripMark({ slug: "japon-2024", point: AT_TOKYO }),
@@ -69,8 +151,16 @@ describe("spreadCoincident", () => {
     expect(placed[0]?.leftPercent).not.toBe(placed[1]?.leftPercent);
 
     expect(spread).not.toBe(placed);
-    expect(Math.abs(Number(spread[0]?.topPercent) - Number(spread[1]?.topPercent))).toBeGreaterThan(
-      2
+    // Both are nudged, in opposite directions, and neither has moved a hundredth
+    // of a percent off the point its coordinates project to.
+    // `toBeCloseTo` on the horizontal component, not equality: `cos(π/2)` is
+    // 6.1e-17 in binary floating point, which rounds to a zero of either sign.
+    expect(Number(spread[0]?.nudge?.x)).toBeCloseTo(0, 6);
+    expect(spread[0]?.nudge?.y).toBe(-0.75);
+    expect(Number(spread[1]?.nudge?.x)).toBeCloseTo(0, 6);
+    expect(spread[1]?.nudge?.y).toBe(0.75);
+    expect(spread.map(({ leftPercent }) => leftPercent)).toEqual(
+      placed.map(({ leftPercent }) => leftPercent)
     );
   });
 
@@ -83,43 +173,25 @@ describe("spreadCoincident", () => {
     expect(placed[0]?.leftPercent).toBe(placed[1]?.leftPercent);
     expect(placed[0]?.topPercent).toBe(placed[1]?.topPercent);
 
-    expect([spread[0]?.leftPercent, spread[0]?.topPercent]).not.toEqual([
+    // They stay on top of each other — that is the fix — and what tells them
+    // apart is the screen offset the stylesheet will apply.
+    expect([spread[0]?.leftPercent, spread[0]?.topPercent]).toEqual([
       spread[1]?.leftPercent,
       spread[1]?.topPercent,
     ]);
+    expect(spread[0]?.nudge).not.toEqual(spread[1]?.nudge);
   });
 
   /**
    * A pair goes straight up and straight down. That is what makes it read as one
    * place holding two trips rather than as two unrelated trips: the point they
-   * share stays exactly the midpoint of the pair.
+   * share stays exactly the midpoint of the drawn pair.
    */
   it("puts a pair above and below the point it shares, which stays the midpoint", () => {
-    const placed = placeMarks(twoAtTokyo(), CROPPED_FRAME);
-    const spread = spreadCoincident(placed, CROPPED_FRAME);
+    const spread = spreadCoincident(placeMarks(twoAtTokyo(), CROPPED_FRAME), CROPPED_FRAME);
 
-    expect(spread[0]?.leftPercent).toBe(placed[0]?.leftPercent);
-    expect(spread[1]?.leftPercent).toBe(placed[0]?.leftPercent);
-    expect((Number(spread[0]?.topPercent) + Number(spread[1]?.topPercent)) / 2).toBeCloseTo(
-      Number(placed[0]?.topPercent),
-      6
-    );
-  });
-
-  /**
-   * A percentage of the height is not the same number of pixels as a percentage
-   * of the width. Without scaling the vertical component by the frame's ratio the
-   * "circle" is an ellipse flattened by the same 1.92 factor as the map, and a
-   * pair separates almost twice as far horizontally as vertically — for no reason
-   * a reader could guess.
-   */
-  it("scales the vertical offset by the frame ratio, so the spread is round on screen", () => {
-    const placed = placeMarks(twoAtTokyo(), CROPPED_FRAME);
-    const spread = spreadCoincident(placed, CROPPED_FRAME);
-
-    const verticalPercent = Math.abs(Number(spread[0]?.topPercent) - Number(placed[0]?.topPercent));
-
-    expect(verticalPercent).toBeCloseTo(1.6 * (CROPPED_FRAME.width / CROPPED_FRAME.height), 1);
+    expect(Number(spread[0]?.nudge?.x) + Number(spread[1]?.nudge?.x)).toBeCloseTo(0, 6);
+    expect(Number(spread[0]?.nudge?.y) + Number(spread[1]?.nudge?.y)).toBeCloseTo(0, 6);
   });
 
   it("leaves a marker that shares its spot with nobody exactly where it was", () => {
@@ -149,9 +221,13 @@ describe("spreadCoincident", () => {
       tripMark({ slug: `voyage-${index}`, point: AT_TOKYO })
     );
     const spread = spreadCoincident(placeMarks(marks, CROPPED_FRAME), CROPPED_FRAME);
-    const positions = new Set(spread.map((entry) => `${entry.leftPercent}|${entry.topPercent}`));
+    /*
+      On the nudges, because the positions are all identical now — and identical
+      on purpose. What has to be distinct is where the stylesheet draws them.
+    */
+    const offsets = new Set(spread.map((entry) => `${entry.nudge?.x}|${entry.nudge?.y}`));
 
-    expect(positions.size).toBe(count);
+    expect(offsets.size).toBe(count);
   });
 
   /**
@@ -163,8 +239,8 @@ describe("spreadCoincident", () => {
     const first = spreadCoincident(placeMarks(twoAtTokyo(), CROPPED_FRAME), CROPPED_FRAME);
     const second = spreadCoincident(placeMarks(twoAtTokyo(), CROPPED_FRAME), CROPPED_FRAME);
 
-    expect(first.map(({ leftPercent, topPercent }) => [leftPercent, topPercent])).toEqual(
-      second.map(({ leftPercent, topPercent }) => [leftPercent, topPercent])
+    expect(first.map(({ leftPercent, topPercent, nudge }) => [leftPercent, topPercent, nudge])).toEqual(
+      second.map(({ leftPercent, topPercent, nudge }) => [leftPercent, topPercent, nudge])
     );
   });
 

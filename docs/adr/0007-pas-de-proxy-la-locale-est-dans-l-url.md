@@ -68,6 +68,7 @@ Elles sont quatre, et non trois — la quatrième est celle qu'un test a fallu
 - **Pas de négociation `Accept-Language`.** Un lecteur germanophone arrivant sur
   `/` reçoit le français. Sans objet avec une seule locale active ; à
   reconsidérer avec la seconde, et c'est le signal d'invalidation n° 1.
+  **(Déclenché le 2026-09-06 — voir la section datée en fin de document.)**
 - **Pas de cookie `NEXT_LOCALE`.** Voir ci-dessus.
 - **Un chemin profond sans préfixe répond 404.** `/voyages/japon-2024` n'est pas
   redirigé vers `/fr/voyages/japon-2024`. Tous les liens internes portent leur
@@ -140,3 +141,33 @@ rouges. Une URL canonique par page est plus simple à tous les étages.
    entrants sans préfixe apparaissent — un partage tronqué, une ancienne URL —
    la réécriture qu'on a refusée devient le bon remède, et une entrée de plus
    dans `redirects()` la fournit sans proxy.
+
+## Le signal d'invalidation n° 1 s'est déclenché — 2026-09-06, TIW-38
+
+Cet ADR annonçait qu'il faudrait le reconsidérer « avec la seconde locale ».
+`en` et `es` sont actifs depuis TIW-38 : le signal a fait exactement ce qu'on
+lui demandait, et voici l'arbitrage plutôt qu'un silence.
+
+**La décision ne change pas. Toujours aucun proxy.** Ce qui change, c'est que
+l'argument ne peut plus être « il n'y a qu'une réponse » — il y en a trois. Le
+nouvel argument est le même coût, pesé contre un bénéfice qui reste faible :
+
+- La négociation `Accept-Language` reste refusée. Elle exigerait une invocation
+  de fonction serveur sur `/`, la seule adresse où elle aurait un sens, pour
+  deviner ce que trois liens de l'en-tête donnent en un clic. Le sélecteur de
+  langue de TIW-38 est la réponse, et il coûte zéro octet de JavaScript.
+- `/` redirige toujours vers `/fr` par `redirects()`, dans la couche de routage
+  de la plateforme. Un francophone n'est pas lésé ; un anglophone arrive sur une
+  page dont l'en-tête porte son drapeau.
+
+**Ce que ça coûte, et qui est nouveau depuis que trois locales existent** : la
+page 404 répond en français sous les trois préfixes. Le 404 global vit au-dessus
+du segment `[locale]` — il le doit, un préfixe inconnu n'atteint jamais ce
+segment — et le catch-all `[locale]/[...rest]` qui le corrigerait introduit une
+route dynamique `ƒ`, c'est-à-dire l'invariant 1 du projet. C'est assumé et écrit
+ici plutôt que découvert par un lecteur hispanophone.
+
+**Le nouveau signal d'invalidation qui remplace celui-ci** : le jour où les
+_récits_ sont traduits, et pas seulement le chrome. Tant que `/en/voyages/crete`
+sert un texte français, une locale n'est qu'une préférence d'interface et le
+coût d'un proxy n'a rien à acheter.

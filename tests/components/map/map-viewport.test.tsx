@@ -5,12 +5,7 @@ import frMessages from "@/i18n/messages/fr.json";
 import { defaultLocale } from "@/i18n/routing";
 import { WorldMap, type MapCountry } from "@/components/map/world-map";
 import type { TripMark } from "@/components/map/marks";
-import {
-  MAX_ZOOM_WIDTH_FRACTION,
-  TRIP_PARAM,
-  VIEW_PARAM,
-  ZOOM_STEP,
-} from "@/components/map/viewport";
+import { TRIP_PARAM, VIEW_PARAM, ZOOM_SCALE_STEPS } from "@/components/map/viewport";
 
 /**
  * The interaction layer, rendered through `WorldMap` exactly as the page renders
@@ -49,14 +44,14 @@ const COUNTRIES: readonly MapCountry[] = [
 ];
 
 /**
- * Three trips: two on the same spot — the zone the panel exists for — and one far
- * away. The pair is given in the WRONG chronological order on purpose, so the
- * panel's "date descending" is asserted against a sort and not against the input.
+ * Three trips: two on the same spot — the overlap « Aussi à cet endroit » exists
+ * for — and one far away. The pair is given in the WRONG chronological order on
+ * purpose, so nothing below can pass by accident on an input order that happens
+ * to match a sort the panel no longer does.
  */
 const TOKYO: TripMark = {
   slug: "japon-2024",
   title: "Japon, printemps 2024",
-  startDate: "2024-04-12",
   placeName: "Tokyo",
   href: "/fr/voyages/japon-2024",
   story: "written",
@@ -66,7 +61,6 @@ const TOKYO: TripMark = {
 const OSAKA: TripMark = {
   slug: "japon-2025",
   title: "Japon, retour à Osaka",
-  startDate: "2025-03-02",
   placeName: "Osaka",
   href: "/fr/voyages/japon-2025",
   story: "written",
@@ -76,7 +70,6 @@ const OSAKA: TripMark = {
 const REYKJAVIK: TripMark = {
   slug: "islande-2022",
   title: "Islande, cercle d’or",
-  startDate: "2022-09-10",
   placeName: "Reykjavik",
   href: "/fr/voyages/islande-2022",
   story: "written",
@@ -85,9 +78,9 @@ const REYKJAVIK: TripMark = {
 
 const MARKS: readonly TripMark[] = [TOKYO, OSAKA, REYKJAVIK];
 
-/** A card that is unmistakably the server's output and not the client's. */
-const cardsFor = (marks: readonly TripMark[]) =>
-  new Map(marks.map((mark) => [mark.slug, <p key={mark.slug}>Fiche de {mark.title}</p>]));
+/** A panel body that is unmistakably the server's output and not the client's. */
+const panelsFor = (marks: readonly TripMark[]) =>
+  new Map(marks.map((mark) => [mark.slug, <p key={mark.slug}>Récit de {mark.title}</p>]));
 
 function renderMap(marks: readonly TripMark[] = MARKS) {
   return render(
@@ -97,18 +90,33 @@ function renderMap(marks: readonly TripMark[] = MARKS) {
         visited={COUNTRIES}
         marks={marks}
         world={WORLD}
-        tripCards={cardsFor(marks)}
+        tripPanels={panelsFor(marks)}
       />
     </NextIntlClientProvider>
   );
 }
 
+/**
+ * A marker's accessible name: `map.markLabel`, `{title}, {place}`. A dot on a
+ * drawing has to say where it stands, so the place is part of the name.
+ */
+const linkNameOf = (mark: TripMark): string =>
+  frMessages.map.markLabel.replace("{title}", mark.title).replace("{place}", mark.placeName);
+
 const markerFor = (mark: TripMark): HTMLElement =>
-  screen.getByRole("link", {
-    name: frMessages.map.markLabel
-      .replace("{title}", mark.title)
-      .replace("{place}", mark.placeName),
-  });
+  screen.getByRole("link", { name: linkNameOf(mark) });
+
+/**
+ * A trip's row inside an open panel, named by its **title alone**.
+ *
+ * Deliberately not `linkNameOf`: « Aussi à cet endroit » has just said where
+ * these trips are, and on this journal most titles are the place — the served
+ * document read « Genève, Genève » and « Rouen, Rouen » when the row reused the
+ * marker's name. Scoped to the panel all the same, because a title is also a
+ * substring of its own marker's name.
+ */
+const nearbyLinkIn = (panel: HTMLElement, mark: TripMark): HTMLElement =>
+  within(panel).getByRole("link", { name: mark.title });
 
 const svgOf = (container: HTMLElement): SVGSVGElement => {
   const svg = container.querySelector("svg");
@@ -129,9 +137,37 @@ const canvasOf = (container: HTMLElement): HTMLElement => {
   return canvas;
 };
 
-const frameWidthOf = (container: HTMLElement): number => Number(viewBoxOf(container).split(" ")[2]);
+/**
+ * The element the four `--frame-*` properties are declared on, one above the
+ * canvas since TIW-39.
+ *
+ * They moved so the stage's own box could be derived from them — that box is what
+ * the zoom slider is positioned against, and a control positioned against a
+ * full-width stage floats beside the drawing rather than on it. Custom properties
+ * inherit downwards, so the canvas, the `<svg>` and every marker still resolve the
+ * same digits; `.style` reads the inline attribute rather than the cascade, which
+ * is why the assertions below reach one element further up.
+ */
+const stageOf = (container: HTMLElement): HTMLElement => {
+  const stage = canvasOf(container).parentElement;
+  if (stage === null) {
+    throw new Error("The canvas has no stage around it.");
+  }
+  return stage;
+};
 
 const search = () => new URLSearchParams(window.location.search);
+
+/** The four numbers of the rendered `viewBox`, as numbers. */
+const frameOf = (container: HTMLElement) => {
+  const [x = Number.NaN, y = Number.NaN, width = Number.NaN, height = Number.NaN] = viewBoxOf(
+    container
+  )
+    .split(" ")
+    .map(Number);
+
+  return { x, y, width, height };
+};
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/fr");
@@ -147,7 +183,14 @@ describe("what the server rendered is still what is drawn", () => {
     // `children`, so it is in the DOM once and the client never re-renders it.
     const { container } = renderMap();
 
-    expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length * 2);
+    /*
+      The drawing's paths, not the document's: since the marker became a pennant
+      it carries an inline `<svg><path>` of its own, and counting every path in
+      the container would count the markers too. The markers are HTML beside the
+      drawing, never inside it (ADR 0003), so scoping to the `<svg>` is exact.
+    */
+    const drawing = container.querySelector("figure svg");
+    expect(drawing?.querySelectorAll("path")).toHaveLength(COUNTRIES.length * 2);
     expect(svgOf(container)).toHaveAttribute("aria-hidden", "true");
     expect(svgOf(container)).toHaveAttribute("focusable", "false");
   });
@@ -170,12 +213,12 @@ describe("what the server rendered is still what is drawn", () => {
     const { container } = renderMap();
 
     const [x, y, width, height] = viewBoxOf(container).split(" ");
-    const canvas = canvasOf(container);
+    const stage = stageOf(container);
 
-    expect(canvas.style.getPropertyValue("--frame-x")).toBe(x);
-    expect(canvas.style.getPropertyValue("--frame-y")).toBe(y);
-    expect(canvas.style.getPropertyValue("--frame-w")).toBe(width);
-    expect(canvas.style.getPropertyValue("--frame-h")).toBe(height);
+    expect(stage.style.getPropertyValue("--frame-x")).toBe(x);
+    expect(stage.style.getPropertyValue("--frame-y")).toBe(y);
+    expect(stage.style.getPropertyValue("--frame-w")).toBe(width);
+    expect(stage.style.getPropertyValue("--frame-h")).toBe(height);
   });
 
   it("marks itself interactive only once mounted", () => {
@@ -203,57 +246,85 @@ describe("what the server rendered is still what is drawn", () => {
 });
 
 describe("opening a trip panel", () => {
-  it("opens the zone's panel instead of navigating", () => {
+  it("opens the clicked trip's own panel instead of navigating", () => {
     renderMap();
 
     fireEvent.click(markerFor(TOKYO));
 
     const panel = screen.getByRole("dialog");
     expect(panel).toBeInTheDocument();
-    // The card came from the server, through the client component, untouched.
-    expect(within(panel).getByText(`Fiche de ${TOKYO.title}`)).toBeInTheDocument();
+    // The body came from the server, through the client component, untouched.
+    expect(within(panel).getByText(`Récit de ${TOKYO.title}`)).toBeInTheDocument();
   });
 
-  it("lists every trip of the zone, most recent first", () => {
+  it("names the panel after the trip that was clicked, and never after a count", () => {
     /**
-     * Tokyo and Osaka are 400 km apart, which at any realistic rendered scale is
-     * a handful of pixels: two 44 px targets overlapping, so a reader cannot have
-     * meant one of them in particular. The criterion is that both are reachable,
-     * date descending — and `OSAKA` is the newer trip while `TOKYO` is given
-     * first, so this fails if the order is the input's rather than the sort's.
+     * **The owner's report, turned into an assertion.** The panel used to belong
+     * to a *zone* named after its most recent trip, so clicking Tokyo opened
+     * "Les 2 voyages à cet endroit" with Osaka — the newer of the pair — at the
+     * top: « quand je clique sur un voyage je veux le descriptif avec les photos
+     * du voyage, pas les autres voyages du pays ».
+     *
+     * Tokyo and Osaka overlap, and `OSAKA` is the newer trip, so this fails if
+     * anything but the clicked slug decides the heading.
+     */
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    expect(screen.getByRole("dialog")).toHaveAccessibleName(TOKYO.title);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    fireEvent.click(markerFor(REYKJAVIK));
+    expect(screen.getByRole("dialog")).toHaveAccessibleName(REYKJAVIK.title);
+  });
+
+  it("shows the clicked trip's body and not its neighbour's", () => {
+    // The other half of the same report: the overlapping trip is a link in a
+    // secondary block, never a second body in the panel's main content.
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+
+    const panel = screen.getByRole("dialog");
+    expect(within(panel).getByText(`Récit de ${TOKYO.title}`)).toBeInTheDocument();
+    expect(within(panel).queryByText(`Récit de ${OSAKA.title}`)).not.toBeInTheDocument();
+  });
+
+  it("names the overlapping trip under « Aussi à cet endroit »", () => {
+    /**
+     * The reason the grouping does not simply disappear: Tokyo and Osaka are two
+     * 44 px targets whose centres are less than one target apart, so a reader at a
+     * pointer cannot always hit the one they meant. The way out is a link in the
+     * panel — a secondary block, not the panel's subject.
      */
     renderMap();
 
     fireEvent.click(markerFor(TOKYO));
 
     const panel = screen.getByRole("dialog");
-    const cards = within(panel)
-      .getAllByText(/^Fiche de /)
-      .map((node) => node.textContent);
+    expect(
+      within(panel).getByRole("heading", { name: frMessages.map.panelNearbyHeading })
+    ).toBeInTheDocument();
 
-    expect(cards).toEqual([`Fiche de ${OSAKA.title}`, `Fiche de ${TOKYO.title}`]);
+    const link = nearbyLinkIn(panel, OSAKA);
+    expect(link).toHaveAttribute("href", OSAKA.href);
+    // The title and nothing else: the heading above already said "here".
+    expect(link).toHaveAccessibleName(OSAKA.title);
   });
 
-  it("names the panel after how many trips it holds", () => {
-    renderMap();
-
-    fireEvent.click(markerFor(TOKYO));
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Les 2 voyages à cet endroit");
-
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    fireEvent.click(markerFor(REYKJAVIK));
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Le voyage à cet endroit");
-  });
-
-  it("opens a lone marker's panel with its own trip only", () => {
+  it("gives a lone marker's panel no « Aussi à cet endroit » block at all", () => {
+    // An empty secondary block is a heading promising rows that do not exist;
+    // `overlappingMarks` leaves a lone marker out of its answer entirely.
     renderMap();
 
     fireEvent.click(markerFor(REYKJAVIK));
 
     const panel = screen.getByRole("dialog");
-    expect(within(panel).getByText(`Fiche de ${REYKJAVIK.title}`)).toBeInTheDocument();
-    expect(within(panel).queryByText(`Fiche de ${TOKYO.title}`)).not.toBeInTheDocument();
+    expect(within(panel).getByText(`Récit de ${REYKJAVIK.title}`)).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole("heading", { name: frMessages.map.panelNearbyHeading })
+    ).toBeNull();
   });
 
   it("moves the focus into the panel, and marks the marker expanded", () => {
@@ -285,7 +356,7 @@ describe("opening a trip panel", () => {
     }
   });
 
-  it("swaps panels when another zone is activated", () => {
+  it("swaps panels when another marker is activated", () => {
     renderMap();
 
     fireEvent.click(markerFor(TOKYO));
@@ -293,7 +364,210 @@ describe("opening a trip panel", () => {
 
     const panels = screen.getAllByRole("dialog");
     expect(panels).toHaveLength(1);
-    expect(within(panels[0] as HTMLElement).getByText(`Fiche de ${REYKJAVIK.title}`)).toBeVisible();
+    expect(within(panels[0] as HTMLElement).getByText(`Récit de ${REYKJAVIK.title}`)).toBeVisible();
+  });
+});
+
+describe("switching to an overlapping trip from inside the panel", () => {
+  it("swaps the panel to that trip without leaving the page", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const activation = fireEvent.click(nearbyLinkIn(screen.getByRole("dialog"), OSAKA));
+
+    // `fireEvent` answers false when a handler called `preventDefault`.
+    expect(activation).toBe(false);
+
+    const panel = screen.getByRole("dialog");
+    expect(panel).toHaveAccessibleName(OSAKA.title);
+    expect(within(panel).getByText(`Récit de ${OSAKA.title}`)).toBeInTheDocument();
+    // And the block now offers the way back.
+    expect(nearbyLinkIn(panel, TOKYO)).toBeInTheDocument();
+  });
+
+  it("keeps the focus inside the panel it just swapped", () => {
+    // The link that was under the pointer is gone with the block that held it, so
+    // a focus left where it was would be a focus on a detached node.
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    fireEvent.click(nearbyLinkIn(screen.getByRole("dialog"), OSAKA));
+
+    expect(screen.getByRole("dialog")).toHaveFocus();
+  });
+
+  it("gives Escape back to the NEW trip's marker, not to the link that vanished", () => {
+    /**
+     * **The trap this whole handler is written around.** The obvious
+     * implementation records the clicked link as the element to restore the focus
+     * to — and that link is unmounted by the very swap it triggered, so `close()`
+     * finds `isConnected === false`, skips the `focus()` and drops the reader on
+     * `<body>`: WCAG 2.4.3 lost, silently, with every assertion above still green.
+     *
+     * The trigger registered by a swap is therefore the **marker of the new trip**
+     * on the map, which is a node that outlives the panel.
+     */
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    fireEvent.click(nearbyLinkIn(screen.getByRole("dialog"), OSAKA));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(markerFor(OSAKA)).toHaveFocus();
+    expect(document.body).not.toHaveFocus();
+  });
+
+  it("reflects the swap in the address bar, so the new panel is the shareable one", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    fireEvent.click(nearbyLinkIn(screen.getByRole("dialog"), OSAKA));
+
+    expect(search().get(TRIP_PARAM)).toBe(OSAKA.slug);
+  });
+
+  it("leaves a modified click on a neighbour to the browser", () => {
+    /**
+     * Same rule as on a marker, and it has to be restated because this is a second
+     * delegated handler on a second root: the panel is portalled to
+     * `document.body`, out of the canvas the marker handler listens on. Ctrl, Cmd,
+     * Shift, Alt and the middle button all mean something to a browser.
+     */
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const panel = screen.getByRole("dialog");
+
+    for (const modifier of [
+      { metaKey: true },
+      { ctrlKey: true },
+      { shiftKey: true },
+      { altKey: true },
+      { button: 1 },
+    ]) {
+      const activation = fireEvent.click(nearbyLinkIn(panel, OSAKA), modifier);
+
+      expect(activation).toBe(true);
+      expect(screen.getByRole("dialog")).toHaveAccessibleName(TOKYO.title);
+    }
+  });
+});
+
+/**
+ * Two ways of leaving, or re-entering, a panel that the panel-per-trip change
+ * broke or made worse. Both were found by an adversarial review of the diff and
+ * neither was reachable from the cases above — which is the point of writing
+ * them down rather than fixing quietly.
+ */
+describe("the activations a string-shaped selection nearly swallowed", () => {
+  /**
+   * **The regression this change introduced.** The selection used to be an
+   * object literal, so every activation handed `setSelection` a fresh reference
+   * and React re-rendered. It is a string now: re-selecting the trip already
+   * open is a value React compares equal, so it bails out and the effect that
+   * moves the focus into the panel never runs — while the handler has already
+   * called `preventDefault()`.
+   *
+   * The reader this stranded is a real one: the marker of the open panel carries
+   * `aria-haspopup="dialog"` and `aria-expanded="true"`, so a screen reader
+   * announces a control that opens a dialog. Activating it did nothing at all —
+   * no navigation, no focus, no answer.
+   */
+  it("re-activating the open trip's marker puts the focus back in its panel", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const panel = screen.getByRole("dialog");
+    expect(panel).toHaveFocus();
+
+    // The reader shift-tabs back out to the marker, then activates it again.
+    markerFor(TOKYO).focus();
+    expect(markerFor(TOKYO)).toHaveFocus();
+
+    fireEvent.click(markerFor(TOKYO));
+
+    expect(screen.getByRole("dialog")).toHaveFocus();
+    expect(screen.getByRole("dialog")).toHaveAccessibleName(TOKYO.title);
+  });
+
+  /**
+   * **Back closed the panel and dropped the focus on `<body>`** — WCAG 2.4.3.
+   * Older than this change, and made far more likely by it: swapping between
+   * neighbours pushes a history entry each time, so Back becomes the natural way
+   * back to the previous trip.
+   */
+  it("gives the focus back to the marker when Back closes the panel", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    expect(screen.getByRole("dialog")).toHaveFocus();
+
+    window.history.pushState({}, "", "/fr");
+    fireEvent.popState(window);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(markerFor(TOKYO)).toHaveFocus();
+  });
+
+  /**
+   * The other half of the rule, and the reason the fix is conditional: this
+   * callback also runs on mount, and a reader who has since tabbed away must not
+   * have the focus yanked back onto the map by a history entry.
+   */
+  /**
+   * **Escape listens on `document`, so it reaches this component from anywhere on
+   * the page** — including the header's search field, which has an Escape of its
+   * own. Measured before the guard: a reader clearing « jap » from that field
+   * emptied it *and* found the focus thrown onto a marker on the map.
+   *
+   * The panel still closes. Only the focus stays put.
+   */
+  it("closes on Escape from outside the panel without taking the focus", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const elsewhere = markerFor(REYKJAVIK);
+    elsewhere.focus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(elsewhere).toHaveFocus();
+  });
+
+  /**
+   * **A row and a marker make the same bargain, so they must say the same thing.**
+   * Both are `<a href>` whose plain activation opens a dialog instead of
+   * navigating; the marker announced it, the row did not, because the sweep that
+   * adds the attribute reads the map's canvas and the panel is portalled out of
+   * it. Measured on the served page: 14 links carrying `data-trip`, 13 carrying
+   * `aria-haspopup`.
+   *
+   * No `aria-expanded` on a row: that attribute says a control owns an expanded
+   * region, and a row does not own the panel it replaces.
+   */
+  it("announces the dialog on a panel row, exactly as on a marker", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const row = nearbyLinkIn(screen.getByRole("dialog"), OSAKA);
+
+    expect(row).toHaveAttribute("aria-haspopup", "dialog");
+    expect(row).not.toHaveAttribute("aria-expanded");
+  });
+
+  it("leaves the focus alone when Back closes a panel the reader had left", () => {
+    renderMap();
+
+    fireEvent.click(markerFor(TOKYO));
+    const elsewhere = markerFor(REYKJAVIK);
+    elsewhere.focus();
+
+    window.history.pushState({}, "", "/fr");
+    fireEvent.popState(window);
+
+    expect(elsewhere).toHaveFocus();
   });
 });
 
@@ -418,79 +692,173 @@ describe("a drag is not a tap", () => {
   });
 });
 
-describe("the zoom controls", () => {
-  const zoomIn = () => screen.getByRole("button", { name: frMessages.map.zoomIn });
-  const zoomOut = () => screen.getByRole("button", { name: frMessages.map.zoomOut });
-  const reset = () => screen.getByRole("button", { name: frMessages.map.zoomReset });
+/*
+ * `describe("the zoom controls")` lived here — six cases on the three buttons —
+ * and went with them in TIW-38. The block below is not their restoration: the
+ * ZOOM's own arithmetic (the scale, the legibility floor, the world clamp, the
+ * centre anchor, the value ↔ width round trip) is a property of `./viewport.ts`
+ * and `./viewport.test.ts` walks it across 51 cases without a DOM. What is here
+ * is only what needs one — the wiring, the gate and the accessible name.
+ */
+describe("the zoom slider", () => {
+  const sliderOf = (name = frMessages.map.zoomLabel): HTMLInputElement => {
+    const slider = screen.getByRole("slider", { name });
+    if (!(slider instanceof HTMLInputElement)) {
+      throw new Error("The zoom control is not an <input>.");
+    }
+    return slider;
+  };
 
-  it("offers three named controls, and they are real buttons", () => {
+  it("is a native range input, named, vertical and inside the figure", () => {
+    /**
+     * Four claims in one case because they are one decision: a native
+     * `<input type="range">` is what buys the keyboard, the `slider` role and the
+     * platform's own rendering, and losing any of the four means it has been
+     * replaced by a `<div>`. `aria-orientation` is stated because the ARIA
+     * default for the role is horizontal and the vertical layout is a CSS fact
+     * the accessibility tree cannot see.
+     *
+     * "Inside the figure" is not tidiness: `tests/e2e/support/axe.ts` confines
+     * the map's one tolerated `target-size` violation to that element, so a
+     * control outside it would silently widen the allowance to the whole page.
+     */
+    const { container } = renderMap();
+    const slider = sliderOf();
+
+    expect(slider.type).toBe("range");
+    expect(slider).toHaveAttribute("aria-orientation", "vertical");
+    expect(slider.max).toBe(String(ZOOM_SCALE_STEPS));
+    expect(slider.step).toBe("1");
+    expect(container.querySelector("figure")?.contains(slider)).toBe(true);
+  });
+
+  it("is not rendered until the layer has mounted", () => {
+    /**
+     * The same gate the panel is behind, and the reason it matters more here: a
+     * range input in a document with no script is focusable, draggable and does
+     * nothing at all — the one thing `no-javascript.populated.spec.ts` exists to
+     * refuse. jsdom mounts effects synchronously, so this asserts the condition
+     * rather than the pre-mount frame; the byte-level proof is in
+     * `map-interaction.spec.ts`, which greps the served HTML.
+     */
     renderMap();
 
-    for (const control of [zoomIn(), zoomOut(), reset()]) {
-      expect(control.tagName).toBe("BUTTON");
-      expect(control).toHaveAttribute("type", "button");
+    expect(sliderOf()).toBeInTheDocument();
+    expect(canvasOf(document.body)).toHaveAttribute("data-interactive");
+  });
+
+  it("zooms the map in when it is moved up the scale, from the centre", () => {
+    const { container } = renderMap();
+    const before = frameOf(container);
+
+    fireEvent.change(sliderOf(), { target: { value: "60" } });
+
+    const after = frameOf(container);
+    expect(after.width).toBeLessThan(before.width);
+
+    /**
+     * The centre of what the reader was looking at has not moved: a slider with
+     * no pointer to aim at must not slide the map sideways as it zooms.
+     *
+     * **The tolerance is the frame's own rounding, and it is stated rather than
+     * borrowed from `toBeCloseTo`.** `digitsOf` rounds every frame to one
+     * decimal, so `x` and `width` each land on a 0.1 grid and a centre — half of
+     * a rounded number added to another — lands on a 0.05 one. This assertion
+     * first read `toBeCloseTo(…, 1)`, whose window is a half-open `< 0.05`, and it
+     * failed on a drift of exactly 0.05: the arithmetic was right and the
+     * boundary was off by one representable step. Widening it to precision 0
+     * would have hidden a real half-unit slide, so the quantum is named instead.
+     *
+     * `EPSILON` on top of it is not slack, it is binary: the drift is exactly
+     * 0.05 in decimal and 0.05000000000001137 once `x + width / 2` has been
+     * through two additions of numbers that have no exact double. Comparing a
+     * decimal quantum against a computed double without allowing for that is how
+     * a correct implementation fails a correct test.
+     */
+    const ROUNDING_QUANTUM = 0.05;
+    const EPSILON = 1e-9;
+    expect(Math.abs(after.x + after.width / 2 - (before.x + before.width / 2))).toBeLessThanOrEqual(
+      ROUNDING_QUANTUM
+    );
+    expect(
+      Math.abs(after.y + after.height / 2 - (before.y + before.height / 2))
+    ).toBeLessThanOrEqual(ROUNDING_QUANTUM + EPSILON);
+  });
+
+  it("goes back out again, so the control is not one-way", () => {
+    const { container } = renderMap();
+
+    fireEvent.change(sliderOf(), { target: { value: "70" } });
+    const zoomedIn = Number(viewBoxOf(container).split(" ")[2]);
+
+    fireEvent.change(sliderOf(), { target: { value: "10" } });
+    const zoomedOut = Number(viewBoxOf(container).split(" ")[2]);
+
+    expect(zoomedOut).toBeGreaterThan(zoomedIn);
+  });
+
+  it("follows a zoom it did not make, because it holds no state of its own", () => {
+    /**
+     * The bidirectional half of the ticket, and the property that makes this a
+     * *view* of the frame rather than a second copy of it: the value is derived
+     * during the render, so a frame restored from a shared address moves the
+     * thumb with nothing to synchronise. The wheel and the pinch cannot be
+     * dispatched under jsdom (they need `passive: false` on a real surface); a
+     * URL-restored frame goes through the very same state.
+     */
+    const { unmount } = renderMap();
+    const atTheBuildsFrame = Number(sliderOf().value);
+    unmount();
+
+    window.history.replaceState(null, "", `/fr?${VIEW_PARAM}=400,200,120`);
+    const { container } = renderMap();
+
+    // A 120-unit frame is far tighter than the crop the build chose, so the thumb
+    // has to be further up the scale — and it has to agree with the drawing.
+    expect(Number(sliderOf().value)).toBeGreaterThan(atTheBuildsFrame);
+    expect(frameOf(container).width).toBeCloseTo(120, 6);
+  });
+
+  it("announces the zoom as a percentage, never as a bare notch", () => {
+    /**
+     * `aria-valuetext` is the whole of what a screen reader says here, and "37"
+     * would be this file's own scale read aloud. The sentence comes from the
+     * catalogue with a token where the number goes — see `ZOOM_VALUE_TOKEN` — so
+     * this also proves the substitution happened: a template that reached the
+     * accessibility tree with its brace still in it is the failure that shape
+     * risks, and it would pass every other assertion in this file.
+     */
+    renderMap();
+
+    fireEvent.change(sliderOf(), { target: { value: "0" } });
+    expect(sliderOf()).toHaveAttribute(
+      "aria-valuetext",
+      frMessages.map.zoomValue.replace("{percent}", "100")
+    );
+
+    fireEvent.change(sliderOf(), { target: { value: "100" } });
+    const announced = sliderOf().getAttribute("aria-valuetext") ?? "";
+    expect(announced).not.toContain("{");
+    expect(announced).toMatch(/\d/);
+    expect(Number(announced.replace(/\D+/g, ""))).toBeGreaterThan(100);
+  });
+
+  it("writes the frame into the address bar without filling the history", () => {
+    /**
+     * A drag is a hundred `change` events. Each one must replace the address and
+     * none may push a history entry, or Back becomes a hundred presses back to
+     * the page the reader came from — the same rule the wheel obeys, and the
+     * opposite of the one a selection obeys.
+     */
+    const depth = window.history.length;
+
+    renderMap();
+    for (const value of ["20", "30", "40", "50"]) {
+      fireEvent.change(sliderOf(), { target: { value } });
     }
-  });
 
-  it("narrows the frame by the step on the way in", () => {
-    const { container } = renderMap();
-    const before = frameWidthOf(container);
-
-    fireEvent.click(zoomIn());
-
-    expect(frameWidthOf(container)).toBeCloseTo(before / ZOOM_STEP, 0);
-  });
-
-  it("keeps the canvas ratio and the viewBox in step at every level", () => {
-    // The invariant that decides whether the markers stay on their countries:
-    // any disagreement letterboxes the SVG and slides all of them.
-    const { container } = renderMap();
-
-    for (const press of [zoomIn(), zoomIn(), zoomOut(), zoomIn()]) {
-      fireEvent.click(press);
-      const [x, y, width, height] = viewBoxOf(container).split(" ");
-      const canvas = canvasOf(container);
-      expect(canvas.style.getPropertyValue("--frame-x")).toBe(x);
-      expect(canvas.style.getPropertyValue("--frame-y")).toBe(y);
-      expect(canvas.style.getPropertyValue("--frame-w")).toBe(width);
-      expect(canvas.style.getPropertyValue("--frame-h")).toBe(height);
-    }
-  });
-
-  it("stops at the legibility floor, however many times it is pressed", () => {
-    const { container } = renderMap();
-
-    for (let press = 0; press < 30; press += 1) {
-      fireEvent.click(zoomIn());
-    }
-
-    expect(frameWidthOf(container)).toBeCloseTo(WORLD.width * MAX_ZOOM_WIDTH_FRACTION, 1);
-  });
-
-  it("stops at the world, however many times it is pressed", () => {
-    const { container } = renderMap();
-
-    for (let press = 0; press < 30; press += 1) {
-      fireEvent.click(zoomOut());
-    }
-
-    const [x, y, width, height] = viewBoxOf(container).split(" ").map(Number);
-    expect(Number(x)).toBeGreaterThanOrEqual(0);
-    expect(Number(y)).toBeGreaterThanOrEqual(0);
-    expect(Number(x) + Number(width)).toBeLessThanOrEqual(WORLD.width + 0.05);
-    expect(Number(y) + Number(height)).toBeLessThanOrEqual(WORLD.height + 0.05);
-  });
-
-  it("puts the frame back where the build left it", () => {
-    const { container } = renderMap();
-    const initial = viewBoxOf(container);
-
-    fireEvent.click(zoomIn());
-    fireEvent.click(zoomIn());
-    expect(viewBoxOf(container)).not.toBe(initial);
-
-    fireEvent.click(reset());
-    expect(viewBoxOf(container)).toBe(initial);
+    expect(search().get(VIEW_PARAM)?.split(",")).toHaveLength(3);
+    expect(window.history.length).toBe(depth);
   });
 });
 
@@ -513,16 +881,14 @@ describe("the state in the address bar", () => {
     expect(search().get(TRIP_PARAM)).toBeNull();
   });
 
-  it("carries the frame once it has changed, and drops it on reset", () => {
-    renderMap();
-
-    fireEvent.click(screen.getByRole("button", { name: frMessages.map.zoomIn }));
-    const parked = search().get(VIEW_PARAM);
-    expect(parked?.split(",")).toHaveLength(3);
-
-    fireEvent.click(screen.getByRole("button", { name: frMessages.map.zoomReset }));
-    expect(search().get(VIEW_PARAM)).toBeNull();
-  });
+  /*
+   * "carries the frame once it has changed, and drops it on reset" was here. Both
+   * halves needed a button: one to change the frame, one to put it back. The
+   * writing half is still covered end to end — `tests/e2e/map-interaction.spec.ts`
+   * drives it with `Ctrl` + wheel in a real browser, which is the only place a
+   * wheel listener registered with `passive: false` can be exercised at all — and
+   * the reset half no longer exists.
+   */
 
   it("restores the frame a shared address names", () => {
     /**
@@ -545,7 +911,7 @@ describe("the state in the address bar", () => {
     renderMap();
 
     const panel = screen.getByRole("dialog");
-    expect(within(panel).getByText(`Fiche de ${TOKYO.title}`)).toBeInTheDocument();
+    expect(within(panel).getByText(`Récit de ${TOKYO.title}`)).toBeInTheDocument();
     // Moving the focus on page load is hostile: the reader has not asked for
     // anything yet. It moves when THEY open a panel, and it comes back when they
     // close one — which the closing test above pins.
@@ -615,25 +981,18 @@ describe("the state in the address bar", () => {
 });
 
 describe("a map with nothing on it", () => {
-  it("draws the world, offers the controls, and opens no panel", () => {
-    // The production state today: `content/trips` is empty until TIW-24. The
-    // interaction layer must be harmless there rather than absent.
-    const { container } = renderMap([]);
+  /*
+   * A case that pressed the zoom button to prove the layer had mounted lived
+   * here. `[data-interactive]` says the same thing without a control, and the
+   * cases above already assert it.
+   */
 
-    expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length * 2);
-    expect(screen.queryByRole("list")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: frMessages.map.zoomIn })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: frMessages.map.zoomIn }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("leaves a marker's link alone when the page passed no cards at all", () => {
+  it("leaves a marker's link alone when the page passed no panel at all", () => {
     /**
-     * `tripCards` is optional, and a caller that omits it gets a map with no
+     * `tripPanels` is optional, and a caller that omits it gets a map with no
      * panel. The activation must then fall through to the link rather than being
-     * swallowed by a panel that cannot open — which is what the "is this zone
-     * known?" test in the click handler is for.
+     * swallowed by a panel that cannot open — which is what the "does this trip
+     * have a panel?" test in the click handler is for.
      */
     render(
       <NextIntlClientProvider locale={defaultLocale} messages={frMessages}>

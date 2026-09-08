@@ -400,6 +400,142 @@ quel que soit leur recouvrement, ce qui fait du pointeur le seul mode dégradé.
 > degré. Ce qui a changé, c'est que **le pointeur n'est plus le mode dégradé** :
 > le panneau lui rend ce que la tabulation avait déjà.
 
+> **Note (2026-09-07, correction du premier mécanisme).** La note ci-dessus se
+> réjouit d'un décalage « qui grandit à l'écran à mesure que le lecteur zoome ».
+> C'était le défaut, pas la fonctionnalité, et le propriétaire du carnet l'a vu
+> avant nous : *« Les Sables d'Olonne, La Rochelle, Annecy, Rouen ne sont pas bien
+> placés en France. Genève non plus. »*
+>
+> Un décalage converti en unités monde n'est pas une distance à l'écran : c'est
+> une distance **sur la Terre**. Mesuré sur le contenu réel du carnet, en
+> comparant la page servie à la projection des mêmes coordonnées :
+>
+> | Balise | Écart au point projeté |
+> |---|---|
+> | Annecy | 4,6 unités monde vers le nord, ~150 km |
+> | Genève | 4,6 unités vers le sud, ~150 km |
+> | La Rochelle, Les Sables-d'Olonne, Noirmoutier | un triangle du même rayon, deux des trois en mer |
+>
+> Les coordonnées de `content/trips/**` étaient justes ; c'est le rendu qui
+> mentait, et il mentait d'autant plus fort que le lecteur zoomait — l'inverse
+> exact de ce qu'on attend d'un zoom.
+>
+> **Ce qui change.** `spreadCoincident` ne touche plus aux pourcentages. Il pose un
+> `nudge` en `rem` à côté de la position, que `.mark` ajoute à son `translate` :
+> `translate(calc(-50% + var(--mark-nudge-x, 0rem)), …)`. La séparation vaut donc
+> le même nombre de pixels à tous les niveaux de zoom — ce qui est la seule chose
+> qu'une cible de 44 px ait jamais demandée, et précisément ce que la section
+> ci-dessus déclarait impossible « en pourcentage ». Elle avait raison sur le
+> pourcentage et tort sur la conclusion : l'unité qui manquait était le `rem`.
+>
+> Le regroupement, lui, ne bouge pas : la cellule de 1,6 % de la largeur du cadre
+> répond à la question « le build les pose-t-il sur le même pixel », et un
+> pourcentage est la bonne unité pour celle-là. Deux unités, deux questions.
+> `tests/components/map/spread.test.ts` refuse désormais tout déplacement de
+> position, preuve par échec délibéré à l'appui.
+>
+> Ce qui reste ouvert est inchangé : le recouvrement à l'échelle du monde attend
+> toujours un vrai regroupement.
+
+> **Note (TIW-39, 2026-09-08). Le premier survol sur un pays, et la décision a
+> tenu.** Le propriétaire a demandé une quatrième teinte pour les pays qu'il
+> souhaite visiter, *« avec un hover de texte qui dit "nom du pays : à venir" »*.
+> C'est la première fois depuis cette décision qu'on veut survoler autre chose
+> qu'un voyage, et la section « le SVG est inerte » y répond frontalement : rien
+> qui ne soit pas un voyage ne peut être survolé, focalisé ni cliqué.
+>
+> **Le SVG n'a pas bougé d'un attribut.** La note est du HTML posé sur le dessin,
+> sur un point que `src/map/anchor.ts` calcule à l'intérieur de la forme —
+> exactement ce qu'est une balise. Les mêmes deux propriétés personnalisées, la
+> même arithmétique de cadre, donc les notes et les balises zooment ensemble.
+> Ce que la décision de 2026 avait prévu sans le nommer : « tout ce qui est
+> interactif est du HTML par-dessus » couvre aussi ce qui est seulement survolable.
+>
+> **Trois choses ont été tranchées au passage, et aucune n'est évidente.**
+>
+> 1. **L'étiquette est dans le document en permanence**, masquée visuellement, et
+>    le survol ne fait que la peindre. Un lecteur d'écran lit les quatre notes au
+>    repos, dans l'ordre localisé que la façade a trié. C'est ce qui autorise
+>    l'absence de `tabindex` : un arrêt de tabulation dont le seul effet serait de
+>    révéler un texte qu'une synthèse vocale possède déjà est un arrêt qui
+>    n'existe pour personne — et il y en aurait un par pays devant chaque balise.
+> 2. **Une phrase visible dans la légende**, parce qu'il restait un lecteur que ni
+>    le survol ni les notes ne servaient : celui qui voit, et qui n'a pas de
+>    survol — un clavier, un écran tactile. Elle est `aria-hidden`, et ce n'est pas
+>    un détail : une `<figcaption>` est le **nom accessible** de la figure, et la
+>    phrase dans ce nom a fait rougir trois cas d'un coup — exactement le défaut
+>    que la section « la légende compte, les balises nomment » consigne déjà.
+> 3. **La teinte ne porte pas l'état toute seule.** Un pays souhaité est le seul
+>    état de cette carte qui ne soit pas un fait du passé ; il est tireté, donc la
+>    différence survit au niveau de gris et aux deux thèmes. Même règle que la
+>    balise creuse d'un récit à venir.
+>
+> WCAG 1.4.13 est tenu et mesuré plutôt qu'affirmé : *survolable* (l'étiquette est
+> dans la boîte survolée), *persistant*, et *rejetable* par exemption — elle ne
+> recouvre aucun contenu, ce que `tests/e2e/wished.populated.spec.ts` vérifie
+> balise par balise au lieu de le promettre en commentaire.
+>
+> **Ce qui invaliderait ça.** Une note qu'il faudrait *actionner* — un lien vers
+> une page « à venir », par exemple. Elle deviendrait une cible de 44 px, un arrêt
+> de tabulation par pays, et il faudrait alors trancher son rang dans le parcours
+> avant les balises. Ce jour-là c'est une balise, pas une note.
+
+> **Note (2026-09-08, deux retours du propriétaire sur la même carte).**
+>
+> *« Dans les pays à venir enlève les balises. »* L'anneau creux posé sur chaque
+> pays souhaité était une marque de la famille des balises, debout sur un pays qui
+> ne porte aucun voyage — la confusion que le retour désigne. Il est parti. Ce qui
+> reste est la cible seule : un carré de rien de 1,25 rem centré sur l'ancre, plus
+> large que l'anneau parce qu'une cible invisible doit se *trouver*, et pas plus,
+> parce que ce calque est **au-dessus** des balises et qu'une boîte invisible qui
+> avalerait un clic de balise serait un défaut bien pire que celui qu'elle corrige.
+> `tests/e2e/wished.populated.spec.ts` mesure les deux moitiés.
+>
+> *« Les balises actuelles ne sont pas précises. Tu peux utiliser un ping plus
+> pointu ? »* — et la critique est exacte. Un fanion est un mât surmonté d'un
+> drapeau : son contact avec le sol est **l'extrémité d'un trait vertical**, large
+> de deux unités, et tout le reste du dessin pend d'un seul côté. Rien n'y dit
+> « ici » ; l'œil lit le drapeau, qui est précisément la partie qui n'est pas le
+> lieu. Le pied était en outre à x = 3 d'une boîte de 18, donc la feuille de style
+> devait le rattraper latéralement et le dessin penchait quand même.
+>
+> **Trois formes ont été essayées, et il vaut mieux garder les deux ratées que la
+> conclusion seule.** Le fanion pendait tout entier d'un côté de son ancre : rien
+> dans le dessin ne disait « ici », l'œil lisait le drapeau, qui est précisément la
+> partie qui n'est pas le lieu. Une **goutte pleine** a suivi ; elle pointait juste
+> et se lisait comme un pâté à douze pixels, sa plus grande largeur faisant les deux
+> tiers de sa hauteur — sur un pays de la taille de la Belgique, la balise **était**
+> le pays. Puis un **bâton surmonté d'un rond**, demandé mot pour mot : il pointait,
+> il écartait la tête du lieu, et il ressemblait à une sucette. Un schéma de balise
+> plutôt qu'une balise. *« Utilise un icon plus jolie ou fais plus réaliste. »*
+>
+> C'est **la** balise de carte maintenant : une goutte percée d'un œillet. À vingt
+> pixels il n'y a pas de place pour être original et être lu, et la reconnaissance
+> immédiate est l'essentiel de ce que « plus joli » veut dire ici.
+>
+> L'œillet n'est pas un ornement. Pleine, une goutte de cette taille n'a pour tout
+> détail que sa silhouette ; le trou lui donne un intérieur, et `paint-order: stroke`
+> le cercle de la même encre que le contour, si bien qu'il se lit comme un œillet
+> poinçonné et non comme un manque. C'est aussi lui qui porte la distinction
+> *raconté / à venir* sans seconde teinte : la variante creuse échange le remplissage
+> et le contour, et l'œillet s'inverse avec elle.
+>
+> **Deux contours et `fill-rule: evenodd`**, ce qui rompt avec les deux formes
+> précédentes — toutes deux d'un seul contour, justement pour que `paint-order` ne
+> dessine pas de couture. Ici le second contour *doit* être cerné, donc la règle qui
+> l'interdisait ne s'applique pas ; `src/components/site/brand-art.ts` emploie la
+> même technique pour l'aiguille de l'avion.
+>
+> Ce que les trois essais partagent et qui n'est pas négociable : la pointe **est**
+> le lieu, sur l'axe médian de la boîte, donc l'ancrage se réduit à une translation
+> verticale ; la forme est **symétrique**, donc deux balises voisines se recouvrent
+> de la même façon quel que soit leur ordre — ce que `marks.ts` reprochait au
+> fanion ; et le grossissement au survol part de la pointe.
+> `tests/components/map/mark-art.test.ts` tient les quatre propriétés, et son cas de
+> symétrie compare des **points** et non des abscisses : une liste d'abscisses passe
+> sur un dessin faux, puisqu'elle ne vérifie jamais que l'abscisse miroir a gardé
+> son ordonnée.
+
 **Ce qui invaliderait cette décision.**
 
 1. Un besoin de zoom ou de panoramique **continu**, qui demanderait de recalculer
@@ -448,3 +584,61 @@ Aucun de ces signaux n'est présent aujourd'hui.
 > tient, et c'est lui qui décide — pas cette note.
 >
 > Les signaux 2 et 3 restent absents.
+
+> **Note (2026-09-08, le panneau passe de la zone au voyage).** Un retour du
+> propriétaire, et il porte sur le contenu du panneau et non sur le dessin :
+> « quand je clique sur un voyage je veux le descriptif avec les photos du
+> voyage, pas les autres voyages du pays ».
+>
+> **Ce qu'il voyait.** Relevé dans le document servi : cliquer Paris ouvrait
+> « Les 6 voyages à cet endroit » — Gand-Bruges, Paris, Noirmoutier, La Rochelle,
+> Les Sables-d'Olonne, Rouen — avec Gand-Bruges en tête, parce qu'une zone était
+> nommée d'après son voyage le plus récent. Le voyage activé n'était ni le titre,
+> ni le premier élément. Le défaut est structurel et pas cosmétique : le panneau
+> répondait à une question que le lecteur avait déjà tranchée en visant.
+>
+> **Ce qui change.** Un panneau appartient à un voyage. Son `<h2>` est le titre du
+> voyage, son corps est `src/components/trips/trip-panel.tsx` — pays, dates,
+> durée, villes, au plus trois photos, et une sortie réelle — et
+> `map.panelHeading`, le pluriel ICU sur un compte de voyages, est supprimé des
+> trois catalogues. Le `data-zone` des balises disparaît : `data-trip` suffit.
+>
+> **Ce qui ne change pas, et c'est ce qui rendait le regroupement nécessaire.**
+> Les balises se recouvrent vraiment. Mesuré sur le contenu du dépôt, à 1440 px,
+> cibles de 44 px : `annecy ↔ geneve` sur 44 × 24 px, `paris ↔ rouen` sur
+> 30 × 36 px, `roses ↔ barcelone` sur 33 × 31 px, et neuf autres paires — à
+> 390 px, tout recouvre tout. Un lecteur au pointeur ne peut donc pas toujours
+> viser la balise qu'il veut. La réponse est un bloc secondaire en pied de
+> panneau, « Aussi à cet endroit », et non le contenu principal.
+>
+> **`zonesOf` est remplacée par `overlappingMarks`, et c'est le seul changement
+> d'algorithme.** L'ancienne fonction faisait du *single linkage* : une balise
+> rejoignait une zone dès qu'elle touchait **une** de ses membres, ce qui
+> chaînait six voyages là où seules deux paires se touchent. Ce chaînage n'avait
+> de sens que parce qu'une zone devait être une **partition**. Un panneau par
+> voyage n'en demande plus : la seule question restante — « quelles balises la
+> mienne recouvre-t-elle » — est une relation par paire, pas transitive. Le rayon
+> et son argumentaire (une largeur de cible WCAG 2.5.8) sont conservés tels quels.
+>
+> **Le défaut que la bascule a mis au jour, et qu'aucun test unitaire ne pouvait
+> voir.** L'attribut qui marque un lien de bascule a d'abord été déclaré dans
+> `map-viewport.tsx`, qui porte `'use client'`. Un module client n'exporte pas
+> ses valeurs vers un Server Component, il exporte des *références* : le serveur
+> a rendu l'attribut avec la source d'une fonction pour NOM.
+>
+>     React does not recognize the `function() { throw new Error("Attempted to
+>     call PANEL_SWITCH_ATTRIBUTE() from the server…") }` prop on a DOM element.
+>     Invalid attribute name: `%s`
+>
+> Les 345 cas de `tests/components/map/**` étaient verts pendant ce temps : Vitest
+> importe le module directement et n'applique jamais le proxy de frontière. C'est
+> la **deuxième** fois que ce dépôt paie cette leçon — `ZOOM_VALUE_TOKEN` l'avait
+> déjà payée, et le paragraphe qui la raconte dans `viewport.ts` disait
+> explicitement exister « pour que la leçon ne soit pas apprise deux fois ». Elle
+> l'a été. La constante vit désormais à côté de lui, dans le module pur.
+>
+> **Ce que la décision de cette ADR gagne au passage.** Rien du dessin n'a bougé :
+> le `<svg>` est toujours `aria-hidden`, toujours sans `pointer-events`, et le
+> bloc voisin est du HTML posé par-dessus, exactement comme une balise et comme
+> les notes de pays souhaités de la note précédente. Le compte de composants
+> clients reste à trois.

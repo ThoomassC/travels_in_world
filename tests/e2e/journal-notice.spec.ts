@@ -185,11 +185,31 @@ test.describe("the notice and the first screen", () => {
       expect(figureBox).not.toBeNull();
 
       /**
-       * One line at both reference widths. Two lines is what a `max-width` on the
-       * sentence produced in the first version — 47 px instead of 28 — and it is the
-       * cheapest way to lose the result above without anyone noticing.
+       * **Still one line at both reference widths — and the ceiling moved, because
+       * the notice did.**
+       *
+       * This read `< 40` for as long as the notice was a muted sentence in the
+       * whitespace above the `<h1>`, where one line cost 28 px and two cost 47.
+       * The owner asked for a band that a reader cannot miss: a full-bleed plate,
+       * an advisory glyph and type at reading size, which is 50 px on one line.
+       * The old ceiling refused the design rather than the defect it was written
+       * against, so it is raised — and it is raised to the smallest number that
+       * still fails on the thing that mattered.
+       *
+       * The defect is unchanged: **the sentence wrapping to a second line**. That
+       * is what a `max-width` on the paragraph produced before, it is what a
+       * longer translation would produce now, and it is the cheapest way to lose
+       * the fold result below without anyone noticing. One line of `--text-base`
+       * inside `--space-3` block padding measures 50 px; a second line adds 22, so
+       * anything at or above 68 is a wrap. 60 sits between the two with room for a
+       * font-metric change on either side of it.
+       *
+       * Measured at both widths on the served build: 49.67 px.
        */
-      expect(noticeBox?.height ?? 0).toBeLessThan(40);
+      expect(
+        noticeBox?.height ?? 0,
+        "the notice is taller than one line — the sentence has wrapped, and the fold assertion below is about to become the only thing holding"
+      ).toBeLessThan(60);
 
       // `y + height`, in page coordinates: nothing has scrolled, so this is the
       // distance from the top of the document to the bottom of the figure.

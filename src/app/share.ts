@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { localePathname } from "@/i18n/pathname";
+import { routing } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
 import { FEED_PATH } from "./rss";
 
@@ -39,8 +41,20 @@ export type ShareImage = {
 
 export type SharePage = {
   readonly locale: Locale;
-  /** The page's own URL, locale prefix included, as `localePathname` builds it. */
-  readonly path: string;
+  /**
+   * The page's address WITHOUT its locale prefix — `/`, `/voyages`,
+   * `/voyages/japon-2024`, as `src/i18n/paths.ts` builds them.
+   *
+   * It used to be the prefixed path, and every call site computed it with the
+   * same `localePathname({ href, locale })`. Taking the bare href instead is what
+   * lets this builder produce the canonical AND the `hreflang` alternates from one
+   * value: with three active locales a page needs both, and a page that declared
+   * only the first would tell a crawler that `/en/voyages/x` and `/es/voyages/x`
+   * are three unrelated pages competing for the same subject. Deriving them
+   * together means no page can carry one without the others — the same argument
+   * that already put the feed link in this builder.
+   */
+  readonly href: string;
   readonly title: string;
   readonly description: string;
   /** From the message catalogue — never a literal, like every other reader-facing string. */
@@ -73,13 +87,13 @@ export type SharePage = {
 /**
  * Open Graph wants `language_TERRITORY` (`fr_FR`), the routing config holds a bare
  * language (`fr`), and the mapping between them is derived rather than written
- * down: a table of two entries is a table that goes stale the day `en` is
- * activated and nobody remembers it exists.
+ * down — which is what made activating `en` and `es` cost nothing here: a table
+ * would have been three entries nobody remembered to grow.
  *
  * `Intl.Locale#maximize` is CLDR's "add the likely subtags" — `fr` → `fr-Latn-FR`,
- * `en` → `en-Latn-US`. A locale with no likely region falls back to the bare
- * language, which is tolerated by every consumer and is better than an invented
- * territory.
+ * `en` → `en-Latn-US`, `es` → `es-Latn-ES`. A locale with no likely region falls
+ * back to the bare language, which is tolerated by every consumer and is better
+ * than an invented territory.
  */
 export function openGraphLocale(locale: Locale): string {
   const region = new Intl.Locale(locale).maximize().region;
@@ -117,14 +131,47 @@ const SITE_SHARE_IMAGE = {
   height: 630,
 } as const;
 
+/**
+ * The same page in every active locale, plus `x-default` — the `hreflang` set.
+ *
+ * WHY IT IS HERE AND NOT IN A PAGE: every page already goes through this builder
+ * for its canonical, and the two answer one question together. A canonical says
+ * "this URL is the one address for what is here"; without the alternates beside
+ * it, three localised pages saying that about themselves are three pages a
+ * crawler has no reason to relate — the exact duplicate-content reading that
+ * costs a multilingual site its ranking.
+ *
+ * `x-default` points at the default locale, because that is what `/` already
+ * resolves to: `next.config.ts` redirects the bare root to `/fr`, and there is no
+ * `Accept-Language` negotiation to send a reader anywhere else (see
+ * `src/i18n/routing.ts`). Naming the same target twice — once as `fr`, once as
+ * `x-default` — is the standard way to say "this is the address for a reader we
+ * have no better answer for", and it is honest here rather than aspirational.
+ *
+ * Relative, like the canonical and the feed link next to it: `metadataBase`
+ * resolves them, once, in Next's implementation.
+ */
+function localeAlternates(href: string): Record<string, string> {
+  return Object.fromEntries([
+    ...routing.locales.map((locale) => [locale, localePathname({ href, locale })]),
+    ["x-default", localePathname({ href, locale: routing.defaultLocale })],
+  ]);
+}
+
 export function shareMetadata(page: SharePage): Metadata {
+  /**
+   * The page's own prefixed URL, built here rather than by the caller so that it
+   * cannot disagree with the alternates below — see `SharePage["href"]`.
+   */
+  const path = localePathname({ href: page.href, locale: page.locale });
+
   /**
    * A trip's cover photograph wins; the brand is the fallback, and that order is
    * the whole point — a story shares as itself, and only a page with nothing of
    * its own to show falls back to saying which site it belongs to.
    *
    * The alt text is the site name, not a description of the drawing: the image
-   * *is* the site name set in type, so "a comet on a trajectory" would describe
+   * *is* the site name set in type, so "an aeroplane on a trajectory" would describe
    * the decoration and drop the information. It comes from `page.siteName`, which
    * is already a message from the catalogue — no reader-facing literal here.
    */
@@ -144,7 +191,15 @@ export function shareMetadata(page: SharePage): Metadata {
      * prerendered document and refuses one whose canonical is not its own URL.
      */
     alternates: {
-      canonical: page.path,
+      canonical: path,
+      /**
+       * The `hreflang` set — see {@link localeAlternates}. Beside the canonical
+       * and for the same reason as the feed link below: Next merges metadata
+       * shallowly per top-level field, so a page declaring `alternates` for its
+       * canonical would drop a layout-level `languages` block, and the pages that
+       * forgot to repeat it would be exactly the ones nobody checks.
+       */
+      languages: localeAlternates(page.href),
       /**
        * Feed discovery, and it is **here rather than in the layout** for a
        * measured reason: Next merges metadata shallowly per top-level field, so
@@ -163,7 +218,7 @@ export function shareMetadata(page: SharePage): Metadata {
 
     openGraph: {
       type: page.type,
-      url: page.path,
+      url: path,
       siteName: page.siteName,
       title: page.title,
       description: page.description,

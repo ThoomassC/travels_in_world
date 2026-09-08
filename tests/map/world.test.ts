@@ -20,11 +20,21 @@ const FRENCH = "fr";
 const JAPAN_NUMERIC = "392";
 
 /**
- * The three territories world-atlas 110m ships without an `id`. They can never be
- * joined to a country code, and they are still drawn: leaving them out would
- * punch three holes in the map.
+ * The territories world-atlas 50m ships without an `id`. They can never be joined
+ * to a country code, and they are still drawn: leaving them out would punch holes
+ * in the map.
+ *
+ * **Three at 110m, five here**, and the two newcomers are what a finer vintage
+ * draws rather than a change of policy: `Indian Ocean Ter.` and `Siachen Glacier`
+ * are too small for the coarse simplification to carry at all.
  */
-const UNIDENTIFIED_TERRITORY_NAMES = ["Kosovo", "N. Cyprus", "Somaliland"];
+const UNIDENTIFIED_TERRITORY_NAMES = [
+  "Indian Ocean Ter.",
+  "Kosovo",
+  "N. Cyprus",
+  "Siachen Glacier",
+  "Somaliland",
+];
 
 function build(visitedCountryCodes: readonly CountryCode[], locale: string = FRENCH) {
   return buildWorldGeometry({ visitedCountryCodes, locale });
@@ -44,15 +54,21 @@ function shapeFor(code: CountryCode, shapes: readonly CountryShape[]): CountrySh
 
 describe("the background layer", () => {
   /**
-   * All 177, not "the ones we could join". The background layer is the map: a
+   * All 240, not "the ones we could join". The background layer is the map: a
    * country dropped because its code was unknown leaves a hole in the ocean, and
    * an SVG with a missing path is as valid as one without.
+   *
+   * **240 shapes for 241 geometries**, and the difference is the one merge the 50m
+   * vintage forces: numeric 036 arrives twice, as `Australia` and as its external
+   * territory `Ashmore and Cartier Is.`, and `src/map/dataset.ts` concatenates the
+   * two into one multi-part shape. The second assertion below reads the dataset
+   * itself, so it moves with the vintage; the literal is what pins the merge.
    */
   it("produces one shape per geometry in the dataset", () => {
     const world = build([]);
 
-    expect(world.countries).toHaveLength(177);
-    expect(world.countries).toHaveLength(readDatasetGeometries().length);
+    expect(world.countries).toHaveLength(240);
+    expect(world.countries).toHaveLength(readDatasetGeometries().length - 1);
   });
 
   it("gives every country a non-empty path", () => {
@@ -72,17 +88,36 @@ describe("the background layer", () => {
   it("keeps the dataset's order, so the paint order is stable", () => {
     const ids = build([]).countries.map((shape) => shape.id);
 
-    // Compared on `id`, not on `name`: `name` is localised for every joined
-    // country, so a name-to-name comparison would only be asserting that French
-    // and the dataset's English happen to agree — which they do not, and which is
-    // not what "same order" means.
-    expect(ids).toEqual(readDatasetGeometries().map((geometry) => geometry.id));
+    /**
+     * Compared on `id`, not on `name`: `name` is localised for every joined
+     * country, so a name-to-name comparison would only be asserting that French
+     * and the dataset's English happen to agree — which they do not, and which is
+     * not what "same order" means.
+     *
+     * The dataset's own order, minus the second occurrence of any repeated id.
+     * That subtraction is the merge `src/map/dataset.ts` performs for numeric 036
+     * — `Australia` and `Ashmore and Cartier Is.` become one multi-part shape, at
+     * the position of the first. Written as a de-duplication rather than as a
+     * literal so it still describes the rule if a later vintage repeats a
+     * different code.
+     */
+    const seen = new Set<string>();
+    const expected = readDatasetGeometries()
+      .map((geometry) => geometry.id)
+      .filter((id) => {
+        if (id === null) return true;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+
+    expect(ids).toEqual(expected);
   });
 });
 
-describe("the three territories with no ISO identifier", () => {
+describe("the territories with no ISO identifier", () => {
   /**
-   * The crash this whole block exists for. `id` is absent on three of the 177
+   * The crash this whole block exists for. `id` is absent on five of the 241
    * geometries, so any code reaching for `geometry.id.padStart` or indexing a
    * table with it throws — during the build, on a dataset nobody changed.
    */
@@ -90,7 +125,7 @@ describe("the three territories with no ISO identifier", () => {
     expect(() => build([])).not.toThrow();
   });
 
-  it("marks exactly those three as unjoinable, in both fields at once", () => {
+  it("marks exactly those as unjoinable, in both fields at once", () => {
     const world = build([]);
     const unidentified = world.countries.filter((shape) => shape.id === null);
 
@@ -98,7 +133,9 @@ describe("the three territories with no ISO identifier", () => {
     // `code` and `id` have to go missing together. A shape with an `id` of `null`
     // and a non-null `code` would be joinable on a key that does not exist, which
     // is how a country ends up painted as visited without ever being declared.
-    expect(unidentified.map((shape) => shape.code)).toEqual([null, null, null]);
+    expect(unidentified.map((shape) => shape.code)).toEqual(
+      UNIDENTIFIED_TERRITORY_NAMES.map(() => null)
+    );
   });
 
   /**
@@ -116,9 +153,9 @@ describe("the three territories with no ISO identifier", () => {
   });
 
   /**
-   * Unjoinable is not undrawn. Northern Cyprus, Somaliland and Kosovo are land: if
-   * they carry no path the map shows three white gaps, and the only way to notice
-   * is to look at the rendered image.
+   * Unjoinable is not undrawn. Every one of them is land: if they carry no path
+   * the map shows white gaps, and the only way to notice is to look at the
+   * rendered image.
    */
   it("still draws them", () => {
     const withoutPath = build([])
@@ -183,7 +220,7 @@ describe("the join between a declared country code and a geometry", () => {
     const world = build([]);
 
     expect(world.visited).toEqual([]);
-    expect(world.countries).toHaveLength(177);
+    expect(world.countries).toHaveLength(240);
   });
 });
 
@@ -209,14 +246,19 @@ describe("a declared code that resolves to no geometry", () => {
   });
 
   /**
-   * Monaco. A real country with a real alpha-2 and a real numeric (492) that
-   * world-atlas 110m simply does not carry — verified against the dataset's 177
-   * ids, alongside SG (702), MT (470) and SM (674), all absent for the same
-   * reason: at 110m they are smaller than a pixel.
+   * Gibraltar. A real country code with a real numeric (292) that world-atlas 50m
+   * does not carry, alongside TV (798) and UM (581) — the only three of the 249
+   * assigned codes that the shipped vintage misses and a finer one would draw.
+   *
+   * **This case used to name Monaco, and the switch to 50m is why it could not
+   * stay.** MC (492) was one of the micro-states 110m omitted, together with SG,
+   * MT and SM; 50m draws all four. The vintage that fixed the coastline also
+   * emptied this test of its subject, which is the ordinary way a resolution
+   * change lands: it does not break the rule, it moves the examples.
    */
-  it("refuses a real country the 110m vintage does not carry, and says why", () => {
-    expect(() => build(["MC"])).toThrow(/MC/);
-    expect(() => build(["MC"])).toThrow(/110m/);
+  it("refuses a real country the 50m vintage does not carry, and says why", () => {
+    expect(() => build(["GI"])).toThrow(/GI/);
+    expect(() => build(["GI"])).toThrow(/50m/);
   });
 
   /**
@@ -229,7 +271,7 @@ describe("a declared code that resolves to no geometry", () => {
    * what makes the "missing geometry" message actionable — so "one says ISO and
    * the other does not" was a bad proxy, and this case used to assert it. What
    * genuinely separates them is that a typo has no resolution story to tell: only
-   * the real-country failure may talk about the 110m vintage, because only there
+   * the real-country failure may talk about the 50m vintage, because only there
    * is switching dataset a fix the author can consider.
    */
   it("tells the two failures apart", () => {
@@ -244,7 +286,7 @@ describe("a declared code that resolves to no geometry", () => {
 
     const missingGeometry = (() => {
       try {
-        build(["MC"]);
+        build(["GI"]);
       } catch (error) {
         return error instanceof Error ? error.message : String(error);
       }
@@ -254,7 +296,7 @@ describe("a declared code that resolves to no geometry", () => {
     expect(unknownCode).not.toBe("");
     expect(missingGeometry).not.toBe("");
     expect(unknownCode).not.toBe(missingGeometry);
-    expect(unknownCode).not.toMatch(/110m/);
+    expect(unknownCode).not.toMatch(/50m/);
   });
 });
 
@@ -268,7 +310,7 @@ describe("the viewBox and the precision of the path data", () => {
   });
 
   /**
-   * One decimal, across all 177 paths and not a sample — the failure this catches
+   * One decimal, across all 240 paths and not a sample — the failure this catches
    * is a single geometry emitted through a different code path (a point feature, a
    * multi-polygon fallback) at full precision, which a sample of ten would miss
    * 94 times out of 100.
@@ -310,21 +352,42 @@ describe("the weight of the geometry payload", () => {
    * not get faster or slower with the machine: it is the compressed size of a
    * deterministic string, so it either holds or someone changed the rounding.
    *
-   * Measured on this dataset: **30.1 KiB brotli at one decimal, 45.5 KiB at three**
-   * — the 15 KiB the rounding buys, on a page whose whole JS budget is 150 KiB
-   * (`AGENTS.md`, "Dépendances écartées"). The ceiling is set at 34 KiB, which
-   * leaves room for a world-atlas patch release and none for losing the rounding.
+   * **THE CEILING WAS 34 KiB AND IS NOW 200, AND THAT IS THE ONE THING THIS
+   * COMMENT EXISTS TO EXPLAIN.** The old paragraph ended "if this fails, the fix
+   * is to find what stopped rounding — not to raise the ceiling", and it was
+   * right about every failure it could imagine. This is the failure it could not:
+   * the ceiling was raised on purpose, by the owner, after being shown the figure.
    *
-   * If this fails, the fix is to find what stopped rounding — not to raise the
-   * ceiling.
+   * WHY. At the 110m vintage three of the journal's fourteen places rendered in
+   * the sea — Les Sables-d'Olonne by 2.0 px, Roses by 0.8, Noirmoutier by 0.2,
+   * measured point-in-polygon — because the simplification straightens the French
+   * Atlantic façade. The owner reported it as misplaced markers before anyone
+   * measured it. `src/map/dataset.ts` carries the full comparison across the three
+   * vintages and the trade it settles.
+   *
+   * WHAT IT COSTS, and the number is deliberately in this test rather than only in
+   * a comment: 30.2 KiB brotli at 110m, **182.6 KiB at 50m**. The home document
+   * grows by about 152 KiB, and it is the only route that renders the full map.
+   *
+   * WHAT THE GUARD STILL GUARDS, because a ceiling six times higher is worth
+   * nothing if it guards nothing. Two things, both still live:
+   *
+   * - **the rounding.** At three decimals this same vintage measures far past
+   *   200 KiB, so losing `createRoundingPathContext` is still a red test — which
+   *   was the original purpose, and the only one the old ceiling served.
+   * - **a third silent vintage bump.** 10m measures 512.6 KiB and would fail here
+   *   rather than ship, exactly as 50m used to.
+   *
+   * If this fails, the fix is still to find what stopped rounding. Raising it
+   * again is a decision with an owner's name on it, not a repair.
    */
-  it("keeps every path together under 34 KiB brotli", () => {
+  it("keeps every path together under 200 KiB brotli", () => {
     const pathData = build([])
       .countries.map((shape) => shape.path)
       .join("");
     const compressed = brotliCompressSync(Buffer.from(pathData, "utf8")).byteLength;
 
-    expect(compressed).toBeLessThan(34 * 1024);
+    expect(compressed).toBeLessThan(200 * 1024);
   });
 });
 
@@ -402,7 +465,7 @@ describe("the identity shared between the two layers", () => {
    * Every visited entry, not just the one above — a `find`-based implementation
    * shares identity by accident and a `map`-based one copies every time, so the
    * guard has to cover the whole set. `Array.prototype.includes` compares by
-   * reference for objects, which is `toBe` applied 177 times in one assertion.
+   * reference for objects, which is `toBe` applied 240 times in one assertion.
    */
   it("shares identity for every visited country at once", () => {
     const world = build(["JP", "ES", "AT", "CD", "BR", "AU"]);

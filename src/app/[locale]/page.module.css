@@ -3,23 +3,27 @@
    latest-trips block.
    ============================================================================ */
 
-.hero {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.title {
-  font-size: var(--text-display-md);
-}
-
-.intro {
-  color: var(--text-muted);
-  font-size: var(--text-md);
-  /* A measure, not a width: this is the one paragraph on the page that says what
-     the site is, and past ~70 characters a line loses its reader between the end
-     of one and the start of the next. */
-  max-width: 60ch;
+/**
+ * The page's heading — announced, never drawn (TIW-38).
+ *
+ * The hiding is the pattern the rest of this repository uses: a 1 px box with
+ * `clip-path`, never `display: none` nor `visibility: hidden`, both of which
+ * would take the heading out of the accessibility tree — and out of the document
+ * outline, which is the entirety of what it is still here for.
+ *
+ * `.title` and `.intro` used to live here. The first is this rule; the second is
+ * gone, along with its message key.
+ */
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /*
@@ -33,3 +37,24 @@
   business — and this page no longer has to compute a ratio for a stylesheet it
   does not own, nor pass it through an inline style.
 */
+
+/**
+ * The countries list under the map, and it exists **only** below 768 px.
+ *
+ * Above that the map itself is the index: thirteen markers a pointer can hit,
+ * each opening its trip's panel. Below it the markers are hidden — see
+ * `world-map.module.css` for the measurement that decided it — and this list is
+ * how a reader gets from the home page into the journal. `display: none` above
+ * the breakpoint keeps it out of the desktop document's accessibility tree
+ * entirely, so nothing there gains a duplicate of navigation it already has.
+ */
+.phoneCountries {
+  display: none;
+}
+
+@media (max-width: 48rem) {
+  .phoneCountries {
+    display: block;
+    margin-block-start: var(--space-4);
+  }
+}

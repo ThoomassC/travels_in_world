@@ -40,14 +40,27 @@ import { absoluteUrl } from "../site-url";
 export const dynamic = "force-static";
 
 /**
- * The feed is served in the default locale and in that locale only.
+ * The feed is served in the default locale and in that locale only — including
+ * now that `en` and `es` are active, which is a decision and not an omission.
  *
- * One feed, at one address, because that is what a `<link rel="alternate">` in
- * the document head can point at and what a subscriber pastes into a reader. The
- * day `en` becomes active, the honest answer is a second address
- * (`/feed.en.xml`) rather than a mixed-language channel — and the shape here is
- * already right for it: every locale-bound value below goes through this one
- * constant.
+ * **What a second feed would carry.** Every `<item>` here is a récit's title, its
+ * dates and its countries, and `content/trips/**` holds those in French with no
+ * per-locale field (`src/i18n/routing.ts` says so at length: the chrome is
+ * translated, the stories are not). So `/feed.en.xml` would broadcast the same
+ * French titles under an English channel name, at a second address a subscriber
+ * would have to choose between — three channels of one journal, differing by two
+ * strings and a URL prefix. That is a worse answer than one address, not a more
+ * complete one.
+ *
+ * The consequence, stated rather than left to be found: the
+ * `<link rel="alternate" type="application/rss+xml">` in the head of `/en/...`
+ * and `/es/...` points at this French feed. It is the only feed that exists, and
+ * its items are the French stories those pages already show.
+ *
+ * The shape stays right for the day the récits are translated: every
+ * locale-bound value below goes through this one constant, so a per-locale feed
+ * is a loop over `routing.locales` and a `[locale]` segment in the route's path —
+ * not a rewrite. Until then, `renderRssFeed`'s `language` says `fr`, truthfully.
  */
 const FEED_LOCALE = routing.defaultLocale;
 

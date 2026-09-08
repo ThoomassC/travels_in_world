@@ -24,6 +24,14 @@ import styles from "./journal-notice.module.css";
  * `/_not-found` sits *above* the locale segment and therefore does not carry it,
  * which is what the criterion says.
  *
+ * **A band, and it used to be a line.** TIW-35 shipped this as one muted sentence
+ * in the whitespace above the `<h1>` — « une ligne, pas un encart » — and the
+ * stylesheet next door still carries the fold measurement that decided it. The
+ * owner reversed the call: a reader who lands on a carnet with a working map and
+ * no récit was not noticing the line at all, and being noticed is the entire job
+ * of this component. It is now a full-bleed advisory band. What that costs at the
+ * fold, and what was given back to pay for it, is in `journal-notice.module.css`.
+ *
  * **Zero byte of JavaScript.** An `<aside>`, a `<p>` and a stylesheet. The
  * milestone's two `'use client'` boundaries are spent — the map's interaction
  * (TIW-14) and the photo viewer (TIW-17) — and a banner nobody can dismiss has no
@@ -62,13 +70,53 @@ export function JournalNotice(): ReactElement {
   return (
     <aside className={styles.notice} aria-label={t("noticeLabel")}>
       {/*
-        One sentence, and it names the map without depending on being next to one:
-        this renders on `/fr/a-propos` too, where there is no map on the page — the
-        reader has one nav entry away. It is also true in both states
-        `holdsNoStory` covers: an empty collection, where the places are on their
-        way, and an untold-only collection, where they are already drawn.
+        The band bleeds to both edges of the viewport, so the sentence needs a box
+        of its own to stay on the page's measure — otherwise it would start at the
+        glass on a wide screen while every other first letter of the document
+        starts at the content column.
       */}
-      <p className={styles.body}>{t("noticeBody")}</p>
+      <div className={styles.inner}>
+        <p className={styles.body}>
+          {/*
+          The glyph, and it is not decoration in the sense that lets you drop it.
+          The shared palette states the rule its semantic colours come with — « la
+          couleur double toujours un mot ET un glyphe » — so the amber is never on
+          its own in carrying "this is an advisory" (WCAG 1.4.1). The words do it,
+          the shape does it, and the colour is the third channel rather than the
+          only one.
+
+          `aria-hidden` and `focusable="false"`: it repeats what the sentence
+          beside it already says, and an announced decoration is noise. Same
+          reasoning, and the same two attributes, as the header mark in
+          `./site-brand.tsx`.
+        */}
+          <svg
+            className={styles.glyph}
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M12 3.4 22.2 21.4 1.8 21.4 Z" />
+            <path d="M12 9.6V14.4" />
+            <path d="M12 17.9h0.01" />
+          </svg>
+
+          {/*
+          One sentence, and it names the map without depending on being next to one:
+          this renders on `/fr/a-propos` too, where there is no map on the page — the
+          reader has one nav entry away. It is also true in both states
+          `holdsNoStory` covers: an empty collection, where the places are on their
+          way, and an untold-only collection, where they are already drawn.
+
+          Inside the `<p>` rather than beside it, which is what centring forced.
+          As a flex sibling the glyph sat against the left edge of a paragraph
+          bounded by `--measure`, so on a wide screen it hung two hundred pixels
+          away from a sentence centred inside that box. In the text flow it leads
+          the first line and travels with it at every width.
+        */}
+          {t("noticeBody")}
+        </p>
+      </div>
     </aside>
   );
 }

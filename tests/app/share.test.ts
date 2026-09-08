@@ -12,7 +12,10 @@ import { routing } from "@/i18n/routing";
 
 const page = {
   locale: routing.defaultLocale,
-  path: "/fr/voyages/japon-2024",
+  // Locale-agnostic, as `src/i18n/paths.ts` builds it. The builder prefixes it
+  // itself, which is what lets it derive the canonical and the `hreflang` set
+  // from one value — see `SharePage["href"]`.
+  href: "/voyages/japon-2024",
   title: "Japon, printemps 2024",
   description: "Japon, printemps 2024 — 5 jours, 4 nuits, Tokyo et Kyoto.",
   siteName: "Travels in World",
@@ -69,9 +72,77 @@ describe("the feed link", () => {
   });
 });
 
+/**
+ * The `hreflang` set, beside the canonical because they are one decision: three
+ * localised pages each claiming to be canonical, with nothing relating them, is
+ * how a multilingual site asks a crawler to treat one subject as three
+ * competitors.
+ */
+describe("the hreflang alternates", () => {
+  it("names the same page in every active locale", () => {
+    const languages = shareMetadata(page).alternates?.languages;
+
+    // Derived from `routing.locales`, so a fourth locale is covered here with no
+    // diff — and a locale dropped from the alternates makes this red.
+    for (const locale of routing.locales) {
+      expect(languages?.[locale]).toBe(`/${locale}/voyages/japon-2024`);
+    }
+  });
+
+  it("declares exactly the active locales plus x-default, and nothing else", () => {
+    expect(Object.keys(shareMetadata(page).alternates?.languages ?? {}).sort()).toEqual(
+      [...routing.locales, "x-default"].sort()
+    );
+  });
+
+  it("points x-default at the default locale", () => {
+    /**
+     * `/` redirects to `/${defaultLocale}` in `next.config.ts` and there is no
+     * `Accept-Language` negotiation, so the default locale IS the address for a
+     * reader the site has no better answer for. Asserted against the routing
+     * config rather than against `/fr`, so the day the default changes this
+     * follows it instead of pinning a stale answer.
+     */
+    const languages = shareMetadata(page).alternates?.languages;
+
+    expect(languages?.["x-default"]).toBe(languages?.[routing.defaultLocale]);
+  });
+
+  it("stays relative, for `metadataBase` to resolve — like the canonical", () => {
+    const languages = shareMetadata(page).alternates?.languages ?? {};
+
+    for (const url of Object.values(languages)) {
+      expect(typeof url === "string" && url.startsWith("/")).toBe(true);
+    }
+  });
+
+  it("is declared even on a page that is not indexable", () => {
+    // `noindex` says "do not list this page"; the alternates say "these three
+    // URLs are the same page". A withdrawn récit is withdrawn in all three.
+    const languages = shareMetadata({ ...page, indexable: false }).alternates?.languages;
+
+    expect(Object.keys(languages ?? {})).toHaveLength(routing.locales.length + 1);
+  });
+});
+
 describe("the canonical", () => {
-  it("is the page's own path", () => {
+  it("is the page's own path, prefixed with its own locale", () => {
     expect(shareMetadata(page).alternates?.canonical).toBe("/fr/voyages/japon-2024");
+    expect(shareMetadata({ ...page, locale: "en" }).alternates?.canonical).toBe(
+      "/en/voyages/japon-2024"
+    );
+  });
+
+  it("is the alternate of the page's own locale, never another's", () => {
+    /**
+     * The pair that would break silently if the two were computed separately:
+     * a canonical saying `/en/…` beside an `hreflang="en"` saying `/fr/…` asks a
+     * crawler two contradictory things about one document. They come from one
+     * `href` here, which is what makes the contradiction unwritable.
+     */
+    const metadata = shareMetadata({ ...page, locale: "es" });
+
+    expect(metadata.alternates?.languages?.es).toBe(metadata.alternates?.canonical);
   });
 
   it("stays relative, for `metadataBase` to resolve", () => {
@@ -201,19 +272,28 @@ describe("openGraphLocale", () => {
 
   it("derives the territory rather than reading a table", () => {
     /**
-     * `Intl.Locale#maximize` is CLDR's likely-subtags. A two-entry table would be a
-     * table that goes stale the day `en` is activated and nobody remembers it
-     * exists, so the alarm is here instead: this asserts the mechanism on a locale
-     * the site does not have yet.
+     * `Intl.Locale#maximize` is CLDR's likely-subtags, and this is the case that
+     * proves the mechanism instead of the answer: a hand-written table of three
+     * entries is a table that goes stale at the fourth locale. `en` → `en-Latn-US`
+     * and `es` → `es-Latn-ES` come out of CLDR, not out of this repository.
      */
     expect(new Intl.Locale("en").maximize().region).toBe("US");
+    expect(new Intl.Locale("es").maximize().region).toBe("ES");
   });
 
   it("covers every active locale", () => {
-    // Derived from `routing.locales`, so the day `en` is declared this case starts
-    // exercising it with no diff here.
+    // Derived from `routing.locales`, so a fourth locale is exercised here with no
+    // diff. It has covered `en` and `es` since they were declared.
     for (const locale of routing.locales) {
       expect(openGraphLocale(locale)).toMatch(/^[a-z]{2}(_[A-Z]{2})?$/);
     }
+  });
+
+  it("gives each active locale its CLDR territory", () => {
+    // The three concrete answers, so a regression in the derivation shows what it
+    // changed rather than only that the shape still matches.
+    expect(openGraphLocale("fr")).toBe("fr_FR");
+    expect(openGraphLocale("en")).toBe("en_US");
+    expect(openGraphLocale("es")).toBe("es_ES");
   });
 });

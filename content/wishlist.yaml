@@ -1,0 +1,33 @@
+# Les pays que Thomas souhaite visiter — le troisième état de la carte.
+#
+# CE FICHIER EST DU CONTENU, comme content/trips/. Il n'y a rien à recompiler
+# pour le changer : ajoute ou retire une ligne, et la carte suit au prochain
+# build. Les pays listés ici sont teintés « à venir » sur le planisphère de
+# l'accueil, et chacun porte une note « <pays> : à venir » que l'on peut
+# survoler à la souris, atteindre au clavier et fermer avec Échap.
+#
+# LES RÈGLES, ET ELLES SONT TOUTES TENUES PAR « npm run validate:content »,
+# qui tourne avant chaque build (script « prebuild ») :
+#
+#   - un code ISO 3166-1 alpha-2, en DEUX CAPITALES, un par ligne. « hr » est
+#     refusé avec le bon code dans le message, pas avec « code inconnu » ;
+#   - le pays doit exister ET la carte doit savoir le dessiner. Le fond de
+#     carte est world-atlas 50m : 14 codes attribués n'y ont aucune forme
+#     (BQ, BV, CC, CX, GF, GI, GP, MQ, RE, SJ, TK, TV, UM, YT). Le validateur
+#     les nomme un par un plutôt que de les laisser disparaître en silence ;
+#   - un pays DÉJÀ VISITÉ n'a rien à faire ici. La carte peint une forme une
+#     fois : « visité » et « à venir » se recouvriraient et une seule des deux
+#     teintes serait visible. Le build refuse le doublon en nommant le pays —
+#     c'est le signal qu'un voyage est arrivé et que la ligne peut partir ;
+#   - pas de doublon dans la liste non plus.
+#
+# L'ORDRE DE CE FICHIER N'EST PAS CELUI DE LA CARTE : les notes sont triées
+# par nom localisé, parce que l'ordre du DOM est l'ordre de tabulation et
+# qu'un lecteur au clavier doit les parcourir dans un ordre qu'une étiquette
+# explique. Écris-les dans l'ordre qui t'arrange.
+
+countries:
+  - HR # Croatie
+  - IT # Italie
+  - ME # Monténégro
+  - PT # Portugal

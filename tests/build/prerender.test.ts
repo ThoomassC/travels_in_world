@@ -49,6 +49,61 @@ const KB = 1024;
 // here for two tickets, which is why every figure below now carries the commit it was
 // taken on: a number with no date is a number nobody can check.
 const HTML_BUDGET_BYTES = 100 * KB;
+
+/**
+ * **THE SECOND HTML CEILING, AND WHY THERE ARE TWO INSTEAD OF ONE RAISED ONE.**
+ *
+ * Moving the basemap from the 110m vintage to 50m — the owner's call, so that
+ * Brittany, the Vendée islands, Corsica and the Greek islands read as coastline
+ * rather than as a smooth curve — takes the projected paths from 30.2 to 182.6
+ * KiB brotli. Those paths are inline in the document, so the three locale
+ * homepages went from ~59 KiB to **199.0 KiB /fr, 199.0 /es, 197.0 /en**,
+ * measured on this build. The single 100 KiB ceiling above refused all three.
+ *
+ * Raising that one constant to fit them would have been the cheap move and the
+ * wrong one: **every other document on the site is under 8.5 KiB** — 8.4 KiB
+ * /fr/voyages, 7.7 /fr/villes, 7.4 /fr/a-propos, 1.3 /_not-found — and a 240 KiB
+ * ceiling would let any of them grow thirtyfold in silence. The routes that carry
+ * the map are the routes that get the map's budget; nothing else does.
+ *
+ * What each ceiling still catches, which is the only question that matters for a
+ * guard that has just been loosened:
+ *
+ * - on the map routes, 41 KiB of headroom over the measurement — enough for real
+ *   content on the home page, and nowhere near the 512.6 KiB a third silent
+ *   vintage bump to 10m would cost, nor the ~150 KiB a client-side map library
+ *   would add;
+ * - on everything else, the original ceiling is untouched and now sits 12x above
+ *   the heaviest document it covers, which is where it has always sat.
+ *
+ * `tests/map/world.test.ts` budgets the paths alone at 200 KiB. This budgets the
+ * whole document, so the two are not redundant: the 41 KiB between 199.0 and 240
+ * is everything that is *not* path data, and it is what this line watches.
+ *
+ * PROVEN BY DELIBERATE FAILURE, on the build this comment quotes — a loosened
+ * guard that nobody re-proved is a guard nobody has:
+ *
+ *   -const MAP_HTML_BUDGET_BYTES = 240 * KB;
+ *   +const MAP_HTML_BUDGET_BYTES = 190 * KB;
+ *
+ *   npm run test:build -> Tests  3 failed | 46 passed (49)
+ *                         × /en, /es, /fr "keeps the document under the HTML budget"
+ *                         AssertionError: expected 203822 to be less than 194560
+ */
+const MAP_HTML_BUDGET_BYTES = 240 * KB;
+
+/**
+ * The routes whose document carries the projected world map, and therefore the
+ * only ones the larger ceiling applies to.
+ *
+ * Derived from the manifest rather than listed, so a fourth locale gets the right
+ * budget without anyone remembering this file — and so a *new* route that starts
+ * rendering the map is refused by the strict ceiling until someone says here that
+ * it should carry it.
+ */
+function htmlBudgetFor(route: string): number {
+  return /^\/[a-z]{2}$/.test(route) ? MAP_HTML_BUDGET_BYTES : HTML_BUDGET_BYTES;
+}
 // measured on develop @ 5c5bf34: 123.2 KB /fr in 7 chunks — the heaviest route, and the
 // only margin that means anything — 120.0 KB /fr/voyages, 111.2 KB /_not-found and
 // /_global-error in 5. TIW-14's `map-viewport` chunk is 3.2 KB of the /fr figure and is
@@ -234,7 +289,7 @@ describe.each(DOCUMENT_ROUTES)("the %s payload stays within budget", (route) => 
   it("keeps the document under the HTML budget", () => {
     const bytes = brotliBytes(Buffer.from(documentHtml(route), "utf8"));
 
-    expect(bytes).toBeLessThan(HTML_BUDGET_BYTES);
+    expect(bytes).toBeLessThan(htmlBudgetFor(route));
   });
 
   it("keeps the initial JavaScript under budget, legacy chunk excluded", () => {
@@ -246,6 +301,113 @@ describe.each(DOCUMENT_ROUTES)("the %s payload stays within budget", (route) => 
     expect(excludedNoModule).toBeGreaterThan(0);
     expect(counted.size).toBeGreaterThan(0);
     expect(total).toBeLessThan(INITIAL_JS_BUDGET_BYTES);
+  });
+});
+
+/**
+ * **THE SEARCH INDEX IS IN EVERY DOCUMENT, AND THIS IS WHAT SAYS WHEN IT MUST
+ * STOP BEING.**
+ *
+ * The header's search renders its rows as markup rather than serialising them as
+ * props — `src/components/search/site-search.tsx` argues why, and the short
+ * version is that the obvious design pays for the index twice. The cost of the
+ * design that was chosen is that the index lands in the HTML of every route,
+ * because the chrome is on every route.
+ *
+ * Measured on the real content, 13 trips: **11.7 KiB of markup, 36 rows**, which
+ * takes a content page from 7.7 to 10.0 KiB brotli. That is affordable against
+ * the 100 KiB ceiling above and it is **linear in the content** — sixty trips is
+ * roughly a hundred rows and 32 KiB of markup, and nothing in the design notices.
+ *
+ * So the ceiling is here rather than in a comment asking someone to keep an eye
+ * on it. The escape route is priced with it: past this size the index becomes a
+ * committed JSON file the panel fetches on first focus. That costs a request, a
+ * failure mode and a file to keep in step with the content — which is exactly
+ * why it is not the design today, and exactly what the extra weight would buy.
+ *
+ * The check reads a *document* and not the component, because what matters is the
+ * bytes a reader downloads, and a route that stopped rendering the search at all
+ * would pass a component test and fail this one.
+ */
+const SEARCH_INDEX_BUDGET_BYTES = 24 * KB;
+
+/**
+ * **WHICH BUILD THIS READS, and it is not always the one you think.**
+ *
+ * This suite reads whatever `.next` holds, and `npm run test:e2e` leaves the
+ * *empty* journal there: `playwright.config.ts` builds
+ * `tests/fixtures/content/no-trips/trips`, and it runs second. So a case here that
+ * assumed thirteen trips passed after `npm run build` and failed after the
+ * end-to-end suite — measured, and it is why the assertions below hold on either
+ * build and the content-dependent figures are in this comment rather than in an
+ * `expect`.
+ */
+describe("the search index stays small enough to live in the document", () => {
+  /**
+   * The panel's own two ids bracket the measurement — `site-search-field` opens it
+   * and `site-search-count` closes it — because the shell they used to be inside
+   * is no longer a `<details>` at all: the disclosure became `:focus-within` in the
+   * stylesheet when the field moved into the bar. A selector naming the element
+   * would have to be rewritten every time the shell changes; these two ids are the
+   * component's contract with the stylesheet and with itself.
+   */
+  it("is present, and no larger than its budget", () => {
+    /**
+     * `/fr/a-propos` rather than `/fr`: the home page's HTML is dominated by the
+     * basemap's 182 KiB of paths, so an index that doubled would still be noise
+     * there. On a content page the index is a visible fraction of the document,
+     * which is the number worth watching.
+     */
+    const html = documentHtml("/fr/a-propos");
+    const start = html.indexOf('id="site-search-field"');
+    const end = html.indexOf('id="site-search-count"', start);
+
+    // Guards the guard: a selector that stopped matching would measure 0 bytes
+    // and pass for ever.
+    expect(start, "the search is not in the document at all").toBeGreaterThan(-1);
+    expect(end, "the panel has no count, so this measured nothing").toBeGreaterThan(start);
+    expect(html.slice(start, end).match(/data-haystack=/g) ?? []).not.toHaveLength(0);
+
+    expect(end - start).toBeLessThan(SEARCH_INDEX_BUDGET_BYTES);
+  });
+
+  it("carries one row per destination, and no duplicates", () => {
+    const html = documentHtml("/fr/a-propos");
+    const ids = [...html.matchAll(/<li id="(q-[a-z]-[^"]+)"/g)].map((match) => match[1]);
+
+    // `aria`-less rows would still render; what must hold is that the ids the
+    // panel keys on are unique, since a duplicate id makes one row unreachable.
+    expect(new Set(ids).size).toBe(ids.length);
+    /*
+      Four is the empty journal: the site's own pages, which exist whatever the
+      content. On the repository's thirteen trips it is thirty-six — the figure
+      the budget above was sized on, and one this suite cannot assert because the
+      end-to-end run leaves the other build behind.
+    */
+    expect(ids.length).toBeGreaterThanOrEqual(4);
+  });
+
+  /**
+   * **The vignettes are defined once per country and referenced per trip**, which
+   * is what keeps nine French trips from carrying nine copies of France. Asserted
+   * on the built document because it is the only place the deduplication is
+   * observable: the layout does it, and a component test would be asserting its
+   * own fixture.
+   *
+   * Skipped rather than failed on the empty journal, where there is no country to
+   * draw and no `<use>` to count — see the note on this block.
+   */
+  it("defines each country's outline once, however many trips reach it", () => {
+    const html = documentHtml("/fr/a-propos");
+    const symbols = [...html.matchAll(/<symbol id="tiw-tile-([a-z]{2})"/g)].map(
+      (match) => match[1]
+    );
+    const uses = [...html.matchAll(/href="#tiw-tile-([a-z]{2})"/g)].map((match) => match[1]);
+
+    expect(new Set(symbols).size, "a country's outline is defined twice").toBe(symbols.length);
+    for (const code of new Set(uses)) {
+      expect(symbols, `no outline defined for ${String(code)}`).toContain(code);
+    }
   });
 });
 

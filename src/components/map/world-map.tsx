@@ -1,9 +1,11 @@
-import { Fragment, type CSSProperties, type ReactElement, type ReactNode } from "react";
+import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { frameAround, type WorldBox } from "./frame";
-import { MapViewport, type MapViewportZone } from "./map-viewport";
+import { MapViewport, type MapViewportPanel } from "./map-viewport";
+import { PANEL_SWITCH_ATTRIBUTE, ZOOM_VALUE_TOKEN } from "./viewport";
 import { placeMarks, spreadCoincident, type TripMark } from "./marks";
-import { worldPointOf, zonesOf } from "./zones";
+import { overlappingMarks, worldPointOf } from "./zones";
+import { MARK_PIN_PATH, MARK_VIEWBOX } from "./mark-art";
 import styles from "./world-map.module.css";
 
 /**
@@ -22,11 +24,14 @@ import styles from "./world-map.module.css";
  * header and in the ticket's report.
  *
  * **What a reader without JavaScript still gets, unchanged:** this whole
- * component. The `<svg>` is rendered with the frame `frameAround` chose, every
- * marker is a real `<a href>` to its trip, and `VisitedCountries` lists the
- * destinations beside it. The criterion "the map stays shown in a frozen version
- * and the list of destinations stays usable" was already met before this ticket;
- * nothing here is a fallback built for the occasion.
+ * component. The `<svg>` is rendered with the frame `frameAround` chose, and
+ * every marker is a real `<a href>` to its trip, named in words. The criterion
+ * "the map stays shown in a frozen version and the list of destinations stays
+ * usable" was already met before this ticket; nothing here is a fallback built
+ * for the occasion. The counted list of countries that used to sit beside this
+ * figure was removed from the map tab on 7 September 2026 — see
+ * `src/app/[locale]/page.tsx` — and the marker list is what carries the
+ * destinations now.
  *
  * Translations come from `useTranslations`, not `getTranslations`: the former
  * works in a *synchronous* Server Component, which is what keeps the whole
@@ -65,26 +70,38 @@ export type MapCountry = {
   /**
    * Localised name, already resolved upstream by `Intl.DisplayNames`.
    *
-   * **This component no longer reads it**, and the field stays because the type
-   * is the narrowing of `@/map`'s `CountryShape` that the joining page checks
-   * against — and because `VisitedCountries`, the textual equivalent beside this
-   * drawing, reads exactly this field.
+   * **This component no longer reads it**, and the field stays for one reason
+   * that outlived the two it used to have: the type is the narrowing of `@/map`'s
+   * `CountryShape` that the joining page checks against, so a rename in the
+   * geometry façade fails `npm run typecheck` in `src/app/[locale]/page.tsx` and
+   * nowhere else. Drop the field and that check goes with it.
    *
    * Until TIW-15 the name was rendered here, as a visually hidden enumeration
    * inside the `<figcaption>`: without it, which countries hold a trip was
    * carried by the tint alone — a distinction measured at 1.14:1 — so a screen
-   * reader learnt "7 pays" and never which seven (WCAG 1.1.1). That enumeration
-   * is gone because `VisitedCountries` supersedes it on every count: the names
-   * are visible rather than hidden, each carries the number of trips that reach
-   * it, and each is a link into the listing that holds them. It rendered under
-   * exactly the same condition (`visited.length > 0`), so no state loses a
-   * channel. Removing it also stops piling forty country names into the
-   * `<figure>`'s accessible *name*, which is a label and not a description.
+   * reader learnt "7 pays" and never which seven (WCAG 1.1.1). TIW-15 replaced
+   * that enumeration with a visible counted list beside the figure, and the owner
+   * removed that list from the map tab on 7 September 2026. What names the
+   * destinations today is the marker list below — one link per trip, `{title},
+   * {place}` — which is a list of *journeys* and not of countries. The
+   * `src/app/[locale]/page.tsx` note says what that costs and when.
    *
    * The drawing itself has never read this field; a `<path>` inside an
    * `aria-hidden` SVG has nothing to say.
    */
   readonly name: string;
+};
+
+/**
+ * A wished country, and the point its note hangs on.
+ *
+ * The name is read *here*, unlike `MapCountry.name` right above — a wished
+ * country has no trip and no marker, so this string is the only thing on the map
+ * that says which country the fourth tint covers.
+ */
+export type MapWish = MapCountry & {
+  /** A point inside the shape, in projected world units. `@/map`'s `anchor`. */
+  readonly anchor: { readonly x: number; readonly y: number };
 };
 
 export type WorldMapProps = {
@@ -113,27 +130,43 @@ export type WorldMapProps = {
    * — and the ordinary case must emit no empty `<g>`.
    */
   readonly untold?: readonly MapCountry[];
+  /**
+   * The countries the carnet **wants** to reach — the fourth tint, « à venir »
+   * (TIW-39, at the owner's request: Croatia, Italy, Portugal, Montenegro).
+   *
+   * Richer than a `MapCountry` by one field, and the extra field is the whole
+   * reason this bucket is not just a fourth list of shapes: a wished country has
+   * no trip, so **nothing else on the map says where it is**. `anchor` is a point
+   * inside the shape — `src/map/anchor.ts` computes it, and its header says why it
+   * is not the centroid: the centroid of Croatia is in Bosnia. The note that names
+   * the country hangs there.
+   *
+   * Optional, and empty is the ordinary state: a carnet with no wish list must
+   * emit no layer and no notes.
+   */
+  readonly wished?: readonly MapWish[];
   /** One marker per published trip, already projected and already sorted upstream. */
   readonly marks: readonly TripMark[];
   /** The projected world box — `{ width: 960, height: 500 }` in production. */
   readonly world: WorldBox;
   /**
-   * The body of a trip's row in the selection panel, keyed by slug and **rendered
-   * by the page** — a `TripCard` with its cover, its dates and its duration.
+   * The body of one trip's panel, keyed by slug and **rendered by the page** — a
+   * `TripPanel` with the trip's description and its photos.
    *
    * A `ReactNode` and not trip data, which is the decision that keeps this layer
-   * where `docs/adr/0003-carte-svg-inerte-et-balises-html.md` put it. A card needs
-   * `Intl` date formatting, the `trips` message namespace and a locale-prefixed
-   * href; receiving it already rendered means `src/components/map/**` still
-   * imports neither façade, still renders under jsdom from a seven-shape fixture,
-   * and still has no second definition of what a trip looks like. It also means
-   * the cards travel in the flight payload as markup rather than as code: the
-   * client component displays one, and never builds one.
+   * where `docs/adr/0003-carte-svg-inerte-et-balises-html.md` put it. A panel body
+   * needs `Intl` date formatting, the `trips` message namespace, the photo
+   * components and a locale-prefixed href; receiving it already rendered means
+   * `src/components/map/**` still imports neither façade, still renders under
+   * jsdom from a seven-shape fixture, and still has no second definition of what a
+   * trip looks like. It also means the bodies travel in the flight payload as
+   * markup rather than as code: the client component displays one, and never
+   * builds one.
    *
    * Optional, because a map with no panel is a valid map — the component test
    * renders it that way, and a marker then keeps its plain navigation.
    */
-  readonly tripCards?: ReadonlyMap<string, ReactNode>;
+  readonly tripPanels?: ReadonlyMap<string, ReactNode>;
 };
 
 /**
@@ -149,12 +182,21 @@ export type WorldMapProps = {
  * particular frame; the reader now chooses the frame, so a marker's position has
  * to be expressed in the space the frame is cut out of, and the stylesheet
  * re-derives the percentage from the four `--frame-*` values the client component
- * writes. `worldPointOf` is the conversion, and it is applied *after* the
- * coincidence spread — so the nudge that separates two trips leaving the same
- * city becomes a fixed distance on the map and grows as the reader zooms in,
- * which is the real fix the ADR assigned to this ticket.
+ * writes. `worldPointOf` is the conversion.
+ *
+ * **`--mark-nudge-x` / `--mark-nudge-y` are rem, and they are the other half of
+ * that decision.** The coincidence spread used to be folded into the position
+ * before this conversion, which turned it into a distance on the Earth: Annecy
+ * and Genève ended up drawn 150 km either side of the lake they sit on. The
+ * offset now travels separately and the stylesheet adds it to the marker's
+ * `translate`, so it is a constant number of pixels at every zoom and the anchor
+ * stays on the town. Written only for the handful of markers that share a spot;
+ * `.mark` falls back to `0rem` for everyone else, which keeps the attribute — and
+ * the document's weight — off sixty markers to serve two.
  */
-type MarkStyle = CSSProperties & Record<"--mark-x" | "--mark-y" | "--mark-order", string>;
+type MarkStyle = CSSProperties &
+  Record<"--mark-x" | "--mark-y" | "--mark-order", string> &
+  Partial<Record<"--mark-nudge-x" | "--mark-nudge-y", string>>;
 
 /** Same reasoning, for the ratio the figure's height cap is derived from. */
 type FigureStyle = CSSProperties & Record<"--world-aspect", string>;
@@ -175,9 +217,10 @@ export function WorldMap({
   countries,
   visited,
   untold = [],
+  wished = [],
   marks,
   world,
-  tripCards,
+  tripPanels,
 }: WorldMapProps): ReactElement {
   const t = useTranslations("map");
 
@@ -197,15 +240,12 @@ export function WorldMap({
   const placed = spreadCoincident(placeMarks(marks, frame), frame);
 
   /**
-   * Which markers a reader would take for one place, and therefore which trips
-   * one activation has to offer. Computed here, at build time, on the frame the
-   * server rendered — `zonesOf` records why it is not re-clustered as the reader
-   * zooms, and what that buys.
+   * Which markers each marker overlaps, and therefore which other trips a panel
+   * has to offer a way to. Computed here, at build time, on the frame the server
+   * rendered — `overlappingMarks` records why it is not recomputed as the reader
+   * zooms, and why the answer is pairwise rather than a grouping.
    */
-  const zones = zonesOf(placed, frame);
-  const zoneOfTrip = new Map(
-    zones.flatMap((zone) => zone.marks.map((entry) => [entry.mark.slug, zone.id] as const))
-  );
+  const overlaps = overlappingMarks(placed, frame);
 
   /**
    * The figure's height cap, which used to live in `src/app/[locale]/page.tsx`'s
@@ -262,6 +302,52 @@ export function WorldMap({
    * their world coordinates, in the flight payload rather than in the bundle;
    * the interaction is one delegated listener on the canvas above them.
    */
+  /**
+   * **The wished countries' notes, and the decision they embody.**
+   *
+   * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` holds the map's SVG
+   * `aria-hidden` and free of pointer events: nothing that is not a trip can be
+   * hovered, focused or clicked, and everything interactive is HTML laid over the
+   * drawing. A note on a country is the first thing since that decision to want a
+   * hover, and it does **not** break it — the note is HTML, over the drawing, on
+   * the anchor `@/map` computed, exactly like a marker.
+   *
+   * **The label is in the document whether or not anyone hovers.** It is visually
+   * hidden at rest and revealed on `:hover` — the reveal is a painting, not a
+   * rendering — so a screen reader reads all four notes in this list, in the
+   * localised order the geometry façade sorted them into, and a reader with no
+   * pointer at all loses nothing. That is what lets there be no `tabindex` here:
+   * a focus stop that reveals text a screen reader already has would be a stop
+   * that exists for nobody.
+   *
+   * **WCAG 1.4.13, stated rather than assumed.** *Hoverable*: the label is inside
+   * the box that is hovered, so moving onto it keeps it up. *Persistent*: nothing
+   * dismisses it but leaving. *Dismissible*: exempt, because the label is placed
+   * clear of the drawing's own content and obscures none of it — which is a
+   * property of the stylesheet and is asserted, not asserted-by-comment, in
+   * `tests/e2e/wished.populated.spec.ts`.
+   */
+  const notes =
+    wished.length > 0 ? (
+      <ul className={styles.notes} aria-label={t("wishedListLabel")} role="list">
+        {wished.map((country) => {
+          const style: MarkStyle = {
+            "--mark-x": String(country.anchor.x),
+            "--mark-y": String(country.anchor.y),
+            "--mark-order": "0",
+          };
+
+          return (
+            <li key={country.code ?? country.name} className={styles.note} style={style}>
+              {/* The dot is what a pointer aims at; the label is what it reveals. */}
+              <span className={styles.noteDot} aria-hidden="true" />
+              <span className={styles.noteLabel}>{t("wishedNote", { country: country.name })}</span>
+            </li>
+          );
+        })}
+      </ul>
+    ) : null;
+
   const overlay =
     placed.length > 0 ? (
       <ul
@@ -296,6 +382,12 @@ export function WorldMap({
             "--mark-x": String(point.x),
             "--mark-y": String(point.y),
             "--mark-order": String(placed.length - index),
+            ...(entry.nudge === undefined
+              ? {}
+              : {
+                  "--mark-nudge-x": `${entry.nudge.x}rem`,
+                  "--mark-nudge-y": `${entry.nudge.y}rem`,
+                }),
           };
 
           return (
@@ -328,19 +420,21 @@ export function WorldMap({
                 instead — whose own card carries this very href. A modified click
                 is never intercepted, so "open in a new tab" still works.
 
-                `data-trip` and `data-zone` are the whole interface between this
-                server-rendered list and the client component: one delegated
-                listener reads them from `event.target.closest("a[data-trip]")`,
-                so no marker needs a React node, a handler or a byte of bundle.
-                `aria-haspopup` is added on mount and never rendered here — a
-                reader without the script must not be told about a dialog that
-                cannot open.
+                `data-trip` is the whole interface between this server-rendered
+                list and the client component — one attribute, since TIW-40 —
+                and one delegated listener reads it from
+                `event.target.closest("a[data-trip]")`, so no marker needs a React
+                node, a handler or a byte of bundle. The `data-zone` that used to
+                sit beside it is gone with the zones: a panel is keyed on the
+                trip's own slug, so the marker already carries everything the
+                client needs to name one. `aria-haspopup` is added on mount and
+                never rendered here — a reader without the script must not be told
+                about a dialog that cannot open.
               */}
               <a
                 className={styles.link}
                 href={mark.href}
                 data-trip={mark.slug}
-                data-zone={zoneOfTrip.get(mark.slug)}
                 /*
                   TIW-19's badge on the map. An attribute and not a second class
                   name, so the halo below is one CSS rule keyed on it and the
@@ -363,7 +457,31 @@ export function WorldMap({
                 */
                 data-story={mark.story === "unwritten" ? "unwritten" : undefined}
               >
-                <span className={styles.dot} aria-hidden="true" />
+                {/*
+                  The pennant. `aria-hidden`, like the dot it replaces: the link
+                  around it already carries the trip's name, the country and, for
+                  an unwritten trip, « récit à venir ». An announced decoration is
+                  noise.
+
+                  Inline and not a `<span>` shaped by CSS, which is what this was:
+                  the mast and the flag are one closed contour, and the ring that
+                  separates the marker from whichever tint it lands on is that
+                  contour stroked before it is filled (`paint-order` in the
+                  stylesheet). Two pseudo-elements cannot share one outline, so the
+                  seam between mast and flag would have shown as a line across the
+                  mark. Thirteen of these cost about 2.6 KB of markup.
+
+                  `focusable="false"` is not redundant with `aria-hidden` — old
+                  Trident and Edge put SVG elements in the tab order regardless.
+                */}
+                <svg
+                  className={styles.dot}
+                  viewBox={MARK_VIEWBOX}
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d={MARK_PIN_PATH} />
+                </svg>
                 {/*
                   The halo, and **only** the halo: it is decoration on top of a
                   distinction the accessible name below already carries in words.
@@ -429,32 +547,97 @@ export function WorldMap({
     ) : null;
 
   /**
-   * One panel per zone, its cards already rendered by the page. A zone with no
-   * card at all — the state a caller that passes no `tripCards` produces — is
-   * dropped, so the client component finds no zone for that marker and leaves its
-   * link alone rather than swallowing the activation.
+   * **One panel per trip**, its body already rendered by the page, its heading the
+   * trip's own title. A trip with no body — the state a caller that passes no
+   * `tripPanels` produces, and the state of a slug the page chose not to describe
+   * — is dropped, so the client component finds no panel for that marker and
+   * leaves its link alone rather than swallowing the activation.
+   *
+   * The « Aussi à cet endroit » block is appended here, on the server, and not in
+   * the client component. It needs `mark.title`, `mark.placeName`, `mark.href` and
+   * a message key, all of which this component already holds: rendering it here
+   * crosses no façade, adds nothing to the client bundle, and keeps the panel's
+   * whole content server-rendered markup — which is what
+   * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` asks of this layer.
    */
-  const panelZones: readonly MapViewportZone[] =
-    tripCards === undefined
+  const panels: readonly MapViewportPanel[] =
+    tripPanels === undefined
       ? []
-      : zones.flatMap((zone) => {
-          const cards = zone.marks.flatMap((entry) => {
-            const card = tripCards.get(entry.mark.slug);
+      : placed.flatMap((entry) => {
+          const body = tripPanels.get(entry.mark.slug);
 
-            return card === undefined ? [] : [<Fragment key={entry.mark.slug}>{card}</Fragment>];
-          });
+          if (body === undefined) {
+            return [];
+          }
 
-          return cards.length === 0
-            ? []
-            : [
-                {
-                  id: zone.id,
-                  // Resolved here, on the server, ICU plural included: the client
-                  // component takes no translator — see `MapViewportLabels`.
-                  heading: t("panelHeading", { count: cards.length }),
-                  body: cards,
-                },
-              ];
+          /**
+           * Absent from the map means "no neighbour" — `overlappingMarks` never
+           * stores an empty list — so `?? []` is the only check needed and the
+           * block below cannot be rendered as a heading over nothing.
+           */
+          const nearby = overlaps.get(entry.mark.slug) ?? [];
+
+          return [
+            {
+              trip: entry.mark.slug,
+              /**
+               * The trip's own title, and that is the ticket. It used to be
+               * `t("panelHeading", { count })` — « Les 6 voyages à cet endroit » —
+               * which named a grouping rather than the thing the reader clicked.
+               * The key no longer exists in any of the three catalogues, and
+               * `tests/i18n/message-arguments.test.ts` is what would notice a call
+               * to it surviving.
+               */
+              heading: entry.mark.title,
+              body: (
+                <>
+                  {body}
+                  {nearby.length > 0 ? (
+                    <section className={styles.nearby}>
+                      <h3 className={styles.nearbyHeading}>{t("panelNearbyHeading")}</h3>
+                      {/*
+                        `role="list"` because the stylesheet removes the bullets,
+                        and Safari removes the list semantics along with them —
+                        the count is the whole reason this block exists, so losing
+                        it would be losing the block.
+                      */}
+                      <ul className={styles.nearbyList} role="list">
+                        {nearby.map((neighbour) => (
+                          <li key={neighbour.mark.slug}>
+                            {/*
+                              A real `<a href>`, so it works with no script at all
+                              — it then simply navigates to the trip. With the
+                              interaction layer running, `PANEL_SWITCH_ATTRIBUTE`
+                              is what tells the panel's delegated handler to swap
+                              the panel instead, and `data-trip` is the slug it
+                              swaps to. A modified click is never intercepted.
+
+                              **The title alone, and NOT `map.markLabel`.** That
+                              key is `{title}, {place}` and it is right on the
+                              drawing, where a marker is a dot that has to say
+                              where it stands. Here the heading above has just
+                              said it, and on this journal most titles *are* the
+                              place — measured in the served document, the two
+                              neighbours of Annecy and Paris read « Genève,
+                              Genève » and « Rouen, Rouen ». One name, once.
+                            */}
+                            <a
+                              className={styles.nearbyLink}
+                              href={neighbour.mark.href}
+                              data-trip={neighbour.mark.slug}
+                              {...{ [PANEL_SWITCH_ATTRIBUTE]: "" }}
+                            >
+                              {neighbour.mark.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+                </>
+              ),
+            },
+          ];
         });
 
   return (
@@ -463,28 +646,48 @@ export function WorldMap({
         /*
           The client boundary, and the only one this map has. Everything below is
           rendered here, on the server, and travels as nodes: `children` is the
-          drawing, `overlay` is the marker list, and each zone's `body` is a stack
-          of trip cards. `MapViewport` adds the `<svg>` tag whose `viewBox` it
-          owns, four custom properties, three buttons and a panel shell — see its
-          header for why that is the whole of the client's job.
+          drawing, `overlay` is the marker list, and each panel's `body` is one
+          trip's description followed by the markers it overlaps. `MapViewport`
+          adds the `<svg>` tag whose `viewBox` it owns, four custom properties, a
+          zoom slider and a panel shell — see its header for why that is the whole
+          of the client's job.
         */
         <MapViewport
           initialFrame={frame}
           world={world}
-          overlay={overlay}
-          zones={panelZones}
+          overlay={
+            /*
+              Two lists in one overlay: the trips' markers and the wish list's
+              notes. `MapViewport` takes a node, so the pair costs nothing — and
+              keeping them apart is what lets each carry its own accessible name
+              instead of one list mixing thirteen links with four labels.
+            */
+            <>
+              {overlay}
+              {notes}
+            </>
+          }
+          panels={panels}
           labels={{
-            zoomIn: t("zoomIn"),
-            zoomOut: t("zoomOut"),
-            zoomReset: t("zoomReset"),
-            wheelHint: t("wheelHint"),
             panelClose: t("panelClose"),
+            zoomLabel: t("zoomLabel"),
+            /*
+              Resolved with the ICU argument's own name as its value, so what
+              crosses the boundary is the translated sentence with a hole in it —
+              `ZOOM_VALUE_TOKEN` says why the number cannot be filled
+              in here, and why the constant lives in `viewport.ts` rather than
+              beside the component that consumes it. The value changes on every notch; the
+              wording, the word order and the space before the `%` do not, and
+              those are the parts a translator owns.
+            */
+            zoomValue: t("zoomValue", { percent: ZOOM_VALUE_TOKEN }),
           }}
         >
           {/*
-            Inert by construction rather than by a list of CSS rules. 177 country
-            shapes have nothing to say to a screen reader — the names live in
-            `VisitedCountries`, next to this figure — and hiding the whole SVG is
+            Inert by construction rather than by a list of CSS rules. 240 country
+            shapes have nothing to say to a screen reader — what a reader needs is
+            the marker list below, not a roll-call of the world — and hiding the
+            whole SVG is
             what makes the acceptance criterion "the other countries are neutral,
             not focusable and have no hover state" true without relying on anyone
             remembering to leave out a `tabindex` or a `:hover`.
@@ -531,6 +734,30 @@ export function WorldMap({
               ))}
             </g>
           ) : null}
+          {/*
+            **The fourth tint (TIW-39): countries the carnet wants to reach.**
+
+            Painted *before* the two visited layers would have been wrong and
+            painting it last is deliberate for the opposite reason to theirs: it
+            must not overpaint them. It cannot — `buildWorldGeometry` throws if a
+            country is both wished and visited, so the three lists are disjoint by
+            construction and the paint order only decides whose border wins against
+            a neighbour.
+
+            **The hatch, and why it is not a fourth colour alone.** A wished
+            country is the only state on this map that is not a fact about the
+            past, and colour alone would make it a fifth shade of the same
+            statement. It carries a hatch — a pattern, so the difference survives
+            greyscale, both themes and a reader who sees no colour at all. Same
+            rule as the untold marker's hollow pennant, and the same reason.
+          */}
+          {wished.length > 0 ? (
+            <g className={styles.wished}>
+              {wished.map((country, index) => (
+                <path key={shapeKey(country, index)} d={country.path} />
+              ))}
+            </g>
+          ) : null}
         </MapViewport>
       ) : (
         /*
@@ -554,19 +781,53 @@ export function WorldMap({
 
         A `<figcaption>` is also the `<figure>`'s accessible *name* (HTML-AAM),
         which is why the enumeration of visited countries that used to hang here
-        as hidden text is gone. `VisitedCountries` carries the names now —
-        visible, counted and linked — and a label made of forty country names was
-        never a label.
+        as hidden text is gone: a label made of forty country names was never a
+        label. The caption counts; the markers name.
       */}
       <figcaption className={styles.caption}>
         {/*
           `visited.length + untold.length`, and the sum is the honest count: the
           caption answers *where has he been*, and a country visited without being
-          written about has still been visited. Counting only `visited` would make
-          the caption disagree with `VisitedCountries` beside it, which tallies
-          trips per country over the whole collection — and would quietly shrink
-          the number the day a récit went unwritten.
+          written about has still been visited. Counting only `visited` would
+          quietly shrink the number the day a récit went unwritten, and disagree
+          with the Pays tab, which groups every published trip whether its récit
+          is written or not.
         */}
+        {/*
+          **The wish list, named in visible text and not only on hover.**
+
+          Without this line a sighted reader with no pointer — a keyboard, a touch
+          screen that has no hover state — sees four hatched countries carrying a
+          dot and no name at all. The notes over the map are read by a screen
+          reader whatever happens, so the gap was exactly and only that reader; the
+          caption closes it, and it demotes the hover to what it should be, a
+          convenience.
+
+          Joined with the locale's own list separator would be better and is not
+          available to a server component without pulling `Intl.ListFormat` into a
+          layer that has no locale — the names arrive already sorted and already
+          localised, and the comma is the caption's, not the language's.
+        */}
+        {wished.length > 0 ? (
+          /*
+            **`aria-hidden`, and the reason is three paragraphs up.** A
+            `<figcaption>` is the figure's accessible *name* (HTML-AAM). This
+            sentence in the name turns "Carte du monde : 5 voyages, 5 pays" into
+            "À venir : Croatie, Viêt Nam. Carte du monde…" — measured, three
+            end-to-end cases went red at once — which is the very defect that
+            comment records about the list of visited countries that used to hang
+            here.
+
+            Hiding it costs nothing, and that is what makes it the right answer
+            rather than a convenient one: every word of it is already in the
+            accessibility tree, once per country, in the notes over the map. This
+            copy exists for the one reader the notes do not serve — sighted, with
+            no hover — and that reader does not read the accessible name.
+          */
+          <span className={styles.captionWished} aria-hidden="true">
+            {t("wishedCaption", { countries: wished.map((country) => country.name).join(", ") })}
+          </span>
+        ) : null}
         {showsWholeWorld
           ? t("summary", { trips: marks.length, countries: visited.length + untold.length })
           : t("summaryCropped", { trips: marks.length, countries: visited.length + untold.length })}

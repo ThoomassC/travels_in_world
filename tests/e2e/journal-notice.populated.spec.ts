@@ -60,9 +60,11 @@ test.describe("a journal that holds récits", () => {
    *
    * `/fr/voyages` and not `/fr`, which is a correction worth recording rather than
    * quietly fixing: the first version of this case asserted "Récit à venir" on the
-   * home page and went red. `LatestTrips` renders `LATEST_TRIP_COUNT = 3` cards
-   * ordered by `startDate`, and the fixture's untold trip (`maroc-2023`) is the
-   * fourth journey — so the home page never shows that mention at all. The full
+   * home page and went red. `LatestTrips` renders `LATEST_TRIP_COUNT` cards
+   * ordered by `startDate` — three then, one since 7 September 2026 — and the
+   * fixture's untold trip (`maroc-2023`) is the fourth journey, so the home page
+   * never shows that mention at all. Cutting the block from three to one only
+   * made that truer. The full
    * listing renders every trip, which is the page where "the journal holds an untold
    * trip *and* holds récits" can be read off the document.
    *

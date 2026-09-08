@@ -78,9 +78,16 @@ describe("markers that are close without being identical", () => {
 
     const spread = spreadCoincident(placed, CROPPED_FRAME);
 
-    expect(Math.abs(Number(spread[0]?.topPercent) - Number(spread[1]?.topPercent))).toBeGreaterThan(
-      2
-    );
+    /*
+      Asserted on the nudge and not on the positions, since the correction of
+      2026-09 (`../../../src/components/map/marks.ts`): the spread is a screen
+      offset the stylesheet applies, and moving the position was what drew Annecy
+      150 km from Annecy. What this case has always been about is unchanged —
+      these two are recognised as overlapping at all.
+    */
+    expect(spread[0]?.nudge).toBeDefined();
+    expect(spread[1]?.nudge).toBeDefined();
+    expect(spread[0]?.nudge).not.toEqual(spread[1]?.nudge);
   });
 
   /**
@@ -102,6 +109,8 @@ describe("markers that are close without being identical", () => {
 
     const spread = spreadCoincident(placed, CROPPED_FRAME);
 
-    expect(spread[0]?.topPercent).not.toBe(spread[1]?.topPercent);
+    // Grouped, therefore nudged apart — the positions themselves stay where the
+    // projection put them.
+    expect(spread[0]?.nudge).not.toEqual(spread[1]?.nudge);
   });
 });

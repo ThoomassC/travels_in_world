@@ -1,0 +1,62 @@
+/* =============================================================================
+   "Pays" — the index of the countries this carnet has been to.
+
+   No colour is declared here: every value comes from `src/styles/tokens.css`,
+   which imports the shared palette. The rows themselves are dressed by
+   `src/components/countries/country-list.module.css`, next to the component, so
+   the same list can be dropped under the map without carrying a page's
+   stylesheet with it.
+
+   The header rules mirror `../villes/page.module.css` and `../voyages/page.module.css`
+   deliberately: the three are sibling index pages, and a reader moving between
+   them should meet the same heading, the same measure and the same empty box.
+   ============================================================================ */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-block-end: var(--space-5);
+}
+
+.title {
+  font-size: var(--text-display-sm);
+}
+
+.intro {
+  color: var(--text-muted);
+  /* A measure, not a width — the same reason as the catalogue's intro. */
+  max-width: 60ch;
+}
+
+/**
+ * Nothing published yet. Not a "0 pays" counter above an empty grid: a heading
+ * with nothing under it reads as a broken page.
+ *
+ * Identical to the two other indexes' empty box, on purpose — the three fail the
+ * same way and a reader who has seen one should recognise the others.
+ */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+}
+
+.emptyBody {
+  color: var(--text-muted);
+  max-width: 55ch;
+}
+
+.emptyLink {
+  /* 44 px of target (WCAG 2.2, 2.5.8) in `rem`, so it grows with a reader's
+     larger default size. This is the page's only way out when it is empty. */
+  min-block-size: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  font-weight: var(--weight-medium);
+}

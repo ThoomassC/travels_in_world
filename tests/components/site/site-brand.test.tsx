@@ -17,7 +17,7 @@ import { defaultLocale } from "@/i18n/routing";
  * component's whole accessible name is made of two of those keys.
  *
  * What no assertion below is about: pixels. jsdom computes no layout, so the
- * clearance between the trajectory and the comet, the 32 px mark and the 44 px
+ * clearance between the trajectory and the aeroplane, the 32 px mark and the 44 px
  * target are checked by rendering in a real browser and by reading
  * `./brand-art.test.ts`, never here. Saying so is the point — a test that looked
  * like it covered the drawing would be worse than no test.
@@ -86,9 +86,40 @@ describe("the logo is the link home", () => {
      * Queried through the accessible name so this cannot pass on some other span:
      * the element carrying `lang` must be the one carrying the name.
      */
-    const word = screen.getByText("Travels in World");
+    /**
+     * The lock-up sets the name on two lines since 7 September 2026, so the
+     * element carrying `lang` is the pair and not a single text node —
+     * `getByText` with a string matcher would look for one node holding the whole
+     * name and find nothing. The matcher below asks for the element whose *own*
+     * text is the name, which is exactly the element the attribute must be on:
+     * putting `lang` on either half would leave the other read in French.
+     */
+    const word = screen.getByText(
+      (_content, element) =>
+        element?.textContent?.replace(/\s+/g, " ").trim() === "Travels in World" &&
+        element.tagName === "SPAN" &&
+        element.children.length === 2
+    );
 
     expect(word).toHaveAttribute("lang", "en");
+  });
+
+  /**
+   * **The two lines concatenate to one name, with a space.**
+   *
+   * The accessible name of the link is the concatenation of its descendants'
+   * text, and two adjacent inline boxes can join to "Travelsin World" — measured.
+   * The component renders an explicit space between them; this is what notices if
+   * someone tidies it away, and `tests/e2e/brand.spec.ts` checks the same thing in
+   * a real browser, which is the only place the algorithm actually runs.
+   */
+  it("joins the two lines of the wordmark with a space", () => {
+    renderBrand(<SiteBrand locale={defaultLocale} />);
+
+    const name = screen.getByRole("link").textContent ?? "";
+
+    expect(name).toContain("Travels in World");
+    expect(name).not.toContain("Travelsin");
   });
 
   it("hides the drawing from assistive technology", () => {
@@ -125,7 +156,7 @@ describe("the logo is the link home", () => {
 
 describe("the header carries both the brand and the nav", () => {
   it("puts the lock-up outside the navigation landmark", () => {
-    renderBrand(<SiteNav locale={defaultLocale} />);
+    renderBrand(<SiteNav locale={defaultLocale} searchEntries={[]} searchCountries={[]} />);
 
     /**
      * A logo that is also the way home is not a navigation *entry*. Inside the
@@ -137,34 +168,83 @@ describe("the header carries both the brand and the nav", () => {
      * This is the assertion that goes red if someone "tidies up" by moving the
      * lock-up into the list, which renders identically to the eye.
      *
-     * Three since TIW-25 added "À propos" — and the count is spelled out rather
+     * Three since TIW-25 added "À propos", **four since TIW-38 split the trips
+     * entry into « Pays » and « Villes »** — and the count is spelled out rather
      * than loosened to `toBeGreaterThan`, because "one item too many" is exactly
-     * the failure being guarded.
+     * the failure being guarded. Raising it is therefore a deliberate edit each
+     * time a destination is added, which is the whole design of this assertion:
+     * the number moved because a `<li>` was added on purpose, and the lock-up is
+     * still outside the list, which is the property under test.
      */
     const nav = screen.getByRole("navigation");
 
-    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
     expect(nav).not.toContainElement(
       screen.getByRole("link", { name: /^Travels in World\s*, retour/ })
     );
   });
 
   it("offers exactly one way home per role it plays", () => {
-    renderBrand(<SiteNav locale={defaultLocale} />);
+    renderBrand(<SiteNav locale={defaultLocale} searchEntries={[]} searchCountries={[]} />);
 
-    // Two links to `/fr` — the logo and "Carte" — and that is deliberate rather
-    // than a duplicate: they have different accessible names and answer different
-    // questions ("take me home" / "show me the map"). Pinned so that removing
-    // either becomes a decision instead of an accident.
+    /**
+     * Three links to `/fr` — the logo, "Carte", and "Français" in the language
+     * menu — and that is deliberate rather than a duplicate: each has a different
+     * accessible name and answers a different question ("take me home" / "show me
+     * the map" / "read this site in French"). Pinned so that removing any of them
+     * becomes a decision instead of an accident.
+     *
+     * It was two until TIW-38 gave the header a real language menu. The third is
+     * the one that is arguably a duplicate and is not: `localePathname` can only
+     * build the locale's HOME page, because this component is rendered by the
+     * layout and does not know the current path — `SiteNav`'s comment on the menu
+     * states that limitation rather than hiding it, and this count is where it
+     * shows.
+     */
     const home = screen
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href") === `/${defaultLocale}`);
 
-    expect(home).toHaveLength(2);
+    expect(home).toHaveLength(3);
+  });
+
+  it("sends each grain of the collection to the page that bears its name", () => {
+    renderBrand(<SiteNav locale={defaultLocale} searchEntries={[]} searchCountries={[]} />);
+
+    /**
+     * TIW-38 replaced « Tous les voyages » with two entries, and « Pays » then
+     * pointed at `/voyages` — the catalogue grouped by country. This case pinned
+     * that, with the argument that the label had changed and the address had
+     * not.
+     *
+     * **The country pages ended it.** `/pays` is a page now: an index of the
+     * countries the journal has reached, each row opening that country's own
+     * page. A tab reading « Pays » that led anywhere else would be the third
+     * name for one thing the whole change set out to remove.
+     *
+     * What the pair still pins is the property worth pinning: each label leads to
+     * the page that bears its name, so a regression that reconnects the tab to
+     * the catalogue shows up as a changed href under an unchanged label.
+     *
+     * `/voyages` keeps its own address and every link into it — the home
+     * listing's « voir tous les voyages », every city row, every country page —
+     * it simply has no tab of its own, which is what four destinations on a
+     * 360 px phone allows.
+     */
+    const nav = screen.getByRole("navigation");
+
+    expect(nav.querySelector(`a[href="/${defaultLocale}/pays"]`)).toHaveTextContent(
+      frMessages.trips.navCountries
+    );
+    expect(nav.querySelector(`a[href="/${defaultLocale}/villes"]`)).toHaveTextContent(
+      frMessages.trips.navPlaces
+    );
+    // And the tab really left the catalogue behind, rather than both existing.
+    expect(nav.querySelector(`a[href="/${defaultLocale}/voyages"]`)).toBeNull();
   });
 
   it("carries the colophon on every page, because the layout renders this nav", () => {
-    renderBrand(<SiteNav locale={defaultLocale} />);
+    renderBrand(<SiteNav locale={defaultLocale} searchEntries={[]} searchCountries={[]} />);
 
     /**
      * TIW-25's "accessible depuis la navigation principale, sur toutes les pages".

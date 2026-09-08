@@ -15,14 +15,22 @@ test("the bare root redirects to the default locale", async ({ page }) => {
  * The home page's first screen, asserted against the state production is really
  * in: `content/trips` is empty, so this is what a reader sees today.
  */
-test("the French home page carries the sentence, the map and an honest empty block", async ({
+test("the French home page carries its heading, the map and an honest empty block", async ({
   page,
 }) => {
   await page.goto("/fr");
 
-  await expect(page.getByRole("heading", { level: 1, name: frMessages.home.title })).toBeVisible();
-  await expect(page.getByText(frMessages.home.intro)).toBeVisible();
-  // The map is a `<figure>` carrying a counted caption — see TIW-13.
+  /**
+   * `toBeAttached` and not `toBeVisible`, since TIW-38 took the heading and the
+   * introduction out of the picture at the owner's request. The `<h1>` is still
+   * in the document and still in the accessibility tree — it is the page's only
+   * name, for a screen reader and for a search result — and it is what this line
+   * guards. The introduction is gone outright, so there is nothing left to assert
+   * about it.
+   */
+  await expect(page.getByRole("heading", { level: 1, name: frMessages.home.title })).toBeAttached();
+  // The map is a `<figure>` carrying a counted caption — see TIW-13. The caption
+  // is hidden since TIW-38; the figure and its accessible name are not.
   await expect(page.getByRole("figure")).toBeVisible();
 
   // No trip published: the waiting message, and NOT a "Derniers voyages" heading
@@ -93,13 +101,40 @@ test("the main navigation reaches the full listing, at the same level as the map
   const nav = page.getByRole("navigation", { name: frMessages.trips.navLabel });
   await expect(nav.getByRole("link", { name: frMessages.trips.navMap })).toBeVisible();
 
-  await nav.getByRole("link", { name: frMessages.trips.navAll }).click();
+  await nav.getByRole("link", { name: frMessages.trips.navCountries }).click();
 
-  // The listing is the index of the collection the trip pages are items of, so
-  // its URL is `tripsPath()` — built on the same segment as `tripPath()`.
-  await expect(page).toHaveURL(/\/fr\/voyages$/);
+  // **« Pays » leads to countries.** It led to `/fr/voyages` — the catalogue
+  // grouped by country — for as long as there was no country page to lead to,
+  // and this pair of assertions used to pin that on the argument that the label
+  // had changed and the address had not. `/fr/pays` ended it: the index is a page
+  // now, and each of its rows opens that country's own page.
+  //
+  // `/fr/voyages` keeps its address and every link into it; it simply has no tab.
+  await expect(page).toHaveURL(/\/fr\/pays$/);
   await expect(
-    page.getByRole("heading", { level: 1, name: frMessages.trips.allHeading })
+    page.getByRole("heading", { level: 1, name: frMessages.country.heading })
+  ).toBeVisible();
+});
+
+test("the main navigation reaches the places listing, its own page at its own URL", async ({
+  page,
+}) => {
+  /**
+   * The other half of TIW-38's navigation: « Villes » is a *new* page, so unlike
+   * « Pays » above it the URL is new too. Asserted from `/fr` and by clicking
+   * rather than by `goto`, because what is under test is the entry in the bar —
+   * a page that exists and is unreachable from the header is the failure this
+   * catches.
+   */
+  await page.goto("/fr");
+
+  const nav = page.getByRole("navigation", { name: frMessages.trips.navLabel });
+
+  await nav.getByRole("link", { name: frMessages.trips.navPlaces }).click();
+
+  await expect(page).toHaveURL(/\/fr\/villes$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: frMessages.places.heading })
   ).toBeVisible();
 });
 
@@ -134,6 +169,49 @@ test("the full listing is readable with JavaScript disabled", async ({ browser, 
   }
 });
 
+test("the places listing is readable with JavaScript disabled", async ({ browser, baseURL }) => {
+  /**
+   * The same criterion as the catalogue above, on the page TIW-38 adds: it is a
+   * heading, a `<ul>` and plain anchors, and there is no `'use client'` in its
+   * tree — so a script-less browser must get the whole of it.
+   *
+   * This config serves the EMPTY content fixture, so what has to be readable here
+   * is the waiting message and the way back to the map. A page with neither is a
+   * dead end, and this page is reachable from the header of every other one.
+   */
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+  const page = await context.newPage();
+
+  try {
+    const response = await page.goto("/fr/villes");
+
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByRole("heading", { level: 1, name: frMessages.places.heading })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: frMessages.places.emptyHeading })
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: frMessages.places.emptyBackHome })).toBeVisible();
+    // The count is announced only when there is something to count: an intro
+    // reading "0 ville" over an empty page is the empty block the criteria refuse.
+    await expect(page.getByText(/\b0\b/)).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("the places listing carries the skip link's target too", async ({ page }) => {
+  // The `id` and the `tabIndex={-1}` belong to the page, so they are exactly the
+  // kind of thing that ships on three routes and not on the fourth.
+  await page.goto("/fr/villes");
+
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Enter");
+
+  await expect(page.locator("main")).toBeFocused();
+});
+
 test("an unknown path under the active locale renders the localised 404", async ({ page }) => {
   const response = await page.goto("/fr/no-such-page");
 
@@ -142,10 +220,12 @@ test("an unknown path under the active locale renders the localised 404", async 
     page.getByRole("heading", { level: 1, name: frMessages.notFound.title })
   ).toBeVisible();
   // The 404 must announce its own language, like any other page. There is a
-  // single global `not-found.tsx` and it hardcodes the default locale, so this
-  // will keep saying "fr" for every locale — a known limitation, spelled out in
-  // the README and guarded by the "exactly one active locale" unit test, which
-  // goes red the day a second locale is declared.
+  // single global `not-found.tsx` and it resolves the default locale, so it says
+  // "fr" under every prefix — `/en/no-such-page` included, now that `en` and `es`
+  // are active. That is an accepted limitation and not a bug to file: the fix is
+  // a `[locale]/[...rest]` catch-all, which costs a dynamic `ƒ` route and
+  // therefore invariant 1. Written down in `src/i18n/routing.ts`, in the README
+  // ("Rendu statique") and in the "declares the three active locales" unit test.
   await expect(page.locator("html[lang]")).toHaveAttribute("lang", "fr");
 });
 

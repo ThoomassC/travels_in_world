@@ -1,0 +1,82 @@
+/* =============================================================================
+   The paper grain's placement and, above all, its ONE number.
+
+   `--grain-opacity` is not a style choice that lives here by accident: it is the
+   value `tests/styles/colour-contract.test.ts` reads to know the worst ground an
+   ink can be measured against. Change it and the suite goes red until every
+   affected ratio is re-measured. That is the deal that let a texture into a
+   repository whose whole colour argument rests on flat composed substrates.
+   ============================================================================ */
+
+.grain {
+  /**
+   * `fixed` rather than `absolute`: the grain must not scroll with the document,
+   * or the noise slides under the map and reads as movement. It also means one
+   * viewport-sized paint instead of one page-sized one.
+   */
+  position: fixed;
+  inset: 0;
+  /* Behind every positioned thing on the page, above the body's own background.
+     The map's marker layer is at 10 and the header bar at 20. */
+  z-index: -1;
+  /* Decoration cannot take a pointer. Without this the whole viewport would be
+     covered by an element that eats every click. */
+  pointer-events: none;
+
+  /**
+   * THE NUMBER. 0.06 is the largest opacity at which the grain still reads as a
+   * surface rather than as dirt on the screen, and it is the bound the colour
+   * contract composites with.
+   */
+  --grain-opacity: 0.06;
+  opacity: var(--grain-opacity);
+
+  /**
+   * **`multiply` in light, `screen` in dark, and the pair is the point.**
+   *
+   * A grain is a variation in the *ground*, so it has to move the ground away
+   * from itself: darkening a pale page and lightening a dark one. Multiply on a
+   * dark page is invisible — it multiplies a value already near zero — and screen
+   * on a pale one washes it out. One blend mode for both themes is how a texture
+   * ends up existing in only one of them.
+   */
+  mix-blend-mode: multiply;
+}
+
+@media (prefers-color-scheme: dark) {
+  .grain {
+    mix-blend-mode: screen;
+  }
+}
+
+/**
+ * The explicit choice has to win over the OS here as it does in the token sheet.
+ * There is no theme toggle in the interface yet — the shared sheet serves both
+ * states without one — so this rule is a placeholder that costs two lines and
+ * prevents the grain from being the single thing that ignores the toggle on the
+ * day it lands.
+ */
+:global(:root[data-theme="dark"]) .grain {
+  mix-blend-mode: screen;
+}
+
+:global(:root[data-theme="light"]) .grain {
+  mix-blend-mode: multiply;
+}
+
+/**
+ * Forced colours replace the author's palette wholesale, and a texture has no
+ * meaning to carry into it — it would only sit as grey noise over a scheme the
+ * reader chose for legibility.
+ */
+@media (forced-colors: active) {
+  .grain {
+    display: none;
+  }
+}
+
+/**
+ * The grain does not move, so `prefers-reduced-motion` has nothing to say about
+ * it. It is listed here because the absence of a rule is otherwise indistinguish-
+ * able from an oversight in a file that has one for every other media feature.
+ */

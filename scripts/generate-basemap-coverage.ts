@@ -47,8 +47,8 @@ const REGENERATE_COMMAND = "npm run basemap:coverage";
  * compares against `SHIPPED_DATASET_VINTAGE`, and `src/map/world.ts` compares the
  * generated list against the geometry it actually projected.
  */
-const SHIPPED_VINTAGE = "110m";
-const FINER_VINTAGES = ["50m", "10m"] as const;
+const SHIPPED_VINTAGE = "50m";
+const FINER_VINTAGES = ["10m"] as const;
 
 const require_ = createRequire(import.meta.url);
 
@@ -134,7 +134,7 @@ function render(shipped: ReadonlySet<string>, finer: ReadonlySet<string>): strin
  * **The question this answers, and why it needs a file.** \`src/iso-3166.ts\` says
  * whether ISO 3166-1 assigns a code; it says nothing about whether a *map* can
  * draw it. At the ${SHIPPED_VINTAGE} vintage, ${undrawable.length} of the ${NUMERIC_BY_ALPHA2.size} assigned codes have no shape
- * at all — every micro-state, Singapore and Hong Kong included. Before TIW-30
+ * at all — ${undrawable.join(", ")}. Before TIW-30
  * \`npm run validate:content\` cleared them and \`buildWorldGeometry\` threw halfway
  * through the prerender of \`/fr\`.
  *
@@ -167,10 +167,11 @@ export const BASEMAP_VINTAGE = "${SHIPPED_VINTAGE}";
 
 /**
  * The finer vintages the same package already ships. Switching to one costs
- * bundle weight, not a dependency — and the price is steep: the whole 50m vintage
- * projects to 182.5 KB brotli of paths against the 34 KB ceiling of
- * \`tests/map/world.test.ts\`. Named here so a refusal can quote the way out with
- * its cost instead of implying it is free.
+ * bundle weight, not a dependency — and the price is steep: the shipped 50m
+ * vintage already projects to 182.6 KiB brotli of paths against the 200 KiB
+ * ceiling of \`tests/map/world.test.ts\`, and 10m measures 512.6 KiB, which is
+ * two and a half times the whole budget. Named here so a refusal can quote the
+ * way out with its cost instead of implying it is free.
  */
 export const FINER_BASEMAP_VINTAGES = [${FINER_VINTAGES.map((v) => `"${v}"`).join(", ")}] as const;
 
@@ -190,7 +191,7 @@ ${codeList(shipped)}
  * Its only job is to keep a refusal from becoming a dead end: ${nowhere.length} assigned codes —
  * ${nowhere.join(", ")} — are drawn by
  * *no* vintage of \`world-atlas\`, so telling their author to switch would be
- * telling them to buy 152 KB of paths that still would not draw their country.
+ * telling them to buy 330 KiB of paths that still would not draw their country.
  */
 export const FINER_VINTAGE_COUNTRY_CODES: ReadonlySet<string> = new Set([
 ${codeList(finer)}

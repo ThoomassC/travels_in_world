@@ -64,19 +64,24 @@ describe("the two ways out the criterion asks for", () => {
 });
 
 describe("the latest trips", () => {
-  it("shows three of them, and not the whole catalogue", () => {
+  it("shows the newest one, and not the whole catalogue", () => {
     renderWithMessages(<WithdrawnNotice locale={defaultLocale} trips={sixTrips} />);
 
     /**
      * The number lives in `LatestTrips` (`LATEST_TRIP_COUNT`), not here — this page
      * reuses the home page's block rather than reimplementing it, so the two cannot
      * disagree about what "les derniers voyages" means. What is asserted is that
-     * this page really goes through it: six entries in, three headings out.
+     * this page really goes through it: six entries in, one heading out.
+     *
+     * It was three until 7 September 2026, at the owner's request. The assertion
+     * deliberately still names a number rather than reading the constant: a test
+     * that imported `LATEST_TRIP_COUNT` would pass whatever the constant became,
+     * including zero.
      */
     expect(
       screen.getByRole("heading", { level: 2, name: frMessages.home.latestHeading })
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(1);
   });
 
   it("renders the honest waiting block when nothing is published", () => {

@@ -11,10 +11,13 @@ import { expect, test, type Page } from "@playwright/test";
  * about the addresses it *links to*, which is where a reader actually goes.
  *
  * **It is not a hypothetical, and the repository has paid for it twice.** The
- * map's textual equivalent shipped `/fr/voyages#pays-bo`, a fragment matching no
- * id on a real build, and `src/components/map/visited-countries.tsx` records
- * measuring it: a fragment that resolves to nothing does not fail, it silently
- * leaves the reader at the top of a listing. And the trip page's own
+ * map's textual equivalent — « Les pays visités », since removed — shipped
+ * `/fr/voyages#pays-bo` on a real build. `TripCatalogue` files a trip under its
+ * *first arrival* country only, so Bolivia, merely crossed by
+ * `perou-bolivie-2023`, had no section and the fragment matched nothing.
+ * Measured, and recorded here because the file that recorded it is gone: a
+ * fragment resolving to nothing does not fail, it silently leaves the reader at
+ * the top of a listing. And the trip page's own
  * `/#voyage-<slug>` pointed at a home page that did not yet emit those ids —
  * TIW-20's note calls it "a promise the URL made and the document did not keep".
  * Both were caught by hand.
@@ -48,11 +51,21 @@ const START = "/fr";
 
 /**
  * A hard stop on the crawl, so a cycle or an unexpected route explosion fails as
- * a number rather than as a timeout. The fixture holds five trips, so the real
- * count is nine documents (`/fr`, `/fr/voyages`, `/fr/a-propos`, four trip pages,
- * and whatever those link to among the same set).
+ * a number rather than as a timeout. The fixture holds five trips, four of which
+ * have a récit, so the real count was seven documents per locale — and the
+ * language menu links the three locales to each other, which made twenty-one.
+ *
+ * **The country pages added six per locale** — the `/pays` index and one page per
+ * country the fixture reaches (Bolivie, Islande, Japon, Maroc, Pérou) — which
+ * takes the real count to thirteen per locale and thirty-nine in all. The old
+ * ceiling of 40 was one document away from the truth, so it fired as « the crawl
+ * found more documents than this fixture can hold » before any dead link could be
+ * reported: a guard that hides the thing it guards.
+ *
+ * Raised to leave the same kind of room it had before rather than to just clear
+ * today's number.
  */
-const MAX_PAGES = 40;
+const MAX_PAGES = 60;
 
 type Reference = {
   /** The page the link was found on, so a failure names where to look. */
@@ -195,15 +208,71 @@ test("no rendered link on any page leads to an address that does not exist", asy
   /**
    * The crawl reached the whole site, which is the guard on the guard: a run that
    * followed nothing would report success for having checked one page. Seven
-   * documents on this fixture — three index pages plus the four trips that have a
-   * récit, and **not** `maroc-2023`, which has none.
+   * documents per locale on this fixture — three index pages plus the four trips
+   * that have a récit, and **not** `maroc-2023`, which has none.
    *
-   * Written out rather than counted, so the day a route arrives somebody has to
-   * decide whether a reader should reach it from `/fr` at all.
+   * **Twenty-one and not seven, since TIW-38.** The language menu is three plain
+   * `<a href>` with an `hreflang`, rendered on every page and working with no
+   * JavaScript, so a crawl that starts at `/fr` reaches `/en` and `/es` on its
+   * first hop and then the whole of both. That is the point of the menu: the two
+   * other locales are part of the reachable site, not a client-side rewrite of
+   * the current URL. It also means this file now checks every fragment of every
+   * translated page, which is where a mistranslated anchor would hide.
+   *
+   * **Twenty-four since the places listing joined the bar**, one `/villes` per
+   * locale — the segment stays French under all three, which `src/i18n/routing.ts`
+   * argues at length. That page is made entirely of fragments into `/voyages`, so
+   * the half of this suite that matters most is the half below: every row of it is
+   * a `#voyage-<slug>` that has to name an element the catalogue really emits.
+   *
+   * Written out rather than counted, so the day a route or a locale arrives
+   * somebody has to decide whether a reader should reach it from `/fr` at all.
+   *
+   * **The country pages are that day.** Six per locale — the `/pays` index the
+   * « Pays » tab now leads to, and one page per country the fixture reaches — and
+   * the decision is yes: the index is a tab, so every reader meets it from the
+   * first screen, and each of its rows is the way into a country. They are
+   * reachable from `/fr` by design and not by accident, which is exactly what
+   * this list is here to make somebody say out loud.
    */
   expect([...crawled].sort()).toEqual([
+    "/en",
+    "/en/a-propos",
+    "/en/pays",
+    "/en/pays/bolivie",
+    "/en/pays/islande",
+    "/en/pays/japon",
+    "/en/pays/maroc",
+    "/en/pays/perou",
+    "/en/villes",
+    "/en/voyages",
+    "/en/voyages/islande-2022",
+    "/en/voyages/japon-2024",
+    "/en/voyages/japon-2025",
+    "/en/voyages/perou-bolivie-2023",
+    "/es",
+    "/es/a-propos",
+    "/es/pays",
+    "/es/pays/bolivie",
+    "/es/pays/islande",
+    "/es/pays/japon",
+    "/es/pays/maroc",
+    "/es/pays/perou",
+    "/es/villes",
+    "/es/voyages",
+    "/es/voyages/islande-2022",
+    "/es/voyages/japon-2024",
+    "/es/voyages/japon-2025",
+    "/es/voyages/perou-bolivie-2023",
     "/fr",
     "/fr/a-propos",
+    "/fr/pays",
+    "/fr/pays/bolivie",
+    "/fr/pays/islande",
+    "/fr/pays/japon",
+    "/fr/pays/maroc",
+    "/fr/pays/perou",
+    "/fr/villes",
     "/fr/voyages",
     "/fr/voyages/islande-2022",
     "/fr/voyages/japon-2024",

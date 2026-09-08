@@ -2,7 +2,7 @@
   <style>
     <![CDATA[
     /*
-      THE FAVICON — the "welded comet" cut, hand-written on purpose.
+      THE FAVICON — the banked-aeroplane cut, hand-written on purpose.
 
       READ THIS BEFORE EDITING: everything documented here lives in a CSS comment and
       not in an XML one, and that is not a preference. An XML comment may not contain
@@ -39,19 +39,36 @@
       fetches a favicon as its own document: it can be neither a React component nor a
       shared constant. So the path data exists twice, and the copy going stale is
       exactly the break nothing would report. The drift test reads this file off the
-      disk and compares the `d` attribute with BRAND_COMET_PATH, character for
+      disk and compares the `d` attribute with BRAND_PLANE_PATH, character for
       character.
 
-      WHY THE TRAJECTORY IS ABSENT HERE, which is the design decision rather than a
-      simplification. Ink against accent measures 1.99:1 in light and 1.35:1 in dark on
-      this palette, so an accented detail *inside* the mark cannot be seen; keeping the
-      trajectory would mean a detached dotted rule, and at 16 px its dots and the gaps
-      between them are sub-pixel. The header lock-up carries the trajectory at a size
-      where its voids are real. Here the comet stands alone: ONE connected mass, no
-      internal void, nothing whose reading depends on a one-pixel gap.
+      THE MARK CHANGED ON 7 SEPTEMBER 2026 and this file's oldest argument went with
+      it. There is no trajectory in this project any more: the owner supplied an
+      aeroplane seen head-on, one ink, no accented part, so the paragraph that used to
+      explain why the dotted rule was left out of the favicon has nothing left to
+      explain. The aeroplane still stands alone here, and it still stands alone in the
+      header — the difference is that it now does everywhere.
+
+      WHAT THIS CUT DOES AT 16 px, measured rather than asserted, because the mark it
+      replaces was chosen with that number on the table: it inks 34.4 per cent of the
+      box with 44 of its 256 pixels past alpha 200, against 14.6 per cent and 22 pixels
+      for the banked aeroplane, and 28.8 per cent for the welded comet before that. An
+      upright silhouette seen head-on is a far denser shape than a banked cruciform.
+
+      IT HAS AN INTERNAL VOID NOW, and that is the one regression to know about. The
+      compass needle cut out of the fuselage is 2.4 units wide in a 72-unit box, so at
+      16 px it is half a pixel and it vanishes; the mark degrades to a plain silhouette,
+      which still reads as an aeroplane, and the needle returns at 32 px. A second,
+      simplified cut for small sizes was refused: two copies of one drawing is the
+      problem the drift test below already exists to catch.
+
+      AND THAT IS WHY THE PATH CARRIES fill-rule="evenodd". The needle is the second
+      contour of a single path. Under the default non-zero rule it fills solid and the
+      mark loses its only detail — silently, with no error anywhere.
 
       Measured against the eight tab-bar greys of Chrome, Firefox and Safari, light and
-      dark: 10.31:1 at worst, 15.55:1 at best. All AA.
+      dark: 10.31 at worst, 15.55 at best, on the ink this file paints — the shape
+      changed, the two ink values did not, so those readings still hold. All AA.
 
       NO BACKGROUND PLATE, deliberately. A plate would guarantee the same appearance on
       every tab bar and cost the third of the box that makes the silhouette readable at
@@ -83,10 +100,12 @@
       }
     }
 
-    .comet {
+    .plane {
       fill: var(--logo-ink);
     }
     ]]>
   </style>
-  <path class="comet" d="M5 43 Q16.26 32.41 34.67 28.83 A12 12 0 1 0 18.57 13.05 Q8.21 24.52 5 43 Z" />
+  <g transform="translate(8.88 3) scale(0.42)">
+    <path class="plane" fill-rule="evenodd" d="M 36 0 C 34.9 0 34.05 0.25 33 0.65 C 31.03 1.53 29.11 3.6 27.71 6.39 C 25.61 10.53 24 19.16 24 26.23 L 24 28 L 0 56 L 0 64 L 24 56 L 28 80 L 20 92 L 20 100 L 36 92 L 52 100 L 52 92 L 44 80 L 48 56 L 72 64 L 72 56 L 48 28 L 48 26.23 C 48 19.16 46.39 10.53 44.29 6.39 C 42.89 3.6 40.97 1.53 39 0.65 C 37.95 0.25 37.1 0 36 0 Z M 35.2 15.2 C 34.81 15.59 34.8 15.87 34.8 22.8 C 34.8 26.76 34.73 30 34.65 30 C 34.57 30 33.94 29.86 33.25 29.7 C 31.83 29.36 30.35 28.67 29.45 27.91 C 29.12 27.63 28.76 27.4 28.66 27.4 C 28.56 27.4 28.21 27.68 27.89 28.02 L 27.3 28.64 28.13 29.37 C 29.49 30.59 31.32 31.35 34.25 31.9 L 34.8 32.01 34.8 36.42 L 34.8 40.84 33.91 41.7 C 32.46 43.11 32.42 44.82 33.8 46.2 C 35.13 47.53 36.87 47.53 38.2 46.2 C 39.58 44.82 39.54 43.11 38.09 41.7 L 37.2 40.84 37.2 36.42 L 37.2 32.01 37.75 31.9 C 40.68 31.35 42.51 30.59 43.87 29.37 L 44.7 28.64 44.11 28.02 C 43.79 27.68 43.44 27.4 43.34 27.4 C 43.24 27.4 42.88 27.63 42.55 27.91 C 41.65 28.67 40.17 29.36 38.75 29.7 C 38.06 29.86 37.43 30 37.35 30 C 37.27 30 37.2 26.76 37.2 22.8 C 37.2 15.87 37.19 15.59 36.8 15.2 C 36.58 14.98 36.22 14.8 36 14.8 C 35.78 14.8 35.42 14.98 35.2 15.2 Z" />
+  </g>
 </svg>

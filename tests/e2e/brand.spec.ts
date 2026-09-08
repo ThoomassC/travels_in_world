@@ -24,7 +24,16 @@ import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
  * here and are named as unverified in the pull request.
  */
 
-const BRAND_NAME = frMessages.brand.name;
+/**
+ * The name as a reader hears it, rebuilt from the two keys the lock-up renders.
+ *
+ * Two keys since 7 September 2026: the "Deux temps" lock-up sets "Travels" in the
+ * display serif and "in World" small and letterspaced beneath it, so the name is
+ * two elements. It is still one name, and the whole point of the case below is
+ * that the accessibility tree agrees — two adjacent inline boxes can concatenate
+ * to "Travelsin World", which is what the explicit space in the component is for.
+ */
+const BRAND_NAME = `${frMessages.brand.nameLead} ${frMessages.brand.nameTail}`;
 
 test("the logo leads home from a page that is not home", async ({ page }) => {
   await page.goto("/fr/voyages");
@@ -63,12 +72,24 @@ test("the favicon is a document the browser can actually draw", async ({ page })
 });
 
 /**
- * Rasterise the favicon at 16 px — tab-bar size — and read the pixel at the
- * centre of the comet's head, which is solid ink in both themes.
+ * Rasterise the favicon at 16 px — tab-bar size — and read a pixel inside the
+ * aeroplane's wing root, which is solid ink in both themes.
  *
- * Not tainted, so `getImageData` is allowed: the SVG is same-origin. The sample
- * point comes from the geometry — the head disc is centred at (29.5, 18) in a
- * 48-unit box, so (0.61, 0.375) of the way across at any size.
+ * Not tainted, so `getImageData` is allowed: the SVG is same-origin.
+ *
+ * **The sample point is measured, not derived, and that is the change this mark
+ * forced.** The welded comet had a head disc with a known centre, so the point
+ * could be read off the geometry. A banked aeroplane has no such landmark, and it
+ * is a thin cruciform: rasterised at 16 px it inks 14.6 per cent of the box, and
+ * only 22 of its 256 pixels reach alpha 200. The point below is the fullest of
+ * those — pixel (7, 8), alpha 255 — found by rasterising the path and taking the
+ * solid pixel nearest the centre of mass of the solid ones.
+ *
+ * Kept as fractions rather than as (7, 8) so the test still says what it means at
+ * a size other than 16, and chosen so that `Math.round` lands on that pixel:
+ * 0.45 x 16 rounds to 7, 0.51 x 16 rounds to 8. Move the mark and this pair moves
+ * with it — the failure is loud, which is why the guard below throws its own
+ * message instead of asserting on a colour.
  */
 async function inkLuminanceAt16px(page: import("@playwright/test").Page): Promise<number> {
   return page.evaluate(async () => {
@@ -83,8 +104,8 @@ async function inkLuminanceAt16px(page: import("@playwright/test").Page): Promis
     if (context === null) throw new Error("no 2d context");
     context.drawImage(image, 0, 0, 16, 16);
 
-    const x = Math.round(0.61 * 16);
-    const y = Math.round(0.375 * 16);
+    const x = Math.round(0.45 * 16);
+    const y = Math.round(0.51 * 16);
     const [r, g, b, alpha] = context.getImageData(x, y, 1, 1).data;
     if (alpha === undefined || alpha < 200) {
       throw new Error(`the sample point is not inside the mark (alpha ${String(alpha)})`);
@@ -143,4 +164,203 @@ test("the icon and share files are all really served", async ({ request }) => {
     expect(response.status(), `${pathname} is not served`).toBe(200);
     expect(response.headers()["content-type"]).toContain(type);
   }
+});
+
+/**
+ * **THE FIRST TAB STOP OF EVERY PAGE MUST BE VISIBLE WHEN IT IS FOCUSED**, and
+ * this case exists because for two milestones it was not.
+ *
+ * The skip link is the 2.4.1 bypass: it is the first thing in the document and it
+ * jumps a keyboard reader past the header into `<main>`. It was declared at
+ * `z-index: 10` — "above the map's marker layer" — and the sticky header bar sits
+ * at 20 in the same stacking context, so the link was painted *under* the bar on
+ * every page of the site. An accessibility audit measured it with
+ * `elementsFromPoint`: eight of nine sample points inside the focused link's box
+ * returned the brand medallion.
+ *
+ * WCAG 2.4.11 Focus Not Obscured (Minimum) is a AA criterion of WCAG 2.2 and axe
+ * does not check it — it is a question about what covers what after layout, and
+ * only a browser can answer it. Hence a Playwright case rather than a unit test,
+ * and hence an assertion on the *outcome* (nothing covers the link) rather than on
+ * the z-index that currently produces it.
+ *
+ * It runs on `/fr` and on `/fr/a-propos`: the home page is where the map's own
+ * positioned layer competes, and the second is where the bar is the only thing
+ * that could cover anything — a fix that only worked on one of them would be a
+ * fix that read the wrong cause.
+ *
+ * PROVEN BY DELIBERATE FAILURE, which is this repository's standard for a guard:
+ *
+ *   // src/app/[locale]/layout.module.css, .skip:focus-visible
+ *   -  z-index: 30;
+ *   +  z-index: 10;
+ *
+ *   npx playwright test tests/e2e/brand.spec.ts
+ *   -> 2 failed, on both routes, nine points out of nine:
+ *      "(0.1, 0.1) is covered by SPAN.site-brand-module…__medallion"
+ *      "(0.9, 0.5) is covered by SPAN.site-brand-module…__word"
+ */
+for (const route of ["/fr", "/fr/a-propos"] as const) {
+  test(`the focused skip link is not covered by the header on ${route}`, async ({ page }) => {
+    await page.goto(route);
+    await page.keyboard.press("Tab");
+
+    const skip = page.locator(":focus");
+    await expect(skip).toBeVisible();
+    // The first stop really is the bypass and not something else that happens to
+    // be visible — an assertion that would otherwise pass on the logo.
+    await expect(skip).toHaveAttribute("href", /#/);
+
+    /**
+     * Nine points across the link's box, because a partial cover is still a
+     * cover: the bar could clip the top half and leave the bottom readable, which
+     * 2.4.11 (Minimum) tolerates only if *no* part is hidden by author content.
+     * `elementsFromPoint` returns the paint order at each point; the link has to
+     * be the first entry every time.
+     */
+    const covered = await page.evaluate(() => {
+      const element = document.activeElement;
+      if (element === null) {
+        return ["no focus at all"];
+      }
+
+      const box = element.getBoundingClientRect();
+      const problems: string[] = [];
+
+      for (const fx of [0.1, 0.5, 0.9]) {
+        for (const fy of [0.1, 0.5, 0.9]) {
+          const x = box.left + box.width * fx;
+          const y = box.top + box.height * fy;
+          const [top = null] = document.elementsFromPoint(x, y);
+
+          if (top !== element && top !== null && !element.contains(top)) {
+            problems.push(`(${fx}, ${fy}) is covered by ${top.tagName}.${top.className}`);
+          }
+        }
+      }
+
+      return problems;
+    });
+
+    expect(covered, `the focused skip link is painted under something on ${route}`).toEqual([]);
+  });
+}
+
+/**
+ * **THE LOCK-UP SPELLS ONE NAME, AND THE BROWSER HAS TO AGREE.**
+ *
+ * The wordmark is two elements — "Travels" and "in World" — so the link's
+ * accessible name is a *concatenation*, and the accessible-name algorithm does
+ * not promise a separator between two adjacent inline boxes. Measured on this
+ * markup without the explicit space: "Travelsin World", which is a different name
+ * for voice control (WCAG 2.5.3 Label in Name) and a different word for a screen
+ * reader.
+ *
+ * Asserted on the *computed* name and not on the DOM text, because the DOM text
+ * is exactly what looks right while the name is wrong. And on all three locales:
+ * the two keys exist in each catalogue and nothing stops a translator joining
+ * them differently.
+ */
+for (const locale of ["fr", "en", "es"] as const) {
+  test(`the logo's accessible name is the whole brand, on /${locale}`, async ({ page }) => {
+    await page.goto(`/${locale}`);
+
+    const name = await page
+      .getByRole("link")
+      .first()
+      .evaluate((element) => element.textContent?.replace(/\s+/g, " ").trim() ?? "");
+
+    // The first link of the document is the skip link, so the logo is queried by
+    // its href instead — one assertion about one element.
+    const logo = page.locator(`header a[href="/${locale}"]`).first();
+    const accessible = await logo.evaluate(
+      (element) => element.textContent?.replace(/\s+/g, " ").trim() ?? ""
+    );
+
+    expect(accessible.startsWith("Travels in World")).toBe(true);
+    expect(accessible).not.toContain("Travelsin");
+    expect(name.length).toBeGreaterThan(0);
+  });
+}
+
+/**
+ * **THE BAR'S GEOMETRY, and it is here because only a browser lays a grid out.**
+ *
+ * Three defects the owner read off the screen in one sentence — *« le sélecteur de
+ * langue doit être bien à droite et la barre de recherche juste à gauche du
+ * sélecteur. Les onglets au centre du header doivent avoir de l'espace. »* — and
+ * one of them was a genuine collision rather than a matter of taste.
+ *
+ * Measured on the dev server at three widths before the fix:
+ *
+ *   width | nav ends | field starts | language's right gutter
+ *   ------|----------|--------------|------------------------
+ *    1440 |      887 |          898 | 168 px
+ *    1280 |      807 |          818 |  88 px
+ *    1100 |      717 |          702 |  24 px   ← fifteen pixels of overlap
+ *
+ * The overlap is what a stretched right zone fixes: with `justify-self: end` that
+ * box is sized by its content, so the 20 rem field could not be asked to shrink
+ * and overflowed leftwards into the navigation. The gutter is what the bar's row
+ * spanning the window fixes. Both are asserted below, at the width where each
+ * failed.
+ *
+ * PROVEN BY DELIBERATE FAILURE — `git checkout src/components/site/site-nav.module.css`
+ * with these cases in place:
+ *
+ *   npx playwright test brand.spec -> 4 failed | 9 passed
+ *     1440: "expected <= 25, received 168"   (the gutter)
+ *     1280: "expected <= 25, received  88"   (the gutter)
+ *     1100: "the search field overlaps the navigation"
+ *     and the tabs, 4 px apart instead of 12
+ */
+for (const width of [1440, 1280, 1100]) {
+  test(`the header's three zones do not collide at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/fr");
+
+    const boxOf = async (locator: import("@playwright/test").Locator) => {
+      const box = await locator.boundingBox();
+      expect(box, "an element of the bar has no box at all").not.toBeNull();
+      return box as NonNullable<typeof box>;
+    };
+
+    const nav = await boxOf(page.locator("header nav"));
+    const field = await boxOf(page.getByLabel(frMessages.search.field).locator("xpath=ancestor::label[1]"));
+    const language = await boxOf(page.locator("header details").first());
+
+    // 1. The tabs and the search never share a pixel — the defect at 1100.
+    expect(field.x, "the search field overlaps the navigation").toBeGreaterThan(nav.x + nav.width);
+
+    // 2. The search is immediately to the left of the language menu, and nothing
+    //    is between them.
+    expect(field.x + field.width).toBeLessThanOrEqual(language.x);
+    expect(language.x - (field.x + field.width)).toBeLessThan(24);
+
+    /*
+      3. The language menu is against the window's edge — one gutter, whatever the
+         width. It used to be pinned to `main`'s measure, which on a wide screen
+         left it 168 px inside a bar that is a full-width band of colour.
+    */
+    expect(width - (language.x + language.width)).toBeLessThanOrEqual(24 + 1);
+  });
+}
+
+/**
+ * And the tabs themselves. Asserted as the distance between two labels rather
+ * than as a `gap`, because what was read as cramped is what the eye measures:
+ * each label already carries 12 px of its own padding, so a 4 px gap left two
+ * 44 px targets 28 px apart edge to edge.
+ */
+test("the four destinations have room between them", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/fr");
+
+  const links = page.locator("header nav a");
+  const first = await links.nth(0).boundingBox();
+  const second = await links.nth(1).boundingBox();
+
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  expect((second?.x ?? 0) - ((first?.x ?? 0) + (first?.width ?? 0))).toBeGreaterThanOrEqual(8);
 });

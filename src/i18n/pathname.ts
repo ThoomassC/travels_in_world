@@ -56,8 +56,11 @@ import { routing } from "./routing";
  *   builds the string here (widening the fork, plus a case in the spec) or goes
  *   back to `getPathname` and accepts the 3.8 KB on that route.
  * - **`forcePrefix`.** Upstream's escape hatch for forcing a prefix while
- *   changing locale. Not implemented; it has no caller while `fr` is the only
- *   active locale, and it is only meaningful with a locale switcher.
+ *   changing locale. Still not implemented, and TIW-38 is when that stopped
+ *   being free: three locales are active and the header has a language switcher.
+ *   It has no caller because `localePrefix` is `"always"`, so every path this
+ *   fork builds already carries its prefix and there is nothing to force. The
+ *   day `localePrefix` becomes `"as-needed"`, this is the first thing to write.
  * - **`href: undefined`.** Upstream returns the string `"/frundefined"`; this
  *   fork throws. That divergence is deliberate and is the one place the fork is
  *   the better of the two — a thrown error at build time beats a 404 shipped.

@@ -100,6 +100,49 @@
   color: var(--text-body);
 }
 
+/**
+ * The country heading when it is the listing's top level — a journal whose every
+ * trip is on one continent, where the component drops the continent chapter
+ * rather than print it once over everything.
+ *
+ * It takes the size and the two reflow declarations `.continentHeading` carries,
+ * because it now does that heading's job: it is the chapter title a reader scans,
+ * and it is the widest word on the page at a raised default font size. The note
+ * above `.continentHeading` measures why `min-width: 0` and `overflow-wrap`
+ * together are one fix and neither works alone — the same flex-item minimum size
+ * applies here.
+ *
+ * The rule that separated the chapters is NOT reproduced. `.continentHeader` drew
+ * one under a heading that had a count beside it; a country heading sits directly
+ * on its grid of cards, which is boundary enough, and a rule per country would
+ * turn a listing into a table.
+ */
+.countryHeadingTop {
+  min-width: 0;
+  font-size: var(--text-xl);
+  overflow-wrap: break-word;
+}
+
+/**
+ * The country heading as a link to that country's page (TIW-39).
+ *
+ * `color: inherit`, so a chapter title stays a chapter title: the accent would
+ * make twelve headings read as twelve calls to action down a sixty-entry page,
+ * and the heading's own weight and size already tell a reader what it is. The
+ * underline is what says it is a link, and it is the only such signal — hence
+ * `text-decoration` declared here rather than removed: this one IS running text,
+ * unlike the rows of `/villes`, which are laid out as blocks with a border of
+ * their own.
+ *
+ * `text-underline-offset` so the underline clears the descenders of a name like
+ * « Belgique » at heading size, where the default sits on top of them.
+ */
+.countryLink {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
 .countries {
   display: flex;
   flex-direction: column;

@@ -325,7 +325,70 @@ type TripIssues = z.core.$RefinementCtx<TripFields>;
  *
  * Every rule runs on every parse, so a file with three mistakes reports three.
  */
+/**
+ * The floor under every date of this journal — 1900-01-01.
+ *
+ * **Why a floor exists at all**, and it was found the hard way: TIW-24 scaffolded
+ * nine real trips with `0001-01-01` written in every date field, deliberately
+ * absurd so nobody could mistake it for data — and they are still outside the
+ * repository, waiting for their dates, which is exactly the outcome this rule now
+ * enforces. `npm run validate:content` passed them, all nine, without a word,
+ * before it existed — because `0001-01-01` IS a real day of the
+ * proleptic Gregorian calendar, and because writing the same absurd value
+ * everywhere satisfies every cross-field rule at once: the end is not before the
+ * start, the story is not published before the departure, every step falls
+ * inside the trip. **No rule in this file judged whether a date could be true.**
+ *
+ * So the only thing standing between a placeholder and a published page was a
+ * comment at the top of a YAML file, which is exactly what this repository has
+ * spent two tickets learning not to rely on.
+ *
+ * The value is a floor and not a range, and that is the whole of its ambition:
+ * it refuses the impossible, never the improbable. 1900 is before any journey a
+ * living person can have taken and long after any date a keyboard slip produces
+ * — `0001`, `0202`, `1002` all land under it. A trip in the future is NOT
+ * refused here: a departure is booked before it is taken, and `publishedAt` is
+ * already tied to `startDate` above.
+ */
+const EARLIEST_PLAUSIBLE_DAY = "1900-01-01";
+
 function checkTrip(trip: TripFields, ctx: TripIssues): void {
+  /**
+   * **One field carries the floor, and the other two get it for free.**
+   *
+   * `publishedAt` was checked here too until the deliberate-failure run said
+   * otherwise: removing the floor left that case green, because
+   * `publishedAt >= startDate` is already a rule above. `publishedAt >=
+   * startDate >= 1900` needs no third rule, and a check that cannot fail on its
+   * own is a check that will be trusted for something it does not do.
+   *
+   * **`endDate` is NOT checked either, and that omission is a fix rather than a
+   * shortcut.**
+   *
+   * `src/content/diagnose.ts` turns a schema issue into the sentence a reader
+   * gets, and it maps by PATH: any `custom` issue on `endDate` is rendered as
+   * "the trip ends before it starts". A second rule on that path therefore
+   * arrives wearing the first one's message — measured, on a scaffold whose two
+   * dates are both `0001-01-01`: `endDate: le voyage se termine le 0001-01-01,
+   * avant son début le 0001-01-01`, which is both false and impossible to act
+   * on.
+   *
+   * Nothing is lost by omitting it. `endDate` is already refused when it falls
+   * before `startDate`, so `startDate >= 1900` and `endDate >= startDate`
+   * together put `endDate` above the floor. The rule that reports is the rule
+   * that can be fixed.
+   *
+   * The steps' dates are covered the same way: another rule below refuses a step
+   * outside the trip's own bounds.
+   */
+  if (isBefore(trip.startDate, EARLIEST_PLAUSIBLE_DAY)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["startDate"],
+      message: `startDate is ${trip.startDate}, before ${EARLIEST_PLAUSIBLE_DAY} — that is a placeholder or a typo, not a date. Put the real departure day in, or leave the folder out of the repository until you have it.`,
+    });
+  }
+
   if (isBefore(trip.endDate, trip.startDate)) {
     ctx.addIssue({
       code: "custom",

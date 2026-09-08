@@ -2,7 +2,15 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { compositeLayers, contrastRatio, resolveToken, withAlpha } from "@thomascaron/ui/contract";
 import { describe, expect, it } from "vitest";
-import { MEASURED_THEMES, assembledSheet, siteToken, theme, type MeasuredTheme } from "./sheet";
+import {
+  GRAIN_INK,
+  MEASURED_THEMES,
+  assembledSheet,
+  grainOpacity,
+  siteToken,
+  theme,
+  type MeasuredTheme,
+} from "./sheet";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 
@@ -18,10 +26,10 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
  * see: the fifty-odd contrast ratios written into the comments of this
  * repository's own CSS Modules.
  *
- * Those numbers are the review artefact. `visited-countries.module.css` rejects
- * a token on the strength of a table; `trip-card.module.css` picks a border by
- * comparing three. A wrong number there is worse than no number, because it is
- * an argument that reads as if it had been checked.
+ * Those numbers are the review artefact. `world-map.module.css` chooses between
+ * two country tints on the strength of a table; `trip-card.module.css` picks a
+ * border by comparing three. A wrong number there is worse than no number,
+ * because it is an argument that reads as if it had been checked.
  *
  * TWO ASSERTIONS, AND THE SECOND IS THE ONE THAT MAKES THIS A GUARD:
  *
@@ -82,25 +90,64 @@ const stack =
    Naming them here rather than inline is what stops a measurement from quietly
    being taken against `--site-background`, which is never the worst case. */
 
-/** The page itself. */
-const page = token("--site-background");
-/** A card, a pill, the map's plate — anything sitting on the page. */
+/**
+ * **The page, grained — and this is the worst case, not the token.**
+ *
+ * TIW-38 laid a generated paper grain under the whole site. A texture has no
+ * single colour, which is exactly the objection this suite had to answer rather
+ * than be excused from. It answers it by measuring the ground a reader can
+ * actually meet at its **darkest** (light theme, `multiply`, so the noise's black
+ * end does the work) and at its **lightest** (dark theme, `screen`, the white
+ * end) — both at the opacity `paper-grain.module.css` declares, read from that
+ * file rather than repeated here.
+ *
+ * Every ink that sits on the page is therefore measured against a ground darker
+ * (or lighter) than `--site-background`. Nothing on this site is measured against
+ * the bare token any more, because nothing is painted on it.
+ */
+const page: Paint = (name) =>
+  compositeLayers([
+    siteToken(name, "--site-background"),
+    withAlpha(GRAIN_INK[name], grainOpacity()),
+  ]);
+
+/** A card, a pill, the map's LAND — anything opaque sitting on the page. */
 const surface = token("--surface");
-/** The map's sea is its plate; its land is a panel painted on top of it. */
-const sea = surface;
-const land = stack("--surface", "--panel-surface");
+/**
+ * **The map's sea is the page itself since TIW-38**, grain included: the drawing
+ * has no plate any more. Its land is `--surface`, opaque, so the grain does not
+ * reach it — which is why land and sea are two different substrates here and were
+ * two layers of one stack before.
+ */
+const sea = page;
+const land = surface;
 /** A visited country: the accent wash over land. */
-const visitedFill = stack("--surface", "--panel-surface", "--accent-quiet");
-/** An untold country: the same wash at half strength (`color-mix(… 50%, transparent)`). */
-const untoldFill = stack("--surface", "--panel-surface", (name) =>
-  withAlpha(siteToken(name, "--accent-quiet"), 0.5)
+const visitedFill = stack("--surface", "--accent-quiet");
+/** An untold country: the copper wash over land (`color-mix(… 18%, transparent)`). */
+const untoldFill = stack("--surface", (name) =>
+  withAlpha(siteToken(name, "--accent-secondary"), 0.18)
 );
-/** The quiet accent plate of a chip or a nav pill, on the page. */
-const quietOnPage = stack("--site-background", "--accent-quiet");
+/** The quiet accent plate of a chip or a nav pill, on the grained page. */
+const quietOnPage: Paint = (name) =>
+  compositeLayers([page(name), siteToken(name, "--accent-quiet")]);
 
 /** The accent at an arbitrary alpha, to price a fill that was considered and refused. */
 const accentAt = (alpha: number): Paint =>
-  stack("--surface", "--panel-surface", (name) => withAlpha(siteToken(name, "--accent"), alpha));
+  stack("--surface", (name) => withAlpha(siteToken(name, "--accent"), alpha));
+
+/**
+ * **The header's resting ink**: `--text-on-accent` at 80 %, on the accent fill it
+ * is written over.
+ *
+ * `color-mix(in srgb, var(--text-on-accent) 80%, transparent)` is white with an
+ * alpha of 0.8 and therefore has no contrast of its own — only the contrast of
+ * the bar under it, which is the whole reason it is composited here rather than
+ * measured as if it were a colour. `site-nav.module.css` explains why the recipe
+ * is a mix and not an `opacity`, and this is what prices the two candidate bars
+ * it chose between.
+ */
+const quietOnAccent = (bar: string): Paint =>
+  stack(bar, (name) => withAlpha(siteToken(name, "--text-on-accent"), 0.8));
 
 interface Measurement {
   /** What the comments call this pair. */
@@ -125,8 +172,8 @@ const MEASUREMENTS = {
     label: "--border-subtle over the page",
     foreground: stack("--site-background", "--border-subtle"),
     background: page,
-    light: 1.33,
-    dark: 1.36,
+    light: 1.17,
+    dark: 1.17,
   },
   "border-subtle/surface": {
     label: "--border-subtle over a card",
@@ -139,99 +186,99 @@ const MEASUREMENTS = {
     label: "--text-accent on a card",
     foreground: token("--text-accent"),
     background: surface,
-    light: 7.1,
+    light: 7.08,
     dark: 8.59,
   },
   "text-muted/surface": {
     label: "--text-muted on a card",
     foreground: token("--text-muted"),
     background: surface,
-    light: 7.27,
+    light: 7.25,
     dark: 8.77,
   },
   "text-accent/page": {
     label: "--text-accent on the page",
     foreground: token("--text-accent"),
     background: page,
-    light: 6.6,
-    dark: 8.3,
+    light: 5.76,
+    dark: 7.1,
   },
   "text-muted/page": {
     label: "--text-muted on the page",
     foreground: token("--text-muted"),
     background: page,
-    light: 6.76,
-    dark: 8.47,
+    light: 5.9,
+    dark: 7.25,
   },
   "control-border/page": {
     label: "--control-border on the page",
     foreground: token("--control-border"),
     background: page,
-    light: 4.77,
-    dark: 6.42,
+    light: 4.16,
+    dark: 5.49,
   },
   "control-border/surface": {
     label: "--control-border on a card",
     foreground: token("--control-border"),
     background: surface,
-    light: 5.13,
+    light: 5.11,
     dark: 6.64,
   },
   "control-border/land": {
     label: "--control-border on the map's land",
     foreground: token("--control-border"),
     background: land,
-    light: 4.64,
-    dark: 6.02,
+    light: 5.11,
+    dark: 6.64,
   },
   "accent-quiet-border/page": {
     label: "--accent-quiet-border over the page",
     foreground: stack("--site-background", "--accent-quiet-border"),
     background: page,
-    light: 1.78,
-    dark: 1.84,
+    light: 1.57,
+    dark: 1.57,
   },
   "accent-quiet-border/surface": {
     label: "--accent-quiet-border over a card",
     foreground: stack("--surface", "--accent-quiet-border"),
     background: surface,
-    light: 1.82,
+    light: 1.83,
     dark: 1.85,
   },
   "accent/surface": {
     label: "--accent on a card",
     foreground: token("--accent"),
     background: surface,
-    light: 4.87,
+    light: 4.86,
     dark: 3.4,
   },
   "accent/page": {
     label: "--accent on the page",
     foreground: token("--accent"),
     background: page,
-    light: 4.53,
-    dark: 3.28,
+    light: 3.96,
+    dark: 2.81,
   },
   "surface/page": {
     label: "a card's fill against the page",
     foreground: surface,
     background: page,
-    light: 1.08,
-    dark: 1.04,
+    light: 1.23,
+    dark: 1.21,
   },
   "land/sea": {
     label: "the map's land against its sea",
     foreground: land,
     background: sea,
-    light: 1.1,
-    dark: 1.1,
+    light: 1.23,
+    dark: 1.21,
   },
   "text-accent/land": {
     label: "--text-accent on the map's land",
     foreground: token("--text-accent"),
     background: land,
-    light: 6.43,
-    dark: 7.79,
+    light: 7.08,
+    dark: 8.59,
   },
   "visited-fill/land": {
     label: "a visited country's fill against bare land",
@@ -244,36 +291,43 @@ const MEASUREMENTS = {
     label: "an untold country's half-strength fill against bare land",
     foreground: untoldFill,
     background: land,
-    light: 1.07,
-    dark: 1.07,
+    light: 1.33,
+    dark: 1.28,
   },
   "accent-a50/land": {
     label: "the accent at alpha 0.5 against bare land — refused",
     foreground: accentAt(0.5),
     background: land,
-    light: 1.99,
-    dark: 1.69,
+    light: 2.08,
+    dark: 1.73,
   },
   "accent-a80/land": {
     label: "the accent at alpha 0.8 against bare land — refused",
     foreground: accentAt(0.8),
     background: land,
-    light: 3.19,
-    dark: 2.43,
+    light: 3.45,
+    dark: 2.6,
+  },
+  "accent-secondary/land": {
+    label: "--accent-secondary, the untold country's outline, on the map's land",
+    foreground: token("--accent-secondary"),
+    background: land,
+    light: 7.65,
+    dark: 6.01,
   },
   "text-accent/visited-fill": {
     label: "--text-accent on the accent end of the card tile's gradient",
     foreground: token("--text-accent"),
     background: visitedFill,
-    light: 5.66,
-    dark: 6.75,
+    light: 6.18,
+    dark: 7.49,
   },
   "text-accent/quiet-on-page": {
     label: "--text-accent on a quiet accent pill, on the page",
     foreground: token("--text-accent"),
     background: quietOnPage,
-    light: 5.8,
-    dark: 7.21,
+    light: 5.09,
+    dark: 6.18,
   },
   "text-accent/text-body": {
     label: "--text-accent against the body text beside it",
@@ -282,19 +336,77 @@ const MEASUREMENTS = {
     light: 1.27,
     dark: 1.22,
   },
+  "on-accent/accent": {
+    label: "--text-on-accent on the accent bar",
+    foreground: token("--text-on-accent"),
+    background: token("--accent"),
+    light: 5.44,
+    dark: 5.44,
+  },
+  "accent-quiet-border/accent": {
+    label:
+      "--accent-quiet-border composited on the accent bar — the reason the language pair is a shape",
+    foreground: (name) =>
+      compositeLayers([siteToken(name, "--accent"), siteToken(name, "--accent-quiet-border")]),
+    background: token("--accent"),
+    light: 1,
+    dark: 1,
+  },
+  "on-accent/accent-active": {
+    label: "--text-on-accent on a hovered bar entry",
+    foreground: token("--text-on-accent"),
+    background: token("--accent-active"),
+    light: 7.51,
+    dark: 6.52,
+  },
+  "on-accent-a80/accent": {
+    label: "the header's 80 % white on the OLD `--accent` bar — the reason the bar moved",
+    foreground: quietOnAccent("--accent"),
+    background: token("--accent"),
+    light: 4.09,
+    dark: 4.09,
+  },
+  "on-accent-a80/accent-active": {
+    label: "the header's 80 % white on the `--accent-active` bar — a nav entry at rest",
+    foreground: quietOnAccent("--accent-active"),
+    background: token("--accent-active"),
+    light: 5.43,
+    dark: 4.79,
+  },
+  "on-accent/on-accent-a80": {
+    label: "a bar entry's full white against its 80 % neighbours — a difference, not a contrast",
+    foreground: token("--text-on-accent"),
+    background: quietOnAccent("--accent-active"),
+    light: 1.38,
+    dark: 1.36,
+  },
+  "accent-secondary/accent": {
+    label: "--accent-secondary on the old teal bar — the underline colour that was asked for",
+    foreground: token("--accent-secondary"),
+    background: token("--accent"),
+    light: 1.57,
+    dark: 1.77,
+  },
+  "accent-secondary/accent-active": {
+    label: "--accent-secondary on the darkened bar — the same underline, refused",
+    foreground: token("--accent-secondary"),
+    background: token("--accent-active"),
+    light: 1.14,
+    dark: 2.12,
+  },
   "logo-ink/page": {
     label: "--logo-ink on the page",
     foreground: token("--logo-ink"),
     background: page,
-    light: 10.28,
-    dark: 12.01,
+    light: 8.97,
+    dark: 10.28,
   },
   "logo-accent/page": {
     label: "--logo-accent on the page",
     foreground: token("--logo-accent"),
     background: page,
-    light: 6.6,
-    dark: 8.3,
+    light: 5.76,
+    dark: 7.1,
   },
   "logo-ink/logo-accent": {
     label: "--logo-ink against --logo-accent — the edge the mark must never have",
@@ -302,6 +414,29 @@ const MEASUREMENTS = {
     background: token("--logo-accent"),
     light: 1.56,
     dark: 1.45,
+  },
+  /**
+   * The two country outlines against **each other** — the pair an accessibility
+   * audit measured on 7 September 2026 and the reason `.visited` is now stroked
+   * 3.5 device pixels against `.untold`'s 2.
+   *
+   * It is registered rather than written as prose because it is a real contrast of
+   * this sheet, and because the number is an *argument*: it says the hue carries
+   * nothing, which is why the stroke width has to. If a future palette pulled these
+   * two apart, this line is what would say so — and the thickness could then be
+   * revisited on evidence instead of on memory.
+   *
+   * There is no threshold column for it, deliberately. WCAG sets none for two
+   * non-textual objects distinguished from each other; 1.4.1 asks for a channel
+   * that is not colour, and `tests/e2e/map-equivalent.populated.spec.ts` is what
+   * checks that one exists.
+   */
+  "text-accent/accent-secondary": {
+    label: "the told country's outline against the untold one's — hue alone, measured",
+    foreground: token("--text-accent"),
+    background: token("--accent-secondary"),
+    light: 1.08,
+    dark: 1.43,
   },
   /* `satisfies` and not a type annotation: an annotation widens the keys to
      `string`, and `Citation.measurement` — declared as `keyof typeof
@@ -339,105 +474,13 @@ const CITATIONS: readonly Citation[] = [
     theme: "light",
   },
 
-  // --- src/components/map/visited-countries.module.css — the header table, then
-  //     the `.link:hover` argument, then the count's own line.
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-accent/surface",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-accent/surface",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/surface",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/surface",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/page",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/surface",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/surface",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "accent-quiet-border/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "accent-quiet-border/page",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-accent/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "surface/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "control-border/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "accent-quiet-border/page",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "accent-quiet-border/page",
-    theme: "dark-os",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/surface",
-    theme: "light",
-  },
-  {
-    file: "src/components/map/visited-countries.module.css",
-    measurement: "text-muted/surface",
-    theme: "dark-os",
-  },
-
   // --- src/components/map/world-map.module.css
   {
     file: "src/components/map/world-map.module.css",
-    measurement: "border-subtle/page",
+    measurement: "text-accent/accent-secondary",
     theme: "light",
   },
+  //     The coastline argument, then the three country states.
   {
     file: "src/components/map/world-map.module.css",
     measurement: "border-subtle/page",
@@ -458,12 +501,12 @@ const CITATIONS: readonly Citation[] = [
   },
   {
     file: "src/components/map/world-map.module.css",
-    measurement: "control-border/surface",
+    measurement: "control-border/page",
     theme: "light",
   },
   {
     file: "src/components/map/world-map.module.css",
-    measurement: "control-border/surface",
+    measurement: "control-border/page",
     theme: "dark-os",
   },
   {
@@ -495,6 +538,17 @@ const CITATIONS: readonly Citation[] = [
     file: "src/components/map/world-map.module.css",
     measurement: "text-accent/land",
     theme: "dark-os",
+  },
+
+  {
+    file: "src/components/map/world-map.module.css",
+    measurement: "text-accent/land",
+    theme: "light",
+  },
+  {
+    file: "src/components/map/world-map.module.css",
+    measurement: "accent-secondary/land",
+    theme: "light",
   },
 
   // --- src/components/map/world-map.tsx
@@ -539,10 +593,11 @@ const CITATIONS: readonly Citation[] = [
     theme: "light",
   },
 
-  // --- src/components/timeline/trip-header.module.css
+  // --- src/components/timeline/trip-header.module.css — the exit pills, and the
+  //     token the grain forced them onto.
   {
     file: "src/components/timeline/trip-header.module.css",
-    measurement: "accent/page",
+    measurement: "text-accent/page",
     theme: "light",
   },
   {
@@ -557,13 +612,18 @@ const CITATIONS: readonly Citation[] = [
   },
   {
     file: "src/components/timeline/trip-header.module.css",
-    measurement: "text-accent/text-body",
+    measurement: "text-accent/quiet-on-page",
     theme: "light",
   },
   {
     file: "src/components/timeline/trip-header.module.css",
-    measurement: "text-accent/quiet-on-page",
+    measurement: "accent/page",
     theme: "light",
+  },
+  {
+    file: "src/components/timeline/trip-header.module.css",
+    measurement: "accent/page",
+    theme: "dark-os",
   },
 
   // --- src/components/trips/trip-card.module.css
@@ -694,6 +754,110 @@ const CITATIONS: readonly Citation[] = [
     theme: "light",
   },
 
+  // --- src/components/site/site-brand.module.css — why the ink token is
+  //     re-pointed on the bar rather than kept.
+  //
+  //     The three `on-accent` readings that used to be registered here were the
+  //     medallion's: what the mark measured against the disc it sat in. The owner
+  //     chose the "Deux temps" lock-up on 7 September 2026 and the disc went with
+  //     the choice, so the pairs it justified left the file. What the wordmark
+  //     itself reads against the bar is `on-accent/accent-active`, and it is
+  //     registered where the bar is declared — `site-nav.module.css`, below.
+  {
+    file: "src/components/site/site-brand.module.css",
+    measurement: "logo-ink/logo-accent",
+    theme: "light",
+  },
+
+  /* --- src/components/site/site-nav.module.css — the bar, the two states of an
+     entry, and the two refusals TIW-38 wrote down.
+
+     The file no longer quotes `on-accent/accent` (5.44) nor
+     `accent-quiet-border/accent` (1.00): both belonged to the `--accent` bar and
+     to the filled language pill that replaced. What it quotes instead is the pair
+     that decided the new bar — 80 % white at 4.09:1 on `--accent` against 5.43:1
+     on `--accent-active` — and the pair that decided the underline's colour. */
+
+  // `.bar`, on why the fill moved: 4.09 / 5.43 / 4.79 / 7.51 / 6.52.
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent-a80/accent",
+    theme: "light",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent-a80/accent-active",
+    theme: "light",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent-a80/accent-active",
+    theme: "dark-os",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent/accent-active",
+    theme: "light",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent/accent-active",
+    theme: "dark-os",
+  },
+
+  // `.link`, the resting entry: 5.43 / 4.79.
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent-a80/accent-active",
+    theme: "light",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent-a80/accent-active",
+    theme: "dark-os",
+  },
+
+  // `.link:hover`, the entry under the pointer: 5.43 → 7.51.
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent-a80/accent-active",
+    theme: "light",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent/accent-active",
+    theme: "light",
+  },
+
+  // The current-page underline: the secondary colour refused at 1.57 and 1.14,
+  // the white it is drawn in at 7.51, and the label's second channel at 1.38 /
+  // 1.36.
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "accent-secondary/accent",
+    theme: "light",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "accent-secondary/accent-active",
+    theme: "light",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent/accent-active",
+    theme: "light",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent/on-accent-a80",
+    theme: "light",
+  },
+  {
+    file: "src/components/site/site-nav.module.css",
+    measurement: "on-accent/on-accent-a80",
+    theme: "dark-os",
+  },
+
   // --- src/components/trips/latest-trips.module.css
   {
     file: "src/components/trips/latest-trips.module.css",
@@ -709,6 +873,11 @@ const CITATIONS: readonly Citation[] = [
   },
 
   // --- src/components/site/brand-art.ts
+  //     The mark the owner supplied on 7 September 2026 has no accented part, so
+  //     the two `logo-accent/page` readings left the file with the trajectory
+  //     they justified. The ink/accent pair stays: the header still recounts why
+  //     the *old* mark needed a clearance, and a historical claim quoted with a
+  //     live number has to keep being a live number.
   { file: "src/components/site/brand-art.ts", measurement: "logo-ink/logo-accent", theme: "light" },
   {
     file: "src/components/site/brand-art.ts",
@@ -717,9 +886,6 @@ const CITATIONS: readonly Citation[] = [
   },
   { file: "src/components/site/brand-art.ts", measurement: "logo-ink/page", theme: "light" },
   { file: "src/components/site/brand-art.ts", measurement: "logo-ink/page", theme: "dark-os" },
-  { file: "src/components/site/brand-art.ts", measurement: "logo-accent/page", theme: "light" },
-  { file: "src/components/site/brand-art.ts", measurement: "logo-accent/page", theme: "dark-os" },
-  { file: "src/components/site/brand-art.ts", measurement: "logo-ink/logo-accent", theme: "light" },
 
   // --- README.md — the "Marque" and "Carte" sections quote the same pairs, in
   //     French decimal notation.
@@ -727,8 +893,6 @@ const CITATIONS: readonly Citation[] = [
   { file: "README.md", measurement: "logo-ink/logo-accent", theme: "dark-os" },
   { file: "README.md", measurement: "logo-ink/page", theme: "light" },
   { file: "README.md", measurement: "logo-ink/page", theme: "dark-os" },
-  { file: "README.md", measurement: "logo-accent/page", theme: "light" },
-  { file: "README.md", measurement: "logo-accent/page", theme: "dark-os" },
   { file: "README.md", measurement: "border-subtle/page", theme: "light" },
 ];
 
@@ -747,8 +911,6 @@ const CITATIONS: readonly Citation[] = [
 const NOT_A_CONTRAST: Readonly<Record<string, readonly string[]>> = {
   // The Open Graph image is 1200 x 630 — an aspect ratio, not a contrast.
   "src/app/share.ts": ["1.91"],
-  // The WCAG threshold the table above is judged against, quoted as a threshold.
-  "src/components/map/visited-countries.module.css": ["4.5"],
 };
 
 /** Two decimals, the precision the comments are written in. */
@@ -764,7 +926,13 @@ describe("the sheet the site actually ships", () => {
 
     // A primitive from `@thomascaron/ui`, reachable only if the import resolved.
     expect(light.tokens.get("--tc-teal-515")).toBe("#087487");
-    expect(resolveToken(light, "--site-background")).toBe("#deedf0");
+    /**
+     * Paper in light since @thomascaron/ui v0.2.0, `mist` in dark. The pair is
+     * asserted rather than the light one alone: the whole point of the paper
+     * family is that it warms the GROUNDS and only the grounds, so a dark theme
+     * that had gone warm too would be the change having escaped its scope.
+     */
+    expect(resolveToken(light, "--site-background")).toBe("#f2e9d6");
     expect(resolveToken(theme("dark-os"), "--site-background")).toBe("#0f191c");
   });
 

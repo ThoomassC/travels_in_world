@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -5,20 +6,19 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 // caught by the `"**/map/*"` half of the geometry façade's guard, which compares
 // strings and cannot tell `src/components/map` from a relative spelling of
 // `src/map`. See the header of `src/components/map/index.ts`.
-import {
-  untoldOnlyCountryCodes,
-  VisitedCountries,
-  WorldMap,
-  type TripMark,
-} from "@/components/map";
+import { untoldOnlyCountryCodes, WorldMap, type TripMark } from "@/components/map";
+import { CountryList } from "@/components/countries/country-list";
+import { panelPhotos } from "@/components/photos/collection";
 import { FreshTripBanner } from "@/components/trips/fresh-trip-banner";
-import { collatorFor, countryNameOf } from "@/components/trips/format";
+import { ProjectPurpose } from "@/components/site/project-purpose";
+import { PAGE_MARK } from "@/components/site/site-nav";
 import { LatestTrips } from "@/components/trips/latest-trips";
-import { TripCard } from "@/components/trips/trip-card";
-import { listTripSummaries } from "@/content/trips";
+import { TripPanel } from "@/components/trips/trip-panel";
+import { loadTrips, listWishedCountries } from "@/content/trips";
 import { freshestTrip } from "@/domain/freshness";
-import { hasStory } from "@/domain/trip";
+import { hasStory, visitedPlaces } from "@/domain/trip";
 import { buildWorldGeometry, projectPoint } from "@/map";
+import { countryEntries } from "./pays/entries";
 import { localePathname } from "@/i18n/pathname";
 import { tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
@@ -65,7 +65,7 @@ export default async function HomePage({ params }: HomePageProps) {
    * flatten. The façade memoises its parse for the whole build, so a second call
    * would cost no second disk read — only a second projection of the same trips.
    */
-  const trips = await listTripSummaries();
+  const trips = await loadTrips();
   const t = await getTranslations("home");
 
   /**
@@ -94,6 +94,20 @@ export default async function HomePage({ params }: HomePageProps) {
     // Duplicates are the normal case — several trips share a country — and
     // `buildWorldGeometry` de-duplicates on its side. Flattening is all this owes.
     visitedCountryCodes: trips.flatMap((trip) => [...trip.countryCodes]),
+    /*
+      **The wish list** (TIW-39), read here because this is the page that holds
+      both façades — the content one for the codes, the geometry one for the
+      shapes. `buildWorldGeometry` is what refuses a code the basemap cannot draw
+      or a country a trip has already reached; the read itself is four lines of
+      YAML and is not memoised, which its own note in `src/content/loader.ts`
+      prices.
+
+      Awaited on its own rather than in a `Promise.all` with the trips above: the
+      two are independent, but the trips are already awaited by the line that
+      needs them for `visitedCountryCodes`, so pairing them would suggest a
+      waterfall that is not there.
+    */
+    wishedCountryCodes: await listWishedCountries(),
     locale,
   });
 
@@ -141,9 +155,6 @@ export default async function HomePage({ params }: HomePageProps) {
           {
             slug: trip.slug,
             title: trip.title,
-            // Read only by `zonesOf`, which sorts a zone's panel by date
-            // descending rather than trusting the order this list arrives in.
-            startDate: trip.startDate,
             placeName: trip.firstArrival.name,
             /**
              * **Where this marker leads, and the one decision the map layer does
@@ -155,8 +166,9 @@ export default async function HomePage({ params }: HomePageProps) {
              * HTML with a green build. The destination is chosen from what
              * certainly exists: the trip's own entry in the listing, which is
              * exactly where « Récit à venir », its dates and its countries are
-             * written. Same move `visited-countries.tsx` records making after
-             * measuring that its `#pays-xx` fragment dangled.
+             * written. Same move the map's country list made after measuring
+             * that its `#pays-xx` fragment dangled — the finding outlived the
+             * list, in the header of `tests/e2e/dead-links.populated.spec.ts`.
              *
              * The fragment is `#voyage-<slug>`, the id `TripCatalogue` puts on
              * each entry — the same scheme the trip page uses to point back at a
@@ -188,37 +200,51 @@ export default async function HomePage({ params }: HomePageProps) {
   });
 
   /**
-   * The body of each trip's row in the map's selection panel (TIW-14).
+   * The body of each trip's panel on the map.
    *
-   * **Built here, and handed to the map as rendered nodes.** A card needs `Intl`
-   * date formatting, the `trips` namespace and a locale-prefixed href — none of
-   * which `src/components/map/**` may reach without ending its own rule that the
-   * whole layer renders under jsdom from a seven-shape fixture
+   * **What this used to be, and why it changed.** Until now it was one
+   * `TripCard` per trip, and the map stacked *every card of a zone* into one
+   * panel: clicking Paris opened « Les 6 voyages à cet endroit » with
+   * Gand-Bruges at the top, because a zone was named after its most recent trip.
+   * The owner's report is the specification — « quand je clique sur un voyage je
+   * veux le descriptif avec les photos du voyage, pas les autres voyages du pays
+   * » — so a panel now belongs to one trip and carries its description. The
+   * markers a finger would cover along with it are still reachable, as a short
+   * list of links `world-map.tsx` appends under « Aussi à cet endroit ».
+   *
+   * **Built here, and handed to the map as rendered nodes**, which is the one
+   * thing that did not change. A body needs `Intl` date formatting, two message
+   * namespaces and a locale-prefixed href — none of which `src/components/map/**`
+   * may reach without ending its own rule that the whole layer renders under
+   * jsdom from a seven-shape fixture
    * (`docs/adr/0003-carte-svg-inerte-et-balises-html.md`). This page is already
-   * the one file holding both façades and both narrowed types, so it is the
-   * right place for the join. The map decides *which* card goes in *which*
-   * panel; it never decides what a card looks like.
+   * the one file holding both façades and both narrowed types, so it is where the
+   * join belongs. The map decides *which* body goes in *which* panel; it never
+   * decides what a body looks like.
    *
-   * `TripCard` and not a second card written for the panel: it is exactly the
-   * criterion's list — cover, title, dates, duration and a read affordance — and
-   * a copy would be a second place for the date format to drift. `headingLevel:
-   * 3` sits under the panel's own `<h2>`.
+   * `TripCard` is not reused: a card is a *listing* row — a cover, a title and a
+   * read affordance, with the title as its link — and the panel's `<h2>` already
+   * carries the title, so a card here would print it twice and link the second
+   * one. `TripCard` is untouched and still renders « Derniers voyages » below.
    *
-   * The cards live in the flight payload whether a panel opens or not. Measured
-   * on the four-trip fixture, that is the cost recorded in this ticket's report;
-   * the alternative — serialising trip data and building the card in the browser
-   * — would have put the formatting, the namespace and the markup in the client
-   * bundle, which is the budget this ticket must not spend.
+   * The bodies live in the flight payload whether a panel opens or not, which is
+   * the cost this ticket's report measures on a real build.
    */
-  const tripCards = new Map(
+  const tripPanels = new Map<string, ReactNode>(
     trips.map((trip) => [
       trip.slug,
-      <TripCard
+      <TripPanel
         key={trip.slug}
         trip={trip}
         locale={locale}
-        headingLevel={3}
-        isNew={trip.slug === fresh?.slug}
+        /*
+          Resolved here and not inside the component, for the reason every prop
+          of that file has: `visitedPlaces` is a domain function, and a component
+          that called it could no longer be rendered from a literal in a unit
+          test. The page holds the façades; the component holds the markup.
+        */
+        cityNames={visitedPlaces(trip).map((place) => place.name)}
+        photos={panelPhotos(trip)}
       />,
     ])
   );
@@ -230,13 +256,41 @@ export default async function HomePage({ params }: HomePageProps) {
       next Tab continues from the top of the page and the reader has skipped
       nothing. The `id` comes from `./main-content` because the link lives in the
       layout and the `<main>` lives here, one per document.
-    */
-    <main id={MAIN_CONTENT_ID} tabIndex={-1}>
-      <section className={styles.hero}>
-        <h1 className={styles.title}>{t("title")}</h1>
-        <p className={styles.intro}>{t("intro")}</p>
 
-        {/*
+      `data-page` is how the header knows which entry to underline (TIW-38). It is
+      read by `site-nav.module.css` through `body:has(main[data-page="carte"])`,
+      backwards, in CSS — which is what lets a nav rendered by the LAYOUT mark the
+      current page without a client component, a prop threaded through every route
+      or a request read. It carries nothing to assistive technology; `SiteNav`'s
+      header says why `aria-current="page"` is still absent and what names this
+      page instead.
+    */
+    <main id={MAIN_CONTENT_ID} tabIndex={-1} data-page={PAGE_MARK.map}>
+      {/*
+        **The title is announced and never drawn** (TIW-38, at the owner's
+        request), and the introduction is gone entirely.
+
+        The `<h1>` is HIDDEN and not deleted, and that is not the same decision
+        twice. A document with no `<h1>` has no heading outline — every other page
+        of this site has one, `tests/e2e` checks the outline of the four screens,
+        and a search result would lose the only thing naming this page. Hiding it
+        costs the composition nothing and keeps all three.
+
+        The introduction had no such job, so it is removed rather than hidden: a
+        paragraph only a screen reader receives is a paragraph nobody decided to
+        write for a screen reader. The message key went with it.
+
+        **And the `<section>` that used to wrap these is gone too**, which is what
+        actually lets the map fill the screen. It was a grid row of zero height —
+        its only remaining child is absolutely positioned — but a row of zero
+        height still takes a `row-gap`, so the map started 24 px lower than the
+        arithmetic below expected and its last degrees of latitude fell under the
+        fold. A wrapper that contains nothing laid out is a wrapper that only
+        costs.
+      */}
+      <h1 className={styles.visuallyHidden}>{t("title")}</h1>
+
+      {/*
           The banner (TIW-19), and it is here — above the map, below the
           introduction — for the acceptance criterion's reason: a returning
           reader must see what is new *before* deciding where to look. It is
@@ -248,60 +302,106 @@ export default async function HomePage({ params }: HomePageProps) {
           and not an optional, so the empty state is this branch and cannot be a
           component quietly returning `null`.
         */}
-        {fresh === undefined ? null : <FreshTripBanner trip={fresh} locale={locale} />}
+      {fresh === undefined ? null : <FreshTripBanner trip={fresh} locale={locale} />}
 
-        {/*
+      {/*
+        **The map, on the wide track** (TIW-38). It is a direct child of `<main>`
+        so `[data-bleed]` can reach it: `grid-column` is a property of a grid
+        ITEM, so a map nested one level deeper would have been laid out by the
+        section and never by the page.
+
+        It was also why the countries list below used to be a sibling rather than
+        the map's neighbour inside a wrapper. That list is gone (see the note
+        after this block), and the reason survives it: each block on this page
+        sits on the track it belongs to, and the map is the only one on the wide
+        one.
+
+        A wrapper and not the attribute on the `<figure>` itself: `WorldMap` owns
+        its own root element and takes no `className`, and widening its props so a
+        page can dress it is the coupling ADR 0003 keeps out of that layer.
+      */}
+      <div data-bleed>
+        <WorldMap
+          countries={world.countries}
+          visited={toldCountries}
+          untold={untoldCountries}
+          /*
+            The wish list (TIW-39). Handed straight through: `buildWorldGeometry`
+            already read `content/wishlist.yaml`, refused any code the basemap
+            cannot draw or a trip has already reached, sorted the survivors by
+            localised name and computed each one's anchor. This page's only job is
+            the one it does for every other bucket — carrying geometry across the
+            boundary `docs/adr/0003` draws, so the map layer imports no façade.
+          */
+          wished={world.wished}
+          marks={marks}
+          world={{ width: world.width, height: world.height }}
+          tripPanels={tripPanels}
+        />
+      </div>
+
+      {/*
+        **The map's index on a phone, and only on a phone.**
+
+        Below 768 px the drawing carries no markers — measured, thirteen 44 px
+        targets inside 130 × 98 px on a 390 px screen, and `world-map.module.css`
+        holds the numbers and the argument. What replaces them is not a smaller
+        map but words: one row per country, its silhouette beside its name and its
+        counts, each opening that country's own page. Above the breakpoint this
+        block is `display: none` and leaves the document's accessibility tree, so
+        a desktop reader gains no duplicate of the navigation the map already is.
+
+        The rows are the very ones `/{locale}/pays` renders, through
+        `countryEntries` — one assembly, so the two pages cannot come to order or
+        count the same countries differently.
+      */}
+      <div className={styles.phoneCountries}>
+        <CountryList countries={countryEntries(trips, locale)} locale={locale} />
+      </div>
+
+      {/*
           No wrapper any more: the height cap that used to live in this page's
           `.mapFrame` moved into the map's own stylesheet with TIW-14. The map now
           owns a panel and three controls as well as a drawing, so its box is its
           own business — and this page no longer computes a ratio for a stylesheet
           it does not own.
         */}
-        <WorldMap
-          countries={world.countries}
-          visited={toldCountries}
-          untold={untoldCountries}
-          marks={marks}
-          world={{ width: world.width, height: world.height }}
-          tripCards={tripCards}
-        />
+      {/*
+          **« Les pays visités » was here, and it is gone at the owner's request.**
+          Deleted rather than hidden, and the component with it: a block nothing
+          renders is a block that rots, and this one carried enough measured
+          reasoning that leaving it half-alive would have been worse than either
+          keeping or removing it.
 
-        {/*
-          The map's textual equivalent (TIW-15), and it sits *outside* the map's
-          own box on purpose. The map caps itself at `45vh × aspect` — about
-          691 px on a 1152 px desktop — so a list rendered inside it would be a
-          centred column two thirds of the page wide, with its `h2` out of line
-          with the "Derniers voyages" `h2` right below. The reading order is what
-          the acceptance criterion asks for ("sous la carte"), and DOM order gives
-          it. (Until TIW-14 the cap was this page's `.mapFrame`; the wrapper is
-          gone and the sibling relation is unchanged.)
+          **What replaced it, and what did not.** The inventory of "which
+          countries, how many trips" is now the Pays tab (`/voyages`, grouped by
+          country) and the Villes tab beside it — the site did not lose it, this
+          page did. What this page loses is the *join* between the drawing and
+          those names: a reader who cannot use the map now has the marker list —
+          thirteen real links, each named "titre, lieu" and, for an untold trip,
+          "— récit à venir" — plus the `<figcaption>`'s count. That still carries
+          1.1.1 for an `aria-hidden` drawing.
 
-          **`trips` and not `world.visited`.** The equivalent is derived from the
-          content, never from the geometry beside it: `buildWorldGeometry` throws
-          for a declared code it cannot draw, so a state with no country shape is
-          a state with no declared code, and a list fed from the tinted subset
-          would have been empty in exactly the states where the drawing is
-          missing. One failure, both channels — which is the opposite of what the
-          "map failed" criterion asks for. The two counts still agree: the
-          caption counts the tinted subset, which `@/map` selects from these very
-          codes.
-
-          The naming and the collation come from the listing's own helpers, so a
-          country reads the same here and on `/fr/voyages`, and this page stays
-          the one place that holds both façades.
+          **The debt this opens, said plainly rather than discovered later.**
+          `world-map.module.css` recorded this list as the channel WCAG 1.4.1
+          rests on, because since TIW-38 the told/untold distinction in the
+          drawing is copper against teal — a difference of hue alone. It is
+          inert today: every published trip is `story: unwritten`, so the map
+          paints one tint and there is no colour-only distinction to carry. It
+          becomes real at the **first published récit**, and the fix then is a
+          shape difference in the drawing (the dashed stroke TIW-38 replaced),
+          not a list a reader must scroll to.
         */}
-        <VisitedCountries
-          trips={trips}
-          labels={{
-            countryName: (code) => countryNameOf(locale, code),
-            compare: collatorFor(locale).compare,
-          }}
-          tripHref={(slug) => localePathname({ href: tripPath(slug), locale })}
-          allTripsHref={localePathname({ href: tripsPath(), locale })}
-        />
-      </section>
 
       <LatestTrips trips={trips} locale={locale} freshSlug={fresh?.slug} />
+
+      {/*
+        Last on the page (TIW-38), which is the whole of its placement argument:
+        a reader meets the map, then the trips, and only then the person who
+        writes them. Putting it above the trips would make the home page an
+        introduction to someone rather than a way into a journal.
+      */}
+      <ProjectPurpose />
     </main>
   );
 }

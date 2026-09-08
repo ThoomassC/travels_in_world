@@ -55,5 +55,11 @@ import "server-only";
  * (`tests/lint/content-facade.test.ts`, `tests/content/trips.test.ts`).
  */
 
-export { findTrip, listTripSummaries, loadTrips, tripStaticParams } from "./loader";
+export {
+  findTrip,
+  listTripSummaries,
+  listWishedCountries,
+  loadTrips,
+  tripStaticParams,
+} from "./loader";
 export type { TripDetail, TripSummary } from "./loader";

@@ -16,18 +16,6 @@ export type TripMark = {
   /** The trip's slug, used as the React key and nowhere else. */
   readonly slug: string;
   readonly title: string;
-  /**
-   * The trip's first calendar day, `YYYY-MM-DD` — never a `Date`, per
-   * `docs/adr/0001-domain-purity.md`.
-   *
-   * Read by `zonesOf` and by nothing else: the trip panel lists the trips of one
-   * zone **date descending**, which is an acceptance criterion of TIW-14. The
-   * content façade already hands the markers in that order and this component
-   * never re-sorts them, so the field looks redundant — and that is exactly why
-   * it is here. A criterion satisfied by an upstream sort is a criterion nothing
-   * in this layer would notice losing.
-   */
-  readonly startDate: string;
   /** The first place of the itinerary — the point the marker is anchored on. */
   readonly placeName: string;
   /** Already locale-prefixed by the page; the component never builds a URL. */
@@ -72,12 +60,38 @@ export type TripMark = {
   readonly story: StoryState;
 };
 
+/**
+ * A screen-space offset, in `rem`, that pulls a marker off a spot it shares with
+ * another — **never** folded into the position above it.
+ *
+ * `rem` and not a percentage of the frame, and the unit is the whole decision.
+ * A percentage is a fraction of *one* frame; the reader chooses the frame, so a
+ * percentage baked at build time is a distance that means something different at
+ * every zoom. Worse, `worldPointOf` converts a position back into world units, so
+ * an offset folded into the position stops being a distance on screen at all and
+ * becomes a distance **on the Earth** — see the note on {@link spreadCoincident}
+ * and the case in `tests/components/map/spread.test.ts` that measures it.
+ *
+ * In `rem`, the separation is a constant number of pixels at every zoom, which is
+ * the only thing a 44 px target ever needed, and it scales with a reader's own
+ * default type size the way the target itself does.
+ */
+export type Nudge = {
+  readonly x: number;
+  readonly y: number;
+};
+
 export type PlacedMark = {
   readonly mark: TripMark;
   /** Distance from the frame's left edge, in percent of its width. */
   readonly leftPercent: number;
   /** Distance from the frame's top edge, in percent of its height. */
   readonly topPercent: number;
+  /**
+   * Absent for the overwhelming majority of markers — a marker that shares its
+   * spot with nobody is returned untouched, object identity included.
+   */
+  readonly nudge?: Nudge;
 };
 
 /**
@@ -89,6 +103,15 @@ export type PlacedMark = {
 const DECIMALS = 2;
 
 const round = (value: number): number => Number(value.toFixed(DECIMALS));
+
+/**
+ * Three decimals for a `rem`, where two are enough for a percentage. The unit is
+ * about sixteen pixels, so a hundredth of one is a sixth of a pixel and two
+ * decimals visibly flatten the spread's circle — 0.748 rem of radius instead of
+ * 0.750 on the diagonal, measured. Three costs one character per marker on the
+ * two or three markers that carry the property at all.
+ */
+const roundRem = (value: number): number => Number(value.toFixed(3));
 
 /**
  * Where each marker sits inside the frame, as a percentage of it.
@@ -136,44 +159,67 @@ export function placeMarks(marks: readonly TripMark[], frame: Frame): readonly P
 }
 
 /**
- * How far a coincident marker is pushed off the shared point, in percent of the
- * frame's width.
+ * How close two markers have to be, in percent of the frame's width, before they
+ * count as landing on the same spot.
+ *
+ * A percentage is the right unit *here* and the wrong one for the offset — the
+ * question this answers is "does the build's own crop put these two on the same
+ * pixel", and the build's own crop is exactly what a percentage is a fraction of.
+ * Where the reader's zoom takes them afterwards is the offset's problem, and the
+ * offset is in `rem`.
+ */
+const COINCIDENT_CELL_PERCENT = 1.6;
+
+/**
+ * How far a coincident marker is pushed off the shared point **on screen**, in
+ * `rem`.
  *
  * Small on purpose. This is an *unreachability* fix, not a legibility one: two
  * trips leaving from the same city are one of the likeliest shapes this journal
  * will hold, and two `<a>` at identical coordinates means the one underneath
- * answers no click at all. A 1.6 % nudge exposes a crescent of each marker
- * without moving any of them off the country it names.
+ * answers no click at all. 0.75 rem is 12 px at the root size — a bit over a
+ * quarter of the 2.75 rem target, so a crescent of each marker stays exposed
+ * while both dots still read as one place.
  */
-const SPREAD_RADIUS_PERCENT = 1.6;
+const SPREAD_RADIUS_REM = 0.75;
 
 /** Where the first marker of a group goes: straight up, so a pair reads as a pair. */
 const SPREAD_START_RADIANS = -Math.PI / 2;
 
 /**
- * Pushes markers that landed on the very same spot onto a small deterministic
- * circle around it.
+ * Gives markers that landed on the very same spot a small deterministic circle of
+ * **screen** offsets — and leaves every one of them exactly where its coordinates
+ * put it.
  *
- * **This is a mitigation and not a fix, and the difference matters.** Fully
- * separating two 44 px targets would require knowing the map's rendered width,
- * which is fluid and unknown at build time: an offset expressed in percent
- * cannot promise a distance in pixels. What this buys is that every marker has
- * *some* exposed area for a pointer, instead of one being wholly buried. Each
- * `<a>` is still 44 px in its own right, and the keyboard never had the problem —
- * both links are in the tab order whatever they overlap. Real separation needs
- * clustering at low zoom, which belongs to TIW-14.
+ * **That separation is the correction of a defect that reached the site**, and it
+ * is worth stating plainly because the version it replaces was deliberate. That
+ * one added the offset to the two percentages, and `worldPointOf` then turned the
+ * result back into world units: the nudge became a fixed distance *on the Earth*,
+ * baked into the prerendered marker, growing on screen as the reader zoomed in.
+ * The note in `./zones.ts` called that growth the fix. It is not — it is a marker
+ * drawn away from the town it names. Measured on the journal's own content:
+ *
+ *   Annecy and Genève, 0.9 world units apart, drawn 4.6 units apart — one pushed
+ *   ~150 km north of the lake, the other ~150 km south of it. La Rochelle, Les
+ *   Sables-d'Olonne and Noirmoutier, the same radius, two of the three out in the
+ *   Atlantic. The coordinates in `content/trips/**` were right the whole time.
+ *
+ * So the position stays true and the offset goes out separately, in `rem`, for
+ * the stylesheet to apply as a `translate` on top of it. A constant number of
+ * pixels at every zoom — which is the only promise a 44 px target ever needed,
+ * and the one the old note said an offset "expressed in percent cannot" make.
+ *
+ * **It remains a mitigation and not a separation.** What it buys is that every
+ * marker has *some* exposed area for a pointer instead of one being wholly
+ * buried. Each `<a>` is still 44 px in its own right, and the keyboard never had
+ * the problem — both links are in the tab order whatever they overlap. Real
+ * separation needs clustering at low zoom, which belongs to TIW-14.
  *
  * Deterministic in three ways, because a prerendered page must be
  * byte-identical between two builds of the same content: grouping is on the
  * rounded percentages already computed, the order inside a group is the input
  * order (so the content façade's sort decides), and the angles are fixed
  * divisions of the circle rather than anything drawn from a generator.
- *
- * The vertical component is scaled by the frame's aspect ratio. A percentage of
- * the height is not the same number of pixels as a percentage of the width, so
- * without it the "circle" is an ellipse flattened by the same 1.92 factor as the
- * map — and a pair of markers separates almost twice as much horizontally as
- * vertically for no reason a reader could guess.
  */
 export function spreadCoincident(
   placed: readonly PlacedMark[],
@@ -202,8 +248,8 @@ export function spreadCoincident(
    * TIW-14's job.
    */
   const cellOf = (entry: PlacedMark): string => {
-    const column = Math.round(entry.leftPercent / SPREAD_RADIUS_PERCENT);
-    const row = Math.round(entry.topPercent / (SPREAD_RADIUS_PERCENT * verticalScale));
+    const column = Math.round(entry.leftPercent / COINCIDENT_CELL_PERCENT);
+    const row = Math.round(entry.topPercent / (COINCIDENT_CELL_PERCENT * verticalScale));
 
     return `${column}|${row}`;
   };
@@ -233,12 +279,20 @@ export function spreadCoincident(
     }
     group.forEach((entry, index) => {
       const angle = SPREAD_START_RADIANS + (index * 2 * Math.PI) / group.length;
+      /*
+        The position is copied across untouched and the circle goes into `nudge`.
+        No aspect correction on the vertical component, unlike the version this
+        replaces: that correction existed because the two axes were percentages
+        of two different lengths, and a rem is a rem in both.
+      */
       offsets.set(entry, {
         mark: entry.mark,
-        leftPercent: round(entry.leftPercent + SPREAD_RADIUS_PERCENT * Math.cos(angle)),
-        topPercent: round(
-          entry.topPercent + SPREAD_RADIUS_PERCENT * verticalScale * Math.sin(angle)
-        ),
+        leftPercent: entry.leftPercent,
+        topPercent: entry.topPercent,
+        nudge: {
+          x: roundRem(SPREAD_RADIUS_REM * Math.cos(angle)),
+          y: roundRem(SPREAD_RADIUS_REM * Math.sin(angle)),
+        },
       });
     });
   }

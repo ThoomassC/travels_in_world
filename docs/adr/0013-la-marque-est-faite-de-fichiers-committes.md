@@ -1,5 +1,19 @@
 # 13. La marque est faite de fichiers committés, et ce sont des octets qu'on vérifie
 
+> **Mise à jour du 7 septembre 2026 — le dessin a changé deux fois depuis.** Cette
+> décision porte sur la _forme_ de la marque (des fichiers committés, une source de
+> vérité, un test de dérive) et cette forme est intacte. Ce qui a bougé, c'est le
+> dessin : la comète décrite ci-dessous a été remplacée par un avion incliné à 21°,
+> puis, à la demande du propriétaire, par un avion vu de face avec une aiguille de
+> compas découpée dans le fuselage. Les conséquences pour un lecteur de cette page :
+> la constante s'appelle `BRAND_PLANE_PATH` et non plus `BRAND_COMET_PATH` ; il n'y a
+> plus de trajectoire nulle part, donc plus de contrainte encre/accent à respecter
+> dans le logo ; et le chemin a désormais **deux contours**, peints en
+> `fill-rule: evenodd`, ce qui ajoute une propriété au test de dérive. Les relevés
+> ci-dessous sont ceux de la comète et sont laissés tels quels : un ADR porte les
+> mesures de sa décision, pas l'état courant. Le README et
+> `src/components/site/brand-art.ts` portent celui-là.
+
 - **Statut** : accepté
 - **Date** : 2026-09-01
 - **Contexte du ticket** : TIW-23 (marque provisoire — logotype, favicon, image

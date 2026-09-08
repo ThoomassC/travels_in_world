@@ -1,6 +1,8 @@
 import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
 import type { Continent } from "@/domain/continent";
+import { localePathname } from "@/i18n/pathname";
+import { countryPath, countrySlugsByCode } from "@/i18n/paths";
 import type { Locale } from "@/i18n/routing";
 import { buildCatalogue } from "./catalogue";
 import type { TripEntry } from "./entry";
@@ -14,6 +16,9 @@ import styles from "./trip-catalogue.module.css";
  * the reader's own alphabetical order and each trip in the content façade's —
  * `startDate` descending, ties broken by `slug`.
  *
+ * **Unless there is only one continent**, in which case its heading is dropped and
+ * the countries move up a level. The long note is at the branch itself.
+ *
  * All of the arranging is `buildCatalogue`, which is a pure function tested
  * against the three states the acceptance criteria name (zero, one, sixty
  * trips). This component supplies the three things that function refuses to
@@ -23,8 +28,9 @@ import styles from "./trip-catalogue.module.css";
  * **Structure by headings, not by landmarks.** Sixty trips over twelve countries
  * and five continents would be seventeen labelled `<section>` regions, and a
  * screen reader's landmark list would then be less useful than no list at all.
- * The heading outline — `h1` page, `h2` continent, `h3` country, `h4` trip — is
- * complete and is what a reader actually walks a long listing with. The one
+ * The heading outline — `h1` page, `h2` continent, `h3` country, `h4` trip, and
+ * `h1`, `h2` country, `h3` trip when there is a single continent — is complete
+ * either way and is what a reader actually walks a long listing with. The one
  * landmark is `<main>`, which the page owns.
  */
 
@@ -56,9 +62,28 @@ export type TripCatalogueProps = {
    * reader is promised.
    */
   readonly freshSlug?: string;
+  /**
+   * Each trip's filter tokens, keyed on its slug — `all country-FR year-2024`.
+   *
+   * **The catalogue does no filtering.** It marks its entries and its two levels
+   * of grouping; `src/components/filters/facet-stylesheet.ts` writes the rules
+   * that read those marks, and `FacetFilter` is the control that switches between
+   * them. The split is what keeps a filter out of a component whose job is to
+   * file a trip under its first arrival — and what lets `/villes` wear the same
+   * filter over a list that shares nothing with this one.
+   *
+   * Optional, because a listing with nothing to choose between renders no
+   * control: the marks are then absent rather than empty.
+   */
+  readonly facetTokens?: ReadonlyMap<string, string>;
 };
 
-export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps): ReactElement {
+export function TripCatalogue({
+  trips,
+  locale,
+  freshSlug,
+  facetTokens,
+}: TripCatalogueProps): ReactElement {
   const t = useTranslations("trips");
   const collator = collatorFor(locale);
 
@@ -70,25 +95,157 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
     compare: collator.compare,
   });
 
+  /**
+   * **One continent means no continent heading**, and the levels below it move up
+   * with it.
+   *
+   * A journal whose every trip is European renders "Europe" once, at the top of
+   * the page, over the whole of it — a chapter title for a book with one chapter.
+   * It is not a grouping a reader can use, because there is nothing to tell it
+   * apart from; it is a word between the introduction and the first country.
+   *
+   * **The promotion is not cosmetic: without it the outline breaks.** Dropping the
+   * `h2` while leaving the countries at `h3` takes the document from `h1` straight
+   * to `h3`, which is the skipped level `tests/e2e/heading-order.populated.spec.ts`
+   * exists to refuse. So the countries become the `h2` chapters they now are, and
+   * the cards under them follow to `h3`.
+   *
+   * `TripCard` types `headingLevel` as `3 | 4`, which is what makes this pair a
+   * typecheck rather than a convention — a third level here would not compile.
+   *
+   * The count that rode beside the continent heading goes with it. Nothing is
+   * lost: with one group its number is the page's own total, which the intro above
+   * the listing already states.
+   */
+  const singleGroup = groups.length === 1;
+  const tripHeadingLevel = singleGroup ? 3 : 4;
+
+  /**
+   * **The one door this listing opens onto the country pages** (TIW-39).
+   *
+   * Every country here already has a heading and a section; a page about that
+   * country is what a reader who scrolled to « Belgique » is looking for, so the
+   * heading becomes the link and nothing else on the site does. The map, the cards
+   * and `/villes` are deliberately left alone — one door, in the place a reader is
+   * already looking.
+   *
+   * Resolved once for the whole listing rather than per heading, because
+   * `countrySlugsByCode` is also where two countries claiming one address, and a
+   * published address ICU has moved, are refused — asking it once per country
+   * would mean sixty chances to catch the collision and none to see it.
+   *
+   * **The FRENCH name feeds the slug in every locale**, which is why this resolver
+   * is pinned to `"fr"` while the heading above reads `countryName(locale)`: one
+   * address per page, like every segment of this site. See `@/i18n/paths`.
+   */
+  const countrySlugs = countrySlugsByCode(
+    groups.flatMap((group) => group.countries.map((country) => country.countryCode)),
+    (code) => countryNameOf("fr", code)
+  );
+
+  /**
+   * The heading's content: the country's name, wrapped in a link to its page.
+   *
+   * A link *inside* the heading and not a heading inside a link: the accessible
+   * name of the heading has to stay the country's name — that is what a reader
+   * navigating by heading hears — and wrapping the other way round would announce
+   * the same string twice, once as a link and once as a heading.
+   *
+   * The unlinked branch is unreachable, the map having been built from these very
+   * codes; the bare name is the honest answer to a lookup that failed rather than
+   * an `href` reading `/fr/pays/undefined`.
+   */
+  const countryLabel = (countryCode: string, countryName: string) => {
+    const slug = countrySlugs.get(countryCode);
+
+    return slug === undefined ? (
+      countryName
+    ) : (
+      <a className={styles.countryLink} href={localePathname({ href: countryPath(slug), locale })}>
+        {countryName}
+      </a>
+    );
+  };
+
   return (
     <div className={styles.catalogue}>
       {groups.map((group) => (
-        <section key={group.continent ?? "unplaced"} className={styles.continent}>
-          <div className={styles.continentHeader}>
-            <h2 className={styles.continentHeading}>{group.continentName}</h2>
-            {/*
-              The count is beside the heading and not inside it: in the heading
-              it becomes part of the accessible name, so a reader navigating by
-              heading hears "Asie 12 voyages" twelve times over instead of the
-              chapter titles they are scanning for.
-            */}
-            <p className={styles.count}>{t("continentCount", { count: group.tripCount })}</p>
-          </div>
+        <section
+          key={group.continent ?? "unplaced"}
+          className={styles.continent}
+          /*
+            `continent` and `country` below are the level, not the axis: what the
+            generated rule needs is "this box is a group, hide it when it holds no
+            matching entry", and the value is there so a reader of the markup can
+            tell the two boxes apart.
+          */
+          data-facet-group={facetTokens === undefined ? undefined : "continent"}
+        >
+          {singleGroup ? null : (
+            <div className={styles.continentHeader}>
+              <h2 className={styles.continentHeading}>{group.continentName}</h2>
+              {/*
+                The count is beside the heading and not inside it: in the heading
+                it becomes part of the accessible name, so a reader navigating by
+                heading hears "Asie 12 voyages" twelve times over instead of the
+                chapter titles they are scanning for.
+              */}
+              {/*
+                `data-facet-total`: this number counts the whole chapter, which
+                stops being true the moment a choice hides half of it. The filter's
+                Module drops it for as long as one is active, and the count line
+                under the control — the number the reader has just changed —
+                answers instead.
+              */}
+              <p
+                className={styles.count}
+                data-facet-total={facetTokens === undefined ? undefined : ""}
+              >
+                {t("continentCount", { count: group.tripCount })}
+              </p>
+            </div>
+          )}
 
           <div className={styles.countries}>
             {group.countries.map((country) => (
-              <section key={country.countryCode} className={styles.country}>
-                <h3 className={styles.countryHeading}>{country.countryName}</h3>
+              /*
+                `id="pays-<CODE>"` — what makes a country's section addressable by
+                a fragment.
+
+                **The code is the schema's, so it is UPPERCASE**, and HTML
+                fragments are case-sensitive: the address is `#pays-FR`, never
+                `#pays-fr`. Worth saying out loud because this project has already
+                paid for a dangling `#pays-bo` once — the measurement is recorded
+                in the header of `tests/e2e/dead-links.populated.spec.ts`, the
+                guard it bought — and because the two spellings look
+                interchangeable in a diff.
+
+                **What still does NOT link here, and why the id is emitted
+                anyway.** The map's textual equivalent points at a trip's page or
+                at this listing whole, because the catalogue files a trip under
+                its *first arrival* only: a country a trip merely crosses has no
+                section, so a fragment built from the tally would dangle for
+                exactly the countries the tally added. That reasoning is about
+                which countries have a section — not about whether the ones that
+                do should be addressable. `tests/e2e/dead-links.populated.spec.ts`
+                resolves every fragment of every rendered link, so a future
+                linker is caught by a guard rather than by a reader.
+              */
+              <section
+                key={country.countryCode}
+                id={`pays-${country.countryCode}`}
+                className={styles.country}
+                data-facet-group={facetTokens === undefined ? undefined : "country"}
+              >
+                {singleGroup ? (
+                  <h2 className={`${styles.countryHeading} ${styles.countryHeadingTop}`}>
+                    {countryLabel(country.countryCode, country.countryName)}
+                  </h2>
+                ) : (
+                  <h3 className={styles.countryHeading}>
+                    {countryLabel(country.countryCode, country.countryName)}
+                  </h3>
+                )}
 
                 {/*
                   A list, so the number of trips under a country is announced on
@@ -109,7 +266,8 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
                       its own, so this fragment is the whole of its address. A
                       fragment naming nothing leaves the reader silently at the
                       top of a sixty-entry page — measured, on `#pays-bo`, and
-                      recorded in `visited-countries.tsx`.
+                      recorded in the header of
+                      `tests/e2e/dead-links.populated.spec.ts`.
 
                       **Why `LatestTrips` does not get one**, though it renders
                       the same cards: the home page also renders the map, whose
@@ -124,11 +282,15 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
                       primary key, and `buildCatalogue` files each trip exactly
                       once.
                     */
-                    <li key={trip.slug} id={`voyage-${trip.slug}`}>
+                    <li
+                      key={trip.slug}
+                      id={`voyage-${trip.slug}`}
+                      data-facets={facetTokens?.get(trip.slug)}
+                    >
                       <TripCard
                         trip={trip}
                         locale={locale}
-                        headingLevel={4}
+                        headingLevel={tripHeadingLevel}
                         isNew={trip.slug === freshSlug}
                       />
                     </li>

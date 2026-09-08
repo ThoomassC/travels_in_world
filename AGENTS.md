@@ -32,11 +32,41 @@ segment de locale est perdu. Une règle ESLint le refuse partout sauf dans
 `src/i18n/navigation.ts`. Angle mort connu et non couvert : `await import("next/link")`.
 
 **3. Server Components par défaut.**
-Le jalon 1 n'autorise que deux composants `'use client'` : l'interaction de la carte et la
-visionneuse photo. **La seconde est dépensée** — `src/components/photos/photo-lightbox.tsx`,
-livrée par TIW-17 ; il n'en reste donc qu'une, celle de la carte (TIW-14). Tout autre
-`'use client'` se justifie en revue. `src/domain/**` reste du TypeScript pur — ni React, ni
-Next, ni `fs`, ni `d3`, ni `sharp`.
+Le jalon 1 n'autorisait que deux composants `'use client'` : l'interaction de la carte
+(TIW-14, `src/components/map/map-viewport.tsx`) et la visionneuse photo (TIW-17,
+`src/components/photos/photo-lightbox.tsx`). **Les deux sont dépensés, et il y en a un
+troisième depuis le 7 septembre 2026** : `src/components/search/site-search.tsx`, la
+recherche de l'en-tête, demandée par le propriétaire. Son en-tête porte l'argument et le
+README le résume — l'essentiel étant que tout ce qui n'est pas de l'interaction vit dans
+`src/components/search/entries.ts`, module pur, et que les lignes du panneau arrivent en
+`children` rendus par le serveur plutôt qu'en props sérialisées. Le compte est donc à
+**trois** ; tout `'use client'` supplémentaire se justifie en revue.
+
+**La recherche est un champ ouvert en permanence dans la barre, et sa divulgation est du
+CSS** — `:focus-within`, pas de `<details>`, pas de script pour ouvrir. Trois choses à savoir
+avant d'y toucher. Le panneau s'ouvrant au focus, les lignes **doivent** sortir de l'ordre de
+tabulation, et c'est le client qui les en sort au montage : rendu par le serveur, le
+`tabindex` casserait le lecteur sans script, pour qui ce panneau est l'index du site — le
+garde est `tests/e2e/map-equivalent.populated.spec.ts`, qui n'atteignait plus les balises de
+la carte. La région qui défile porte l'unique `tabindex="0"` du contrôle, son nom accessible
+et son `overflow` sur le même élément, sinon axe la déclare inatteignable. Et la complétion en
+ligne se décide dans le gestionnaire de frappe et jamais dans un effet, sinon Retour arrière
+remet ce qu'il vient d'enlever.
+
+**Et il est resté à trois quand les filtres sont arrivés**, ce qui est la seule chose à
+retenir avant de toucher aux deux listings. `/fr/voyages` et `/fr/villes` filtrent avec un
+groupe de boutons radio et une **feuille de style générée** — une règle par choix, imprimée
+dans le document — donc zéro octet de JavaScript et un fonctionnement complet sans script.
+L'argument tient dans l'en-tête de `src/components/filters/facets.ts` ; les deux points qui
+décident du reste sont qu'un **seul choix est actif à la fois** (ce qui garde chaque nombre
+affiché exactement vrai et rend le résultat vide inatteignable) et qu'un axe à une seule
+valeur est **supprimé** par `buildFacetIndex` plutôt qu'écrit en dur, donc un axe réapparaît
+quand le contenu le mérite. Le garde est un navigateur et rien d'autre :
+`tests/e2e/filters.populated.spec.ts` filtre sur un build réel, puis refait le même parcours
+avec JavaScript désactivé — c'est ce cas-là qui rougit si quelqu'un remplace la sélection par
+de l'état.
+
+`src/domain/**` reste du TypeScript pur — ni React, ni Next, ni `fs`, ni `d3`, ni `sharp`.
 
 `src/map/**` s'atteint par sa façade `@/map`, **seul** module du dossier à porter
 `import "server-only"` : le build casse si un composant client l'atteint. Les quatre modules
@@ -175,6 +205,50 @@ Ce que ce relevé a en revanche mis au jour, et qui est **antérieur** à ce tic
   Son travail n'est pas de se lire contre la carte mais de séparer le point de la teinte
   sous lui, et point contre anneau vaut 5,44:1 — c'est cette paire-là qui porte la charge.
 
+### Ce que ce dépôt prend de `@thomascaron/ui`, et ce qu'il n'en prend pas
+
+Question posée assez souvent pour mériter une réponse écrite : **la matière est
+partagée, les pièces ne le sont pas.**
+
+Ce qui est pris, et c'est le gros :
+
+- **`tokens.css`**, en un `@import` — la palette, mais aussi le reset, la recette
+  `:focus-visible` et le bloc `prefers-reduced-motion`. C'est pourquoi la feuille
+  locale ne doit redéclarer aucun des trois.
+- **`@thomascaron/ui/contract`**, importé par `tests/styles/colour-contract.test.ts` :
+  le calcul de contraste et la lecture d'une feuille de jetons. Dépendance de
+  développement, zéro octet côté client.
+
+Ce qui n'est **pas** pris — les onze composants — et la raison de chacun, vérifiée
+plutôt que supposée :
+
+| Composant | Pourquoi il ne va pas ici |
+| --- | --- |
+| `Pill`, `Tag` | `tone` et `variant` sont **requis** et sémantiques (succès / alerte / danger ; mesuré / proposé / ouvert), chacun avec son glyphe ✓ ▲ ✕ ◆ ◇ ○. Les pastilles de ce site sont des **boutons radio de filtre** : « France, 7 voyages » n'est pas un état, et le glyphe y serait un contresens. |
+| `Field`, `Input`, `Select`, `Textarea`, `Checkbox` | Ce site n'a aucun formulaire. Sa seule saisie est la recherche de l'en-tête, dont toute la conception consiste à déplacer l'anneau de focus **hors** de l'`<input>`, sur la pilule qui l'entoure — ce que `.tc-input` défait. |
+| `Button` | Les deux seuls boutons sont la croix du panneau (icône seule, 44 × 44) et un `<summary>`. `tc-btn` est dimensionné pour du texte. |
+| `Card` | Un `<div>` avec fond, liseré et rayon. Les fiches d'ici sont des `<article>` qui portent déjà tout ça **plus** une couverture, un recouvrement de lien et un badge. L'enveloppe ajouterait un `<div>` et rien d'autre. |
+| `Message` | **Il code son préfixe de ton en français** — « Attention : », posé en dur dans la librairie et lu par les technologies d'assistance. Sur un site en trois langues, un lecteur anglophone l'entendrait avant sa phrase anglaise. |
+
+Et le coût qui décide du reste : **`ui.css` pèse 7 700 octets brotli, dont 3 467
+de `.tc-doc-*`** — la feuille de la page de démonstration de la librairie, que ce
+site ne rendra jamais. La payer sur chaque document de chaque locale pour
+atteindre une classe utilitaire n'est pas un échange que les budgets d'ici font.
+
+**Conséquence, et c'est là qu'est le garde** : la recette « masqué visuellement »
+est recopiée **neuf fois** dans les modules CSS de `src/`. Recopier est le bon
+choix ici, et c'est aussi exactement comme ça qu'une palette dérive — l'en-tête du
+contrat raconte que six jetons ont divergé sous un commentaire qui promettait le
+contraire. `tests/styles/shared-recipes.test.ts` fait donc de la librairie
+l'autorité sur ces neuf copies : il lit `.tc-visually-hidden` dans `ui.css`, exige
+que chacune déclare exactement la même chose, et refuse en particulier
+`display: none` ou `visibility: hidden` à la place de `clip-path`, qui sortiraient
+le texte de l'arbre d'accessibilité. Prouvé par échec délibéré dans les deux sens.
+
+Ce qui rendrait plus de choses possibles, du côté de la **librairie** et non
+d'ici : des libellés de ton localisables sur `Message`, et `ui.css` livré sans les
+styles de sa documentation.
+
 **Le garde, c'est `tests/styles/colour-contract.test.ts`**, et il a deux moitiés. Il
 recalcule 25 paires depuis la feuille assemblée, sur le support **composé** où chaque encre
 vit vraiment ; et il exige que tout `N.NN:1` écrit dans `src/**` soit enregistré dans sa
@@ -262,14 +336,45 @@ fichier au build. `npm run test:build` reste ce qui le constate : les cinq route
 toujours prérendues, aucune n'est passée en `ƒ`.
 
 Depuis TIW-12 il y a un **second** budget, que ce paragraphe est le seul endroit à réunir
-avec le premier : les tracés du planisphère sont plafonnés à **34 Ko brotli**, mesurés à
-30,1 Ko avec le millésime `world-atlas` 110m. Ce n'est pas du JS — c'est de la donnée de
-chemin dans le HTML — donc les deux plafonds ne se financent pas l'un l'autre. Le garde est
-`tests/map/world.test.ts` : passer au millésime 50m ferait 182,5 Ko et le rougirait, ce qui
-est voulu.
+avec le premier : les tracés du planisphère. Ce n'est pas du JS — c'est de la donnée de chemin
+dans le HTML — donc les deux plafonds ne se financent pas l'un l'autre.
 
-Une variante qu'on croit hors budget et qui ne l'est pas, mesurée par TIW-30 parce que
-l'ignorer aurait fait rejeter une option pour une mauvaise raison : composer le 110m avec les
+**Ce paragraphe a dit le contraire de la vérité pendant plusieurs tickets, et c'est la raison
+de le lire en entier.** Il annonçait un plafond de 34 Ko, une mesure de 30,1 Ko au millésime
+`world-atlas` 110m, et que « passer au millésime 50m ferait 182,5 Ko et le rougirait, ce qui
+est voulu ». Or le dépôt **est** passé au 50m, le plafond de `tests/map/world.test.ts` a été
+relevé à **200 Kio** en connaissance de cause, et l'en-tête de ce cas porte l'argument. Le
+fichier que tout agent lit en premier décrivait donc un garde qui n'existait plus, et
+promettait un échec qui avait déjà été délibérément levé.
+
+Les chiffres réels, remesurés sur un build de ce dépôt, brotli qualité 11 :
+
+```
+/fr  document 196,0 Kio · tracés 181,6 Kio · 93 % du document · 205 tracés
+/en  document 195,6 Kio · tracés 181,6 Kio · 93 %
+/es  document 197,7 Kio · tracés 181,6 Kio · 92 %
+```
+
+**Le planisphère EST le document d'accueil.** Tout le reste — la navigation, la recherche, la
+carte des balises, les treize fiches de panneau, le pied de page — tient dans les 7 % qui
+restent. C'est le fait le plus important à connaître avant de discuter du poids d'une page de
+ce site, et il ne se devine pas.
+
+Ce que le garde à 200 Kio garde encore, parce qu'un plafond six fois plus haut ne vaut rien
+s'il ne garde rien : **l'arrondi** — au même millésime, à trois décimales, on dépasse
+largement les 200 Kio, donc perdre `createRoundingPathContext` reste un test rouge — et **un
+troisième bump silencieux de millésime**, le 10m mesurant 512,6 Kio. Le relever encore est une
+décision qui porte un nom, pas une réparation.
+
+Ce que ce poids coûte, et l'ordre de grandeur d'un éventuel gain, mesuré par simplification de
+Douglas-Peucker sur les tracés servis : à un epsilon qui reste invisible au zoom maximal du
+lecteur (25×, `MAX_ZOOM_WIDTH_FRACTION = 0.04`), on récupère **14 à 16 %** ; il faut descendre
+le zoom maximal vers 8× pour atteindre −32 %. Personne n'a tranché cet arbitrage : il est
+écrit ici pour qu'il soit tranché sur des chiffres le jour où quelqu'un s'en saisit.
+
+Une variante qu'on croit hors budget et qui ne l'est pas, mesurée par TIW-30 **contre le
+plafond de 34 Ko de l'époque** — la mesure reste vraie, c'est sa référence qui a bougé, et
+elle est conservée telle quelle parce que c'est ce qui la rend lisible : composer le 110m avec les
 **seuls** micro-États du 50m donne **33,0 Ko brotli** (238 tracés), donc _sous_ le plafond. Ce
 n'est pas ce qui a été retenu, et le chiffre est là pour que le prochain lecteur écarte cette
 voie sur ses vrais défauts — il ne resterait que 1,0 Ko de marge sur 34, il faudrait charger

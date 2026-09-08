@@ -1,0 +1,259 @@
+/* =============================================================================
+   Trip panel — the body of the map panel once a marker names one trip.
+
+   No colour is declared here; every value comes from `src/styles/tokens.css`,
+   which is what keeps both themes working without this file knowing about them.
+   `--text-muted`, `--text-accent` and `--text-strong` are the shared sheet's
+   text roles and each is documented there against the surfaces below;
+   `--control-border` is its designated "a border you can see" token, and
+   `--border-subtle` is decoration only — which is why it separates the facts and
+   never delimits a control.
+
+   No ratio is quoted in this file, deliberately: `tests/styles/colour-contract.test.ts`
+   refuses any `N.NN:1` that is not registered in its citation table, and every
+   pair used here is one the shared sheet or `trip-card.module.css` has already
+   measured for the same role. Adding a number would mean registering a
+   measurement this file did not make.
+
+   THE WIDTH THIS LIVES IN. The panel is the full viewport below 769 px and
+   `min(24rem, 42vw)` above it (`world-map.module.css`, `.panel`), and its body
+   pads `var(--space-3)` on each side. Nothing below may scroll sideways at
+   either end of that range — hence `min-inline-size: 0` on every flex and grid
+   child, which is what lets a track become narrower than its content instead of
+   pushing the panel wider. The same pattern is in `trip-card.module.css`,
+   `trip-header.module.css` and `photo-gallery.module.css`; this is the fourth.
+   ============================================================================ */
+
+/**
+ * The body's own column. `.panelBody` in `world-map.module.css` is the scroller
+ * and already spaces its children; this element is a single child of it, so it
+ * owns the rhythm between the facts, the cities, the strip and the action.
+ */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* The panel is a flex column too: without this the body refuses to shrink
+     below its widest word and the panel scrolls sideways at 320 px. */
+  min-inline-size: 0;
+}
+
+/**
+ * The three facts, laid out like the card's `.meta` and separated the same way —
+ * a rule and never a generated `·`, because a character in a pseudo-element is
+ * text several screen readers announce, and a border is unambiguously not
+ * content. The list itself is what separates the facts for a reader who does not
+ * see it.
+ */
+.facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  min-inline-size: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.facts li {
+  min-inline-size: 0;
+  /* A country list of five names has to break somewhere; in a 24 rem panel it
+     breaks inside a word rather than widening the panel. */
+  overflow-wrap: break-word;
+}
+
+.facts li + li {
+  padding-inline-start: var(--space-3);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+/**
+ * The cities line. `--text-body` and not `--text-muted`: the facts above are the
+ * trip's identity card and read as metadata, while the itinerary is the one
+ * sentence of this panel a reader actually reads.
+ */
+.cities {
+  margin: 0;
+  min-inline-size: 0;
+  color: var(--text-body);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  /* "Saint-Pierre-et-Miquelon" is one unbreakable token in a 7 rem column. */
+  overflow-wrap: break-word;
+}
+
+/**
+ * The photo strip: three tracks, always, because the count is capped at three by
+ * `PANEL_PHOTO_LIMIT` and a strip that reflows to two-then-one reads as a broken
+ * grid rather than as a response to the width.
+ *
+ * `minmax(0, 1fr)` and not `1fr`: the implicit minimum of a grid track is
+ * `auto`, which is the item's content width — an 800 px photograph — so `1fr`
+ * alone makes the panel scroll sideways at every width.
+ */
+.photos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.photoItem {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+/**
+ * **WCAG 2.5.8, and why the map's exemption does not reach here.**
+ * `tests/e2e/support/axe.ts` forgives a `target-size` finding only when the
+ * element sits inside the map's own `<figure>` — the SVG's markers, whose
+ * geometry is the projection's. This panel is portalled into `document.body`, so
+ * it is not inside that figure and every thumbnail is judged on its own.
+ *
+ * The measured widths, so the floor below is a backstop and not the mechanism:
+ * the track is `(panel - 1.5rem padding - 1rem of gaps) / 3`, which is **~94 px**
+ * at the narrowest panel this layout can produce (a 320 px phone, and equally a
+ * 769 px window where `42vw` bottoms out) and **~115 px** at the 24 rem cap. At
+ * the 3:2 ratio below that is **~62 px** and **~77 px** tall. Both axes clear the
+ * 24 px minimum by a factor of two and a half, and the `var(--space-2)` gap adds
+ * the spacing the criterion asks between neighbours.
+ *
+ * `min-block-size` is the 24 px floor written down anyway: it costs nothing at
+ * any width this panel actually reaches, and it is what fails visibly rather
+ * than silently if someone gives the strip more columns.
+ */
+.photoLink {
+  display: block;
+  min-block-size: 1.5rem;
+  border-radius: var(--radius-sm);
+  /* The shared sheet draws the focus ring on the element's box; without this the
+     ring hugs the inline text box of an inline `<a>` rather than the photo. */
+  outline-offset: 2px;
+}
+
+.photoImage {
+  display: block;
+  inline-size: 100%;
+  /* A uniform ratio so the strip does not stagger; the intrinsic `width` and
+     `height` attributes still reserve the space before the file arrives. */
+  aspect-ratio: 3 / 2;
+  /* Belt and braces over the global `img { max-width: 100% }`: the track can be
+     narrower than the image's intrinsic width. */
+  max-inline-size: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  /* The colour under the blurred placeholder, and the whole of what is painted
+     when a photo has none. `PhotoFigure` sets `background-image` inline, which
+     wins over this shorthand for that longhand only — see its comment. */
+  background: var(--panel-surface);
+}
+
+/* A hairline of feedback on the tile, not on the image: transforming the image
+   would fight `object-fit` on a cropped photograph. Same rule as the gallery. */
+.photoLink:hover .photoImage,
+.photoLink:focus-visible .photoImage {
+  filter: brightness(1.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photoLink:hover .photoImage,
+  .photoLink:focus-visible .photoImage {
+    /* A filter is not an animation, so the shared sheet's reduce block does not
+       cover it; the hover is instantaneous either way, but a reader who asked
+       for less motion gets no brightness flicker under the pointer. */
+    filter: none;
+  }
+}
+
+/**
+ * The way out — the trip's page when it has one, the listing entry when it does
+ * not.
+ *
+ * **A real pill with a real height, where `trip-card.module.css` has an
+ * `aria-hidden` `<span>`.** A card can afford decoration because its title is
+ * the link and `.link::after` makes the whole card the target; this panel has no
+ * such overlay and the `<h2>` above this body is plain text, so this is the only
+ * control in it. `--target-min` is the shared sheet's 44 px, the same floor the
+ * panel's close button and the map's markers take — and unlike a thumbnail this
+ * one is not exempt from 2.5.8 by size.
+ *
+ * `align-self: flex-start` so the pill is as wide as its words and not as wide
+ * as the panel: the default in a flex column is to stretch, and a full-width bar
+ * reads as a primary action the panel does not have.
+ *
+ * `--control-border` and not `--accent-quiet-border`, the choice
+ * `trip-card.module.css` measured at length for `.cta`: the quiet border is a
+ * hint in both themes, and this is a control that needs a boundary.
+ */
+.action {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  max-inline-size: 100%;
+  padding: var(--space-1) var(--space-4);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-accent);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+/**
+ * The underline appears on hover and on focus rather than resting on the pill:
+ * the border and the accent colour already say "control" at rest, and an
+ * underlined label inside a bordered pill reads as two affordances for one
+ * action. Focus is included so a keyboard reader gets the same cue a pointer
+ * does, on top of the shared sheet's ring.
+ */
+.action:hover,
+.action:focus-visible {
+  background: var(--accent-quiet);
+  border-color: var(--text-accent);
+  text-decoration: underline;
+}
+
+/**
+ * « Récit à venir » — deliberately not a pill.
+ *
+ * `.action` is a bordered chip because it says "there is somewhere to go", and a
+ * reader has learnt that shape. This says the opposite, so it must not wear the
+ * same clothes: plain muted text, and the sentence itself is what carries the
+ * meaning in the accessibility tree — nothing here is the only channel, so there
+ * is no 1.4.1 to fail.
+ */
+.pending {
+  margin: 0;
+  min-inline-size: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+/**
+ * The project's recipe, transcribed rather than invented — the same block as
+ * `photo-gallery.module.css` and `trip-header.module.css`.
+ */
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  /* `clip-path`, never `display: none` nor `visibility: hidden`: those two remove
+     the text from the accessibility tree and the link goes back to being named by
+     its image alone. */
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

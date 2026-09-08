@@ -82,6 +82,40 @@ function metaContent(
   return pattern.exec(html)?.[1];
 }
 
+/**
+ * The `hreflang` block of a document, as `{ fr: url, en: url, …, x-default: url }`.
+ *
+ * Case-insensitive on the attribute name because Next writes React's `hrefLang`
+ * spelling into the HTML. That is valid — HTML attribute names are
+ * case-insensitive — and it is exactly the kind of detail that would turn this
+ * reader into a grep that can never match, so the "declares one alternate per
+ * locale" case below asserts the map is non-empty before believing it.
+ */
+function hreflangsOf(html: string): Record<string, string> {
+  const found: Record<string, string> = {};
+
+  for (const match of html.matchAll(
+    /<link rel="alternate" hreflang="([^"]+)" href="([^"]+)"\s*\/?>/gi
+  )) {
+    found[match[1] ?? ""] = match[2] ?? "";
+  }
+
+  return found;
+}
+
+/**
+ * The site's active locales, read from the artefact: the first segment of every
+ * reader-facing prerendered route.
+ *
+ * Derived and not written down, for the reason the header gives — this suite has
+ * no `@/` alias, so it cannot import `routing.locales`, and a hardcoded list is a
+ * list that stops covering the locale added next week. `/fr`, `/en/voyages` and
+ * `/es/voyages/x` all contribute their prefix and nothing else.
+ */
+const ACTIVE_LOCALES = [
+  ...new Set(READER_FACING_ROUTES.map((route) => route.split("/")[1] ?? "")),
+].sort();
+
 describe("the guard has something to read", () => {
   it("derived at least the two reader-facing routes the project cannot lose", () => {
     /**
@@ -147,6 +181,79 @@ describe.each(READER_FACING_ROUTES)("%s declares its own canonical address", (ro
     expect(metaContent(html, "property", "og:site_name")).toBeTruthy();
     expect(metaContent(html, "property", "og:locale")).toMatch(/^[a-z]{2}(_[A-Z]{2})?$/);
     expect(metaContent(html, "name", "twitter:card")).toMatch(/^summary(_large_image)?$/);
+  });
+});
+
+/**
+ * The `hreflang` set, in the bytes — the other half of what
+ * `tests/app/share.test.ts` proves about `shareMetadata`.
+ *
+ * WHY IT IS WORTH A BUILD ASSERTION AND NOT ONLY A UNIT ONE: the unit test proves
+ * the builder returns the right object; this proves Next wrote it into every
+ * prerendered document. Between the two sits `alternates` being merged shallowly
+ * per top-level field — a page declaring its own `alternates` for a canonical and
+ * nothing else would silently ship without the language block, and the page would
+ * render perfectly. With three locales that mistake tells a crawler that `/fr/x`,
+ * `/en/x` and `/es/x` are three unrelated pages about one subject.
+ *
+ * PROVEN BY DELIBERATE FAILURE, which is this repository's standard for a guard.
+ * One `<link rel="alternate" hrefLang="en" …>` deleted from
+ * `.next/server/app/en/voyages.html`, nothing else touched:
+ *
+ *   npm run test:build -> 2 failed | 180 passed
+ *                         × /en/voyages declares one alternate per locale, plus x-default
+ *                         × /en/voyages names ITS OWN locale's alternate as its canonical
+ *
+ * and 182 passed again once the byte was put back.
+ */
+describe("the localised addresses point at each other", () => {
+  it("derived the active locales from the routes it can see", () => {
+    /**
+     * Guards the derivation, in the shape this folder uses everywhere: an empty
+     * or single-entry list would make the cases below assert almost nothing while
+     * reporting success.
+     */
+    expect(
+      ACTIVE_LOCALES.length,
+      "No locale prefix was derived from the prerendered routes, so the hreflang assertions below would compare nothing."
+    ).toBeGreaterThanOrEqual(1);
+    expect(ACTIVE_LOCALES).toContain("fr");
+  });
+
+  it.each(READER_FACING_ROUTES)("%s declares one alternate per locale, plus x-default", (route) => {
+    const hreflangs = hreflangsOf(documentHtml(route));
+
+    expect(Object.keys(hreflangs).sort(), `${route} does not advertise the site's locales`).toEqual(
+      [...ACTIVE_LOCALES, "x-default"].sort()
+    );
+  });
+
+  it.each(READER_FACING_ROUTES)("%s names ITS OWN locale's alternate as its canonical", (route) => {
+    /**
+     * The pair that would break silently if the canonical and the alternates were
+     * computed from two different values: a document saying `canonical=/en/x` and
+     * `hreflang="en" → /fr/x` asks a crawler two contradictory things about
+     * itself. `src/app/share.ts` derives both from one `href`, and this is what
+     * checks the result rather than the intention.
+     */
+    const html = documentHtml(route);
+    const locale = route.split("/")[1] ?? "";
+
+    expect(hreflangsOf(html)[locale]).toBe(canonicalOf(html));
+  });
+
+  it.each(READER_FACING_ROUTES)("%s sends x-default to a locale it also names", (route) => {
+    /**
+     * Which locale is the default is not readable from a document, so this asserts
+     * the property that matters instead: `x-default` points at one of the
+     * addresses the same page advertises, never at a fourth URL. `/` redirects to
+     * the default locale (`next.config.ts`) and `tests/app/share.test.ts` pins
+     * that it is `routing.defaultLocale`.
+     */
+    const hreflangs = hreflangsOf(documentHtml(route));
+    const alternates = ACTIVE_LOCALES.map((locale) => hreflangs[locale]);
+
+    expect(alternates).toContain(hreflangs["x-default"]);
   });
 });
 

@@ -200,7 +200,11 @@ describe("the feed's body", () => {
 
 /* --------------------------------------------------------- reading the YAML -- */
 
-type DeclaredTrip = { readonly slug: string; readonly draft: boolean };
+type DeclaredTrip = {
+  readonly slug: string;
+  readonly draft: boolean;
+  readonly unwritten: boolean;
+};
 
 /**
  * Every trip on disk, with its declared slug and draft flag — parsed from the
@@ -237,21 +241,43 @@ function declaredTrips(): readonly DeclaredTrip[] {
 
     const declared =
       typeof value === "object" && value !== null
-        ? { slug: Reflect.get(value, "slug"), draft: Reflect.get(value, "draft") }
-        : { slug: undefined, draft: undefined };
+        ? {
+            slug: Reflect.get(value, "slug"),
+            draft: Reflect.get(value, "draft"),
+            story: Reflect.get(value, "story"),
+          }
+        : { slug: undefined, draft: undefined, story: undefined };
 
     found.push({
       slug: typeof declared.slug === "string" && declared.slug !== "" ? declared.slug : entry.name,
       draft: declared.draft === true,
+      /**
+       * **The second publication field, and the reason this helper was wrong.**
+       * A trip whose récit is not written is published — it is on the map, in the
+       * lists, and its country is tinted — but it has no page, so `feed.xml`
+       * filters it out with `hasStory`. This helper only knew about `draft`, so
+       * it counted such a trip as an item the feed owed.
+       *
+       * Nothing caught it because `content/trips` held either nothing or only
+       * trips with récits: the two sets were the same set, and the test compared
+       * a number with itself. Nine scaffolded trips with `story: unwritten`
+       * separated them, and the guard reported 0 items for 9 expected.
+       *
+       * The literal is retyped rather than imported from `@/domain/trip` for the
+       * reason the file header already gives: reading the YAML directly is what
+       * stops the loader under test from being asked to confirm its own filter.
+       */
+      unwritten: declared.story === "unwritten",
     });
   }
 
   return found;
 }
 
+/** The trips the feed owes an item: published, and with a récit to point at. */
 const publishedSlugs = (): readonly string[] =>
   declaredTrips()
-    .filter((trip) => !trip.draft)
+    .filter((trip) => !trip.draft && !trip.unwritten)
     .map((trip) => trip.slug);
 
 const draftSlugs = (): readonly string[] =>

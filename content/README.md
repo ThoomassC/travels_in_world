@@ -7,6 +7,14 @@ fichiers sont le contenu du site, versionnés avec le code, lus au build.
 dossier existe déjà pour que `npm run validate:content` ait quelque chose à lire, et pour
 que la structure attendue soit écrite noir sur blanc avant le premier voyage.
 
+> **Un squelette ne se commite pas.** `npm run new-trip <slug>` pose `0001-01-01` partout —
+> début, fin, publication, et chaque étape — et depuis TIW-38 le schéma **refuse** toute date
+> antérieure à 1900 : `npm run validate:content` part en échec, donc `npm run build` aussi, et
+> la CI avec. C'est voulu. Une date plausible inventée aurait été indiscernable d'une date
+> exacte à la relecture ; `0001-01-01` est impossible à confondre, et la barrière garantit
+> qu'un dossier au dates de remplissage ne peut pas atteindre `main`. Remplis les dates
+> réelles avant d'ajouter le voyage à l'index git.
+
 Tu n'as pas à écrire ce fichier depuis une page blanche : `npm run new-trip <slug>` en pose
 un squelette commenté (voir « Commandes » plus bas), et `npm run geocode <slug>` remplit les
 coordonnées. Les deux sections ci-dessous décrivent la cible, pas le travail à la main.

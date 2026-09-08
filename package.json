@@ -27,10 +27,11 @@
     "new-trip": "node --import ./scripts/runtime/register-typescript.mts scripts/new-trip.ts",
     "index-photos": "node --import ./scripts/runtime/register-typescript.mts scripts/index-photos.ts",
     "check:photo-weight": "node --import ./scripts/runtime/register-typescript.mts scripts/photo-weight.ts",
-    "basemap:coverage": "node --import ./scripts/runtime/register-typescript.mts scripts/generate-basemap-coverage.ts"
+    "basemap:coverage": "node --import ./scripts/runtime/register-typescript.mts scripts/generate-basemap-coverage.ts",
+    "brand:rasters": "node --import ./scripts/runtime/register-typescript.mts scripts/generate-brand-rasters.ts"
   },
   "dependencies": {
-    "@thomascaron/ui": "github:ThoomassC/ui-commune#v0.1.0",
+    "@thomascaron/ui": "github:ThoomassC/ui-commune#v0.2.0",
     "d3-geo": "^3.1.1",
     "next": "^16.3.1",
     "next-intl": "^4.13.7",

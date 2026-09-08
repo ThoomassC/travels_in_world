@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import frMessages from "@/i18n/messages/fr.json";
 import { defaultLocale } from "@/i18n/routing";
@@ -59,7 +59,6 @@ function tripMark(index: number): TripMark {
     slug,
     title: `Voyage ${index}`,
     // Descending with the index, like the content façade's own order.
-    startDate: `20${String(24 - (index % 20)).padStart(2, "0")}-06-01`,
     placeName: `Ville ${index}`,
     href: `/fr/voyages/${slug}`,
     // Scattered across the world box so that 60 markers really do frame the
@@ -78,7 +77,6 @@ function tripMark(index: number): TripMark {
 const CENTRED_MARK: TripMark = {
   slug: "japon-2024",
   title: "Japon 2024",
-  startDate: "2024-04-12",
   placeName: "Tokyo",
   href: "/fr/voyages/japon-2024",
   point: { x: 480, y: 250 },
@@ -138,6 +136,25 @@ const viewBoxOf = (container: HTMLElement): string =>
 const layersOf = (container: HTMLElement): readonly Element[] =>
   Array.from(mapSvg(container).querySelectorAll(":scope > g"));
 
+/**
+ * Every `<path>` of the DRAWING, and none of the markers'.
+ *
+ * The marker used to be a `<span>`; since it became a pennant it is an inline
+ * `<svg><path>` of its own, so `container.querySelectorAll("path")` counts one
+ * per marker on top of the world. Four cases here and in `map-viewport.test.tsx`
+ * were counting land and got the sum — which is the kind of assertion that goes
+ * green again for the wrong reason the day someone drops a country.
+ *
+ * Scoped to the `<svg>` that carries the map rather than filtering by class: the
+ * markers live in the HTML overlay beside it, never inside it, which is ADR 0003's
+ * whole arrangement and a property worth leaning on.
+ */
+function drawnPaths(container: HTMLElement): readonly SVGPathElement[] {
+  const drawing = container.querySelector("figure svg");
+
+  return drawing === null ? [] : [...drawing.querySelectorAll("path")];
+}
+
 describe("WorldMap", () => {
   describe("with no published trip", () => {
     it("frames the whole world", () => {
@@ -157,7 +174,7 @@ describe("WorldMap", () => {
       const { container } = renderMap({ marks: [] });
 
       expect(screen.getByRole("figure")).toBeInTheDocument();
-      expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length);
+      expect(drawnPaths(container)).toHaveLength(COUNTRIES.length);
       expect(screen.getByText("Carte du monde : aucun voyage publié, aucun pays")).toBeVisible();
     });
   });
@@ -175,7 +192,15 @@ describe("WorldMap", () => {
 
     it("gives the container exactly the frame's aspect ratio", () => {
       const { container } = renderMap({ marks: [CENTRED_MARK] });
-      const canvas = mapSvg(container).parentElement;
+      /**
+       * The **stage**, one element above the canvas: TIW-39 moved the four
+       * `--frame-*` declarations there so the stage's own box could be derived
+       * from them and the zoom slider positioned against the drawing's real edge.
+       * They inherit down, so nothing changed for the canvas, the `<svg>` or a
+       * marker — but `.style` reads the inline attribute and not the cascade, so
+       * this is where they are now written.
+       */
+      const stage = mapSvg(container).parentElement?.parentElement;
 
       /**
        * Asserted as a *relation* to the `viewBox`, not as literals: these are the
@@ -191,10 +216,10 @@ describe("WorldMap", () => {
        * and not only at the frame the build chose.
        */
       const [x, y, width, height] = viewBoxOf(container).split(" ");
-      expect(canvas?.style.getPropertyValue("--frame-x")).toBe(x);
-      expect(canvas?.style.getPropertyValue("--frame-y")).toBe(y);
-      expect(canvas?.style.getPropertyValue("--frame-w")).toBe(width);
-      expect(canvas?.style.getPropertyValue("--frame-h")).toBe(height);
+      expect(stage?.style.getPropertyValue("--frame-x")).toBe(x);
+      expect(stage?.style.getPropertyValue("--frame-y")).toBe(y);
+      expect(stage?.style.getPropertyValue("--frame-w")).toBe(width);
+      expect(stage?.style.getPropertyValue("--frame-h")).toBe(height);
     });
 
     it("anchors the marker on its projected point, in world units", () => {
@@ -206,8 +231,9 @@ describe("WorldMap", () => {
        * **World units, not percentages** — the change TIW-14 made to this layer.
        * A percentage is a fraction of one particular frame, and the reader now
        * chooses the frame; the stylesheet re-derives the percentage from the four
-       * `--frame-*` values on the canvas, which is what moves sixty markers on a
-       * zoom without a byte of per-marker JavaScript.
+       * `--frame-*` values the stage declares and the canvas inherits, which is
+       * what moves sixty markers on a zoom without a byte of per-marker
+       * JavaScript.
        *
        * The mark sits at the centre of the world box, so it must come back out as
        * the centre of the frame: asserted as the arithmetic the CSS performs,
@@ -217,9 +243,9 @@ describe("WorldMap", () => {
       expect(item?.style.getPropertyValue("--mark-x")).toBe(String(CENTRED_MARK.point.x));
       expect(item?.style.getPropertyValue("--mark-y")).toBe(String(CENTRED_MARK.point.y));
 
-      const canvas = mapSvg(container).parentElement;
+      const stage = mapSvg(container).parentElement?.parentElement;
       const numberOf = (property: string) =>
-        Number(canvas?.style.getPropertyValue(property) ?? Number.NaN);
+        Number(stage?.style.getPropertyValue(property) ?? Number.NaN);
       const markOf = (property: string) => Number(item?.style.getPropertyValue(property) ?? "");
 
       expect(
@@ -329,7 +355,7 @@ describe("WorldMap", () => {
 
       expect(background?.querySelectorAll("path")).toHaveLength(COUNTRIES.length);
       expect(tinted?.querySelectorAll("path")).toHaveLength(visited.length);
-      expect(container.querySelectorAll("path")).toHaveLength(COUNTRIES.length + visited.length);
+      expect(drawnPaths(container)).toHaveLength(COUNTRIES.length + visited.length);
     });
 
     it("hides the whole drawing from assistive technology", () => {
@@ -438,9 +464,11 @@ describe("WorldMap", () => {
       /**
        * A `<figcaption>` *is* the `<figure>`'s accessible name (HTML-AAM), and
        * until TIW-15 it also carried a visually hidden enumeration of every
-       * visited country. That was the right call while nothing else named them;
-       * `VisitedCountries` now names them visibly, counted and linked, so forty
-       * country names in a *label* is all that removal leaves behind.
+       * visited country. That was the right call while nothing else named them,
+       * and it stopped being one the moment a visible list did — forty country
+       * names in a *label* is all the enumeration ever added. The list itself
+       * was later removed from the map tab; the caption never took the names
+       * back, and this case is what keeps it from doing so.
        *
        * Asserted on the caption's own text rather than through
        * `toHaveAccessibleName`, because jsdom's name computation for `figure` is
@@ -505,7 +533,6 @@ describe("WorldMap — the newest récit's marker", () => {
   const OLDER: TripMark = {
     slug: "perou-2019",
     title: "Pérou 2019",
-    startDate: "2019-08-01",
     placeName: "Cusco",
     href: "/fr/voyages/perou-2019",
     point: { x: 200, y: 300 },
@@ -541,8 +568,8 @@ describe("WorldMap — the newest récit's marker", () => {
     const marked = container.querySelectorAll("[data-new]");
 
     expect(marked).toHaveLength(1);
-    // The attribute sits on the `<a>`, beside `data-trip` and `data-zone` — the
-    // element the halo lives inside and the one the stylesheet keys off.
+    // The attribute sits on the `<a>`, beside `data-trip` — the element the halo
+    // lives inside and the one the stylesheet keys off.
     expect(marked[0]?.getAttribute("data-trip")).toBe(CENTRED_MARK.slug);
   });
 
@@ -581,7 +608,14 @@ describe("WorldMap — the newest récit's marker", () => {
 
     expect(items).toHaveLength(2);
     for (const item of items) {
-      expect(item.querySelectorAll("span[aria-hidden='true']").length).toBeGreaterThanOrEqual(2);
+      /*
+        `[aria-hidden]` on any tag, not `span[aria-hidden]`: the marker's glyph
+        was a `<span>` shaped by CSS and is now an inline `<svg>` pennant, so a
+        tag-qualified selector counted one decoration where there are two. What
+        the case is about is that BOTH exist on every marker — the glyph and the
+        halo — and that is what it now counts.
+      */
+      expect(item.querySelectorAll("[aria-hidden='true']").length).toBeGreaterThanOrEqual(2);
     }
   });
 });
@@ -609,7 +643,7 @@ describe("WorldMap — the newest récit's marker", () => {
  *   whole point is that it works with none.
  *
  * So the href points at something that certainly exists — the listing entry of
- * this very trip — which is the same move `visited-countries.tsx` records making
+ * this very trip — which is the same move the map's country list recorded making
  * when its `#pays-xx` fragment turned out to dangle.
  */
 describe("WorldMap — a trip whose récit is not written", () => {
@@ -692,20 +726,26 @@ describe("WorldMap — a trip whose récit is not written", () => {
     expect(screen.queryByRole("link", { name: /nouveau récit/ })).toBeNull();
   });
 
-  it("still opens its zone's panel, which is where « Récit à venir » is read", () => {
+  it("still gets a panel of its own, which is where « Récit à venir » is read", () => {
     /**
      * The criterion asks for the panel to say it, so the marker has to be able to
-     * open one: `data-zone` is what the client component reads, and dropping it
-     * for this state would have made the panel unreachable for exactly the trips
-     * that need it. The card's own wording is `TripCard`'s business and is
-     * asserted there.
+     * open one. There is no `data-zone` to check any more — a panel is keyed on the
+     * trip's own slug — so what is asserted is the thing that actually decides:
+     * the body the page handed over for this slug is the body the panel holds, and
+     * the marker is announced as opening a dialog.
+     *
+     * The wording itself is `TripPanel`'s business and is asserted there.
      */
-    const { container } = renderMap({
+    renderMap({
       marks: [UNTOLD_MARK],
-      tripCards: new Map([["maroc-2026", <p key="card">Récit à venir</p>]]),
+      tripPanels: new Map([["maroc-2026", <p key="body">Récit à venir</p>]]),
     });
 
-    expect(container.querySelector("a[data-trip='maroc-2026']")).toHaveAttribute("data-zone");
+    fireEvent.click(screen.getByRole("link", { name: untoldName(UNTOLD_MARK) }));
+
+    const panel = screen.getByRole("dialog");
+    expect(panel).toHaveAccessibleName(UNTOLD_MARK.title);
+    expect(within(panel).getByText("Récit à venir")).toBeInTheDocument();
   });
 });
 
@@ -752,9 +792,9 @@ describe("WorldMap — the untold country layer", () => {
     /**
      * "2 pays" and not "1 pays": the caption answers *where has he been*, and a
      * country visited without being written about has still been visited. The
-     * distinction belongs to the tint and to `VisitedCountries`, not to this
-     * count — which is also what keeps the caption agreeing with the textual
-     * equivalent beside it, since that list counts trips per country the same way.
+     * distinction belongs to the tint and to the marker's own name, not to this
+     * count — which is also what keeps the caption agreeing with the Pays tab,
+     * where a trip is grouped whether its récit is written or not.
      */
     expect(screen.getByText(/2 voyages, 2 pays/)).toBeInTheDocument();
   });
@@ -764,9 +804,7 @@ describe("WorldMap — the untold country layer", () => {
     const untold = COUNTRIES.slice(2, 4);
     const { container } = renderMap({ visited, untold, marks: [CENTRED_MARK] });
 
-    expect(container.querySelectorAll("path")).toHaveLength(
-      COUNTRIES.length + visited.length + untold.length
-    );
+    expect(drawnPaths(container)).toHaveLength(COUNTRIES.length + visited.length + untold.length);
   });
 
   it("is absent from the drawing when there is no drawing at all", () => {
@@ -776,5 +814,108 @@ describe("WorldMap — the untold country layer", () => {
 
     expect(container.querySelector("svg")).toBeNull();
     expect(screen.getByText(frMessages.map.unavailable)).toBeInTheDocument();
+  });
+});
+
+/**
+ * **The fourth tint and its notes** (TIW-39): the countries the carnet wants to
+ * reach, at the owner's request.
+ *
+ * The decision under test is the one `docs/adr/0003-carte-svg-inerte-et-balises-html.md`
+ * governs: a hover on a country did **not** make the drawing interactive. The
+ * notes are HTML laid over the SVG, on the anchor `@/map` computed, exactly as a
+ * marker is — so the shapes stay `aria-hidden` and free of pointer events, and
+ * everything below is asserted on the overlay rather than on a `<path>`.
+ */
+describe("the countries still to come", () => {
+  const WISHED = [
+    { code: "HR", name: "Croatie", path: "M0,0L5,0L5,5Z", anchor: { x: 500, y: 200 } },
+    { code: "IT", name: "Italie", path: "M6,0L9,0L9,5Z", anchor: { x: 480, y: 220 } },
+  ];
+
+  it("draws no layer and no note when the carnet wishes for nothing", () => {
+    const { container } = renderMap({ marks: [CENTRED_MARK] });
+
+    expect(container.querySelectorAll("[class*='wished']")).toHaveLength(0);
+    expect(screen.queryByRole("list", { name: frMessages.map.wishedListLabel })).toBeNull();
+  });
+
+  it("names every wished country, whether or not anything is hovered", () => {
+    renderMap({ marks: [CENTRED_MARK], wished: WISHED });
+
+    /*
+      The whole point of the label being visually hidden rather than absent: a
+      screen reader reads all of them at rest. A test that only checked the hover
+      would be testing the paint and calling it the information.
+    */
+    const list = screen.getByRole("list", { name: frMessages.map.wishedListLabel });
+
+    expect(list.textContent).toContain("Croatie : à venir");
+    expect(list.textContent).toContain("Italie : à venir");
+  });
+
+  /**
+   * The note hangs on the anchor, in world units, through the same two custom
+   * properties the markers use — so the notes and the markers move together when
+   * the reader zooms, rather than drifting apart at every frame.
+   */
+  it("hangs each note on the anchor the geometry façade computed", () => {
+    renderMap({ marks: [CENTRED_MARK], wished: WISHED });
+
+    /*
+      Addressed through the list's accessible name rather than by class: the CSS
+      module hashes its class names, and `[class*='note']` also matches `.notes`,
+      the list itself — which carries no position at all.
+    */
+    const note = screen
+      .getByRole("list", { name: frMessages.map.wishedListLabel })
+      .querySelector<HTMLElement>("li");
+
+    expect(note?.style.getPropertyValue("--mark-x")).toBe("500");
+    expect(note?.style.getPropertyValue("--mark-y")).toBe("200");
+  });
+
+  /**
+   * **The sentence in the caption, and it is not decoration.** Without it a
+   * sighted reader with no hover — a keyboard, a touch screen — sees four hatched
+   * countries carrying a dot and no name. The notes cover the screen-reader case
+   * whatever happens; this covers the other one.
+   */
+  it("names them in the caption too, in visible text kept out of the figure's name", () => {
+    const { container } = renderMap({ marks: [CENTRED_MARK], wished: WISHED });
+
+    const caption = container.querySelector("figcaption");
+    const sentence = caption?.querySelector("[aria-hidden='true']");
+
+    expect(sentence?.textContent).toBe("À venir : Croatie, Italie.");
+    /*
+      **And it is `aria-hidden`, which is the half that matters.** A
+      `<figcaption>` is the figure's accessible name; this sentence inside it
+      turned "Carte du monde : 5 voyages, 5 pays" into "À venir : … Carte du
+      monde…" and took three end-to-end cases with it. Every word of it is in the
+      accessibility tree already, once per country, in the notes over the map —
+      so hiding this copy loses nobody anything.
+    */
+    expect(caption?.textContent).toContain("Carte du monde");
+  });
+
+  it("says nothing in the caption when there is nothing to come", () => {
+    const { container } = renderMap({ marks: [CENTRED_MARK] });
+
+    expect(container.querySelector("figcaption")?.textContent).not.toContain("À venir");
+  });
+
+  /**
+   * The drawing stays inert, which is the invariant this feature was most likely
+   * to break: the note is HTML over the map and never a `<path>` that answers a
+   * pointer.
+   */
+  it("adds nothing focusable or hoverable inside the drawing", () => {
+    const { container } = renderMap({ marks: [CENTRED_MARK], wished: WISHED });
+
+    const svg = container.querySelector("figure svg:not(li svg)");
+
+    expect(svg?.getAttribute("aria-hidden")).toBe("true");
+    expect(svg?.querySelectorAll("a, button, [tabindex]")).toHaveLength(0);
   });
 });

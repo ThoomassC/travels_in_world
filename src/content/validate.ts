@@ -28,6 +28,7 @@ import {
 } from "./diagnose";
 import { describeField, escapeControls, quoted, runCommand } from "./finding";
 import type { ContentFinding, ContentValidation, FieldPath } from "./finding";
+import { readWishlist, wishlistPathFor } from "./wishlist";
 
 export type { ContentFinding, ContentValidation } from "./finding";
 
@@ -37,7 +38,10 @@ export type { ContentFinding, ContentValidation } from "./finding";
  * `TripSchema` (see `docs/adr/0001-domain-purity.md`):
  *
  * - **the collection**: `TripSchema` sees one trip at a time, so a slug used
- *   twice across two files is invisible to it;
+ *   twice across two files is invisible to it — and since TIW-39 the collection
+ *   is not only trips: `content/wishlist.yaml` sits beside them and is judged
+ *   here too, by `./wishlist`, so a country the basemap cannot draw is refused
+ *   *before* `buildWorldGeometry` throws in the middle of a prerender;
  * - **the disk**: a declared photo that matches no file is a broken page, and
  *   checking it means reaching for `fs`, which the domain must not do;
  * - **the real world**: `CountryCodeSchema` validates the *shape* of a country
@@ -104,9 +108,19 @@ export function validateContent(request: ValidationRequest): ContentValidation {
 
   /** Slug declared in a file → the first file that declared it. */
   const slugOwners = new Map<string, string>();
-  const structural = strayFileFindings(collection.strayFiles, request);
-  const findings: ContentFinding[] = [...structural];
+  /**
+   * The wishlist joins the *structural* findings and not a trip's, because it
+   * belongs to no trip — same slot as a stray file, for the same reason: it is
+   * content the summary must not count as a voyage in error.
+   *
+   * It runs even when the collection is empty, which is the state this repository
+   * shipped in for most of its life. `readWishlist` answers nothing at all when
+   * there is no file, so a journal with no wish list pays no finding and no read
+   * it can notice.
+   */
+  const wishlist = readWishlist(request.contentDir, request.repoRoot);
   const directories = createDirectoryCache();
+  const tripFindings: ContentFinding[] = [];
   let validCount = 0;
 
   for (const trip of collection.files) {
@@ -114,8 +128,26 @@ export function validateContent(request: ValidationRequest): ContentValidation {
     if (own.length === 0) {
       validCount += 1;
     }
-    findings.push(...own);
+    tripFindings.push(...own);
   }
+
+  const structural = [
+    ...strayFileFindings(collection.strayFiles, request),
+    ...wishlist.problems,
+    /**
+     * **Computed after the trips, because it needs them.** A country cannot be
+     * visited and wished for at once — the map paints one shape once, and
+     * `buildWorldGeometry` refuses the pair mid-prerender. That refusal is
+     * correct and it is the wrong place to meet it: `npm run validate:content`
+     * runs before every build and is the command the build's own message points
+     * at, so the same verdict has to be reachable here, with a file and a line.
+     *
+     * It is also the *likeliest* thing to go wrong with this file over time. A
+     * wish becomes a trip; nobody thinks to delete the line.
+     */
+    ...visitedWishFindings(collection.files, wishlist, request),
+  ];
+  const findings: ContentFinding[] = [...structural, ...tripFindings];
 
   return {
     contentDir,
@@ -146,6 +178,68 @@ function strayFileFindings(
       action: `déplace-le en ${displayPath(request.repoRoot, target)}`,
     };
   });
+}
+
+/**
+ * **A country claimed by a trip and by the wishlist at the same time.**
+ *
+ * Refused rather than resolved, and the reason is in the rendering: the three
+ * tinted layers of the map are painted one over the other and are handed over
+ * disjoint, so a country in two of them is drawn twice and only the later paint
+ * shows. "Visited wins" and "wished wins" are both defensible, which is exactly
+ * why neither the validator nor the map gets to choose — the person who wrote the
+ * two files is the one who can say which.
+ *
+ * The finding is filed **against the wishlist**, with its line, and not against
+ * the trip: the trip is a fact and the wish is the thing that has been overtaken
+ * by it. The action says so in one word — the line can go, the country has been
+ * visited.
+ *
+ * Read from the raw documents, like {@link countryCodeFindings}, so a trip with a
+ * schema error elsewhere still contributes its countries and one run reports
+ * everything.
+ */
+function visitedWishFindings(
+  files: readonly TripFile[],
+  wishlist: ReturnType<typeof readWishlist>,
+  request: ValidationRequest
+): readonly ContentFinding[] {
+  if (wishlist.entries.length === 0) {
+    return [];
+  }
+
+  const visited = new Set<string>();
+  for (const trip of files) {
+    if (trip.state !== "parsed") {
+      continue;
+    }
+    const places = valueAt(trip.value, ["places"]);
+    if (!Array.isArray(places)) {
+      continue;
+    }
+    places.forEach((_place, index) => {
+      const parsed = CountryCodeSchema.safeParse(valueAt(trip.value, ["places", index, "countryCode"]));
+      if (parsed.success) {
+        visited.add(parsed.data);
+      }
+    });
+  }
+
+  const file = displayPath(request.repoRoot, wishlistPathFor(request.contentDir));
+
+  return wishlist.entries.flatMap((entry) =>
+    visited.has(entry.code)
+      ? [
+          {
+            file,
+            field: entry.field,
+            ...(entry.location === undefined ? {} : { location: entry.location }),
+            problem: `le pays ${quoted(entry.code)} est déjà visité — un voyage de content/trips/ y passe — et la carte ne peut pas le teinter à la fois ${quoted("visité")} et ${quoted("à venir")}`,
+            action: "retire cette ligne : le souhait est exaucé",
+          },
+        ]
+      : []
+  );
 }
 
 function findingsForTrip(
@@ -582,11 +676,17 @@ function unassignedCode(label: string, code: string): Pick<ContentFinding, "prob
  * **TIW-30: a real country the shipped basemap has no shape for.** The third
  * notch of the chain, and the one that is hardest to word.
  *
- * Nothing is wrong with the code. `SG` is Singapore, ISO 3166-1 numeric 702, and
+ * Nothing is wrong with the code. `GI` is Gibraltar, ISO 3166-1 numeric 292, and
  * every check upstream of here clears it — the schema's `/^[A-Z]{2}$/`, then
- * `isAssignedCountryCode`. What refuses it is `world-atlas` at the 110m vintage,
- * which carries no micro-state at all: measured, 75 of the 249 assigned codes
- * have no geometry, Hong Kong, Malta, Mauritius and French Polynesia among them.
+ * `isAssignedCountryCode`. What refuses it is `world-atlas` at the vintage the
+ * site ships: measured, 14 of the 249 assigned codes have no geometry at 50m —
+ * BQ, BV, CC, CX, GF, GI, GP, MQ, RE, SJ, TK, TV, UM, YT.
+ *
+ * **The example moved with the vintage, and that is the point of the block.** At
+ * 110m the case was Singapore, and 75 codes were in it — every micro-state. 50m
+ * draws Singapore, Monaco, Malta and the rest, so the list is now short and
+ * mostly French overseas départements. What did *not* move is the shape of the
+ * refusal, which is why this function survived a vintage change untouched.
  *
  * So the sentence must not read like the one above it. Told "this code is
  * assigned to no country" the author goes hunting for a typo that is not there,
@@ -594,14 +694,14 @@ function unassignedCode(label: string, code: string): Pick<ContentFinding, "prob
  * that the code is right and the map is what is missing, and it names the vintage
  * so the claim is checkable.
  *
- * **The way out is priced, and it is not the same way out for every code.** 64 of
- * the 75 are drawn by a finer vintage the package already ships; 11 — the French
- * overseas départements and a few dependencies — are drawn by none of them. The
- * finer vintage costs 182.5 KB brotli of paths against a 34 KB ceiling, measured,
- * so it is quoted with its number rather than suggested: an action that said
- * "switch vintage" and stopped there would be an invitation to blow a budget the
- * author cannot see. And for the eleven, saying it at all would be sending them
- * to buy 152 KB that still would not draw their country.
+ * **The way out is priced, and it is not the same way out for every code.** 3 of
+ * the 14 — GI, TV, UM — are drawn by the finer vintage the package already ships;
+ * 11 are drawn by none of them. That finer vintage costs 512.6 KiB brotli of
+ * paths against the 200 KiB ceiling, measured, so it is quoted with its number
+ * rather than suggested: an action that said "switch vintage" and stopped there
+ * would be an invitation to blow a budget the author cannot see. And for the
+ * eleven, saying it at all would be sending them to buy 330 KiB that still would
+ * not draw their country.
  *
  * **What it deliberately does not say.** Not "run `npm run validate:content`" —
  * this *is* that command. Not a substitute country either: the map draws no shape
@@ -612,7 +712,7 @@ function undrawableCode(label: string, code: string): Pick<ContentFinding, "prob
   const wayOut = FINER_VINTAGE_COUNTRY_CODES.has(code)
     ? `retire le lieu du voyage, ou rattache-le à un pays que la carte dessine. ` +
       `Le millésime ${quoted(FINER_BASEMAP_VINTAGES[0])} du même paquet le dessinerait, mais il porte les tracés ` +
-      `de 30,1 à 182,5 Ko brotli pour un plafond de 34 Ko : c'est une décision de budget, pas une option de contenu`
+      `de 182,6 à 512,6 Kio brotli pour un plafond de 200 Kio : c'est une décision de budget, pas une option de contenu`
     : `retire le lieu du voyage, ou rattache-le à un pays que la carte dessine. ` +
       `Changer de millésime n'y ferait rien : aucun de ceux que world-atlas livre ` +
       `(${[BASEMAP_VINTAGE, ...FINER_BASEMAP_VINTAGES].join(", ")}) ne porte de forme pour ce code`;
@@ -621,7 +721,7 @@ function undrawableCode(label: string, code: string): Pick<ContentFinding, "prob
     problem:
       `${label} porte le code pays ${quoted(code)}, que l'ISO 3166-1 alpha-2 attribue bien — ` +
       `mais le fond de carte du site, ${quoted(`world-atlas ${BASEMAP_VINTAGE}`)}, n'a aucune forme pour lui : ` +
-      `à cette résolution il ne contient aucun micro-État`,
+      `à ce millésime, world-atlas ne distingue pas ce territoire`,
     action: wayOut,
   };
 }

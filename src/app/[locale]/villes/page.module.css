@@ -1,0 +1,179 @@
+/* =============================================================================
+   "Villes" — the index of the journal's cities and places.
+
+   No colour is declared here: every value comes from `src/styles/tokens.css`,
+   which imports the shared palette. The three ink-on-surface pairs this file
+   uses — `--text-accent`, `--text-body` and `--text-muted` on `--surface`, plus
+   `--control-border` against `--site-background` and against `--surface` — are
+   the ones `src/components/trips/trip-card.module.css` already measures and
+   registers in `tests/styles/colour-contract.test.ts`. This file reuses the pairs
+   rather than restating their numbers, so there is one measured table for them
+   and not two that can drift apart. (Until September 2026 the file holding that
+   table was the map's own `visited-countries.module.css`, deleted with the block
+   it dressed; the pairs outlived it because they are the site's, not that
+   block's.)
+
+   The header rules mirror `../voyages/page.module.css` deliberately: the two are
+   sibling index pages and a reader moving between them should meet the same
+   heading, the same measure and the same empty box.
+   ============================================================================ */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: var(--text-display-sm);
+}
+
+.intro {
+  color: var(--text-muted);
+  /* A measure, not a width — the same reason as the catalogue's intro. */
+  max-width: 60ch;
+}
+
+/**
+ * A responsive grid of rows, and not the wrapping pills the map's country list
+ * uses.
+ *
+ * The two lists carry different amounts of text. A country pill holds a name and
+ * a count; a row here holds a name, its country and a count, so pills would come
+ * out at wildly different widths and the ragged right edge would make fourteen
+ * names harder to scan than one column of them. `auto-fill` with a floor keeps
+ * one column on a phone and three or four on a desktop, without this sheet
+ * knowing a single breakpoint.
+ *
+ * `minmax(15rem, 1fr)` in `rem` so the floor grows with a reader's larger default
+ * size: at 200 % zoom the grid collapses to one column instead of clipping
+ * "Les Sables-d'Olonne".
+ */
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/**
+ * The whole row is the target — name, country and count together.
+ *
+ * `min-block-size: 2.75rem` — 44 px at the root size — the same number the map's
+ * markers and the country pills carry. WCAG 2.2 level AA only asks 24 px of
+ * 2.5.8, and these are not exempt as "inline text links" because they are laid
+ * out as blocks; matching what the rest of the site already spends costs nothing
+ * and keeps one number in the project.
+ *
+ * `text-decoration: none` is paid for: the border and the fill make the row read
+ * as a control rather than as running text, so the underline is not the only
+ * thing separating it from its surroundings. `--control-border` and not
+ * `--border-subtle`, whose own declaration in the shared sheet marks it
+ * decorative-only — this border is the row's only boundary.
+ */
+.link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  min-block-size: 2.75rem;
+  block-size: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-accent);
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+/**
+ * **Hover changes the fill and never the border**, and that is a decision taken
+ * once for this whole site rather than here.
+ * The map's own country pills measured the alternative, in a stylesheet since
+ * deleted: swapping the border to `--accent-quiet-border` took the row's only
+ * visible boundary well *below* the 3:1 of 1.4.11 in both themes, so pointing at
+ * it made it less delimitable than leaving it alone. `--accent-quiet` moves the
+ * fill and leaves the boundary where it is. `src/components/trips/trip-card.module.css`
+ * records the same finding on its own cards, with the numbers.
+ */
+.link:hover {
+  background: var(--accent-quiet);
+}
+
+/**
+ * Baseline alignment above puts the three spans on one line where they fit; this
+ * is what keeps the row 44 px tall when its content is shorter. `align-items:
+ * center` would do it too, and would misalign a place name against its count at
+ * two font sizes.
+ */
+.name {
+  font-weight: var(--weight-medium);
+}
+
+/**
+ * The country, in the reader's language. Quieter than the place name because it
+ * is the qualifier and not the subject — but `--text-body` and not
+ * `--text-muted`, which the count already owns: three weights of grey on one row
+ * would say there are three levels of importance, and there are two.
+ *
+ * `margin-inline-start: auto` is deliberately absent. Pushing the count to the
+ * right edge of a grid cell looks tidy and puts a variable gap between a name and
+ * its own number, which is the pair a reader is actually comparing across rows.
+ */
+.country {
+  color: var(--text-body);
+  font-size: var(--text-sm);
+}
+
+/**
+ * The number of stays. `--text-muted` on the row it actually sits on — the pair
+ * the country list measures and the colour contract recomputes from the shipped
+ * sheet. `--text-sm` and not `--text-xs`, which at 12 px would be the one thing
+ * on this page a reader has to lean in for.
+ *
+ * `white-space: nowrap` because "3 séjours" wrapping between the digit and the
+ * word is the one break in this row that reads as a bug.
+ */
+.trips {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+/**
+ * Nothing published yet. Not a "0 lieu" counter above an empty grid: a heading
+ * with nothing under it reads as a broken page, and the acceptance criteria are
+ * explicit that no empty block is rendered.
+ *
+ * Identical to the catalogue's empty box, on purpose — the two index pages fail
+ * the same way and a reader who has seen one should recognise the other.
+ */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-md);
+}
+
+.emptyBody {
+  color: var(--text-muted);
+  max-width: 55ch;
+}
+
+.emptyLink {
+  /* 44 px of target (WCAG 2.2, 2.5.8) in `rem`, so it grows with a reader's
+     larger default size. This is the page's only way out when it is empty. */
+  min-block-size: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  font-weight: var(--weight-medium);
+}

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { MAP_DRAWING } from "./support/map";
 
 /**
  * TIW-26's third acceptance criterion: **no network request to a geometry file
@@ -145,8 +146,17 @@ test("using the map fetches nothing beyond this origin either", async ({ page, b
     afterLoad.push(request.url());
   });
 
-  const figure = page.locator("figure");
-  await figure.getByRole("button", { name: "Zoomer sur la carte" }).click();
+  // `Ctrl` + wheel since TIW-38 removed the zoom buttons — the gesture is the
+  // point here, not how it is triggered: what matters is that moving the map
+  // fetches nothing.
+  const box = await page.locator(MAP_DRAWING).boundingBox();
+  await page.mouse.move(
+    (box?.x ?? 0) + (box?.width ?? 0) / 2,
+    (box?.y ?? 0) + (box?.height ?? 0) / 2
+  );
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -240);
+  await page.keyboard.up("Control");
   await page.getByRole("link", { name: "Islande, cercle d'or, Reykjavik" }).click({ force: true });
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.waitForTimeout(1_000);

@@ -4,6 +4,7 @@ import {
   MAX_ZOOM_WIDTH_FRACTION,
   TRIP_PARAM,
   VIEW_PARAM,
+  ZOOM_SCALE_STEPS,
   ZOOM_STEP,
   boundsOf,
   clampViewport,
@@ -12,7 +13,11 @@ import {
   pinchFactor,
   readMapState,
   serialiseViewport,
+  widthAtZoomNotch,
   writeMapState,
+  zoomNotchOf,
+  zoomPercentOf,
+  zoomToNotch,
   zoomViewport,
   type Viewport,
 } from "@/components/map/viewport";
@@ -279,6 +284,192 @@ describe("zoomViewport", () => {
 
     expect(result.width).toBeCloseTo(WORLD.width, 6);
     expect(result.x).toBe(0);
+  });
+});
+
+describe("the zoom slider's scale", () => {
+  /**
+   * The value ↔ width conversion the `<input type="range">` rides on, in both
+   * directions.
+   *
+   * It is worth a hundred cases here rather than one in a browser for the reason
+   * the rest of this file exists: the slider's value is **derived from the
+   * viewport on every render**, so a conversion that is not an exact inverse of
+   * itself does not fail loudly — it makes the thumb crawl behind the finger, or
+   * stick one notch off where it was dropped, on some frames and not others.
+   * There is no assertion a Playwright spec can make about that which is cheaper
+   * than these.
+   */
+  const widestOf = (bounds: ReturnType<typeof boundsOf>) =>
+    Math.min(WORLD.width, WORLD.height * bounds.aspect);
+
+  /** What one notch multiplies the frame's width by, on `BOUNDS`. */
+  const NOTCH_RATIO = (BOUNDS.minWidth / widestOf(BOUNDS)) ** (1 / ZOOM_SCALE_STEPS);
+
+  it("puts the whole world at one end and the legibility floor at the other", () => {
+    expect(widthAtZoomNotch(0, BOUNDS)).toBeCloseTo(widestOf(BOUNDS), 9);
+    expect(widthAtZoomNotch(ZOOM_SCALE_STEPS, BOUNDS)).toBeCloseTo(BOUNDS.minWidth, 9);
+    // And the floor really is the one `clampViewport` refuses to go past, rather
+    // than a second number that happens to agree today.
+    expect(widthAtZoomNotch(ZOOM_SCALE_STEPS, BOUNDS)).toBeCloseTo(
+      clampViewport(view(0, 0, 1, 1), BOUNDS).width,
+      9
+    );
+  });
+
+  it("moves by a constant RATIO per notch, which is the whole point of the scale", () => {
+    /**
+     * The property a linear scale does not have, and the reason the owner's
+     * "zoomer proprement" is arithmetic rather than taste: the map must move at
+     * the same apparent speed wherever the thumb is. Linearly the same notch is
+     * 1 % of the frame at the bottom of the scale and 24 % of it at the top.
+     */
+    const ratios = [];
+    for (let notch = 0; notch < ZOOM_SCALE_STEPS; notch += 1) {
+      ratios.push(widthAtZoomNotch(notch, BOUNDS) / widthAtZoomNotch(notch + 1, BOUNDS));
+    }
+
+    for (const ratio of ratios) {
+      expect(ratio).toBeCloseTo(ratios[0] ?? 0, 9);
+    }
+    // The whole travel is the whole zoom range, so the per-notch ratio is its
+    // hundredth root and nothing has been lost at either end.
+    expect((ratios[0] ?? 0) ** ZOOM_SCALE_STEPS).toBeCloseTo(
+      widestOf(BOUNDS) / BOUNDS.minWidth,
+      6
+    );
+  });
+
+  it("reads back every notch it wrote, all 101 of them", () => {
+    // The exact-inverse property, walked rather than sampled: one notch that does
+    // not round-trip is one place the thumb sticks under a finger.
+    for (let notch = 0; notch <= ZOOM_SCALE_STEPS; notch += 1) {
+      const moved = zoomToNotch(clampViewport(view(0, 0, 960, 0), BOUNDS), notch, BOUNDS);
+
+      expect(zoomNotchOf(moved, BOUNDS), `notch ${notch} did not read back`).toBe(notch);
+      expectInsideTheWorld(moved, BOUNDS.aspect);
+    }
+  });
+
+  it("reads a frame the wheel or a pinch left behind, not only one it set", () => {
+    // The bidirectional half: the slider is a view of the frame, so a zoom that
+    // came from anywhere else has to move the thumb.
+    const start = clampViewport(view(0, 0, 960, 0), BOUNDS);
+    const wheeled = zoomViewport(start, ZOOM_STEP, { x: 0.2, y: 0.7 }, BOUNDS);
+
+    expect(zoomNotchOf(wheeled, BOUNDS)).toBeGreaterThan(zoomNotchOf(start, BOUNDS));
+    /**
+     * And the notch it reports is the NEAREST one to that width — asserted as a
+     * ratio and not as a distance in units, because that is the whole claim: a
+     * wheel step of 1.5 lands nowhere near a notch boundary, and the thumb may
+     * therefore be up to half a notch off the frame. Half a notch is 1.6 %, which
+     * is a sub-pixel of travel on a 192 px track. A tolerance in world units would
+     * have meant something different at each end of the scale, which is precisely
+     * what a logarithmic axis makes untrue.
+     */
+    const reported = widthAtZoomNotch(zoomNotchOf(wheeled, BOUNDS), BOUNDS);
+    expect(Math.abs(Math.log(reported / wheeled.width))).toBeLessThanOrEqual(
+      Math.abs(Math.log(NOTCH_RATIO)) / 2 + 1e-9
+    );
+  });
+
+  it("zooms from the centre of what the reader is looking at", () => {
+    /**
+     * The slider has no pointer to zoom towards, so it takes the anchor the three
+     * removed buttons took. Asserted at both ends of a move: a control that
+     * zoomed from a corner would slide the map out from under the reader on every
+     * pixel of a drag.
+     */
+    const start = clampViewport(view(200, 100, 480, 0), BOUNDS);
+    const centre = { x: start.x + start.width / 2, y: start.y + start.height / 2 };
+
+    for (const notch of [10, 35, 60]) {
+      const result = zoomToNotch(start, notch, BOUNDS);
+
+      expect(result.x + result.width / 2).toBeCloseTo(centre.x, 6);
+      expect(result.y + result.height / 2).toBeCloseTo(centre.y, 6);
+    }
+  });
+
+  it("clamps a notch off either end instead of leaving the world", () => {
+    const start = clampViewport(view(200, 100, 480, 0), BOUNDS);
+
+    for (const notch of [-40, ZOOM_SCALE_STEPS + 40, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expectInsideTheWorld(zoomToNotch(start, notch, BOUNDS), BOUNDS.aspect);
+    }
+    expect(zoomToNotch(start, -40, BOUNDS).width).toBeCloseTo(widestOf(BOUNDS), 6);
+    expect(zoomToNotch(start, ZOOM_SCALE_STEPS + 40, BOUNDS).width).toBeCloseTo(BOUNDS.minWidth, 6);
+    // A notch that is not a number is the widest frame and never a blank map.
+    expect(widthAtZoomNotch(Number.NaN, BOUNDS)).toBeCloseTo(widestOf(BOUNDS), 9);
+  });
+
+  it("answers a notch for a viewport no reader could have reached", () => {
+    // A hand-edited `?carte=` is clamped on the way in, but nothing stops this
+    // function being handed the raw thing: it must not answer NaN, which would
+    // reach the DOM as `value=""` and make the input uncontrolled.
+    for (const raw of [view(0, 0, 5000, 0), view(0, 0, 0.001, 0), view(0, 0, Number.NaN, 0)]) {
+      const notch = zoomNotchOf(raw, BOUNDS);
+
+      expect(Number.isInteger(notch)).toBe(true);
+      expect(notch).toBeGreaterThanOrEqual(0);
+      expect(notch).toBeLessThanOrEqual(ZOOM_SCALE_STEPS);
+    }
+  });
+
+  it("says the zoom as a whole percentage, 100 % being the whole world", () => {
+    /**
+     * What `aria-valuetext` announces. A percentage and not the notch: the notch
+     * is this module's own scale, and a screen reader saying "37" for a map is
+     * reading out an implementation detail.
+     */
+    expect(zoomPercentOf(clampViewport(view(0, 0, 960, 0), BOUNDS), BOUNDS)).toBe(100);
+    expect(zoomPercentOf(zoomToNotch(view(0, 0, 960, 0), ZOOM_SCALE_STEPS, BOUNDS), BOUNDS)).toBe(
+      Math.round((widestOf(BOUNDS) / BOUNDS.minWidth) * 100)
+    );
+    // Monotonic: further in is always a bigger number, which is what makes the
+    // announcement usable while dragging.
+    let previous = 0;
+    for (let notch = 0; notch <= ZOOM_SCALE_STEPS; notch += 10) {
+      const percent = zoomPercentOf(zoomToNotch(view(0, 0, 960, 0), notch, BOUNDS), BOUNDS);
+
+      expect(Number.isInteger(percent)).toBe(true);
+      expect(percent).toBeGreaterThan(previous);
+      previous = percent;
+    }
+  });
+
+  it("keeps its footing on the empty map, where the world IS the frame", () => {
+    /**
+     * The degenerate end of the scale and the production state until TIW-24: the
+     * widest frame is the world itself. Zooming out has nowhere to go, so notch 0
+     * must answer the world rather than a division by a span of zero.
+     */
+    const start = clampViewport(view(0, 0, WORLD.width, 0), WORLD_BOUNDS);
+
+    expect(zoomNotchOf(start, WORLD_BOUNDS)).toBe(0);
+    expect(zoomToNotch(start, 0, WORLD_BOUNDS).width).toBeCloseTo(
+      Math.min(WORLD.width, WORLD.height * WORLD_BOUNDS.aspect),
+      6
+    );
+    expect(zoomToNotch(start, ZOOM_SCALE_STEPS, WORLD_BOUNDS).width).toBeCloseTo(
+      WORLD_BOUNDS.minWidth,
+      6
+    );
+    expect(zoomPercentOf(start, WORLD_BOUNDS)).toBe(100);
+  });
+
+  it("answers notch 0 rather than NaN for a world no wider than the floor", () => {
+    /**
+     * Unreachable from a real page — `MAX_ZOOM_WIDTH_FRACTION` is 4 % — and it is
+     * the case that turns `log(narrowest / widest)` into a zero to divide by. A
+     * `NaN` here reaches the DOM as `value=""`, React logs "a component is
+     * changing a controlled input to be uncontrolled", and the thumb disappears.
+     */
+    const tiny = boundsOf(frameAround([], { width: 1, height: 1 }), { width: 1, height: 1 });
+
+    expect(zoomNotchOf(view(0, 0, 1, 1), tiny)).toBe(0);
+    expect(Number.isFinite(widthAtZoomNotch(50, tiny))).toBe(true);
+    expect(Number.isFinite(zoomPercentOf(view(0, 0, 1, 1), tiny))).toBe(true);
   });
 });
 

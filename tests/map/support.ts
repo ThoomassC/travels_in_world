@@ -58,7 +58,7 @@ export const DATASET_VINTAGES = ["110m", "50m", "10m"] as const;
 export type DatasetVintage = (typeof DATASET_VINTAGES)[number];
 
 /** The vintage the map is actually built from — the one `src/map/dataset.ts` imports. */
-export const SHIPPED_DATASET_VINTAGE: DatasetVintage = "110m";
+export const SHIPPED_DATASET_VINTAGE: DatasetVintage = "50m";
 
 /**
  * Pinned as a path rather than imported as a module: a `resolveJsonModule` import

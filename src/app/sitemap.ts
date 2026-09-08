@@ -1,8 +1,17 @@
 import type { MetadataRoute } from "next";
+import { countryNameOf } from "@/components/trips/format";
 import { listTripSummaries } from "@/content/trips";
 import { hasStory } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
-import { aboutPath, tripPath, tripsPath } from "@/i18n/paths";
+import {
+  aboutPath,
+  countriesPath,
+  countryPath,
+  countrySlugsByCode,
+  placesPath,
+  tripPath,
+  tripsPath,
+} from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
 import { absoluteUrl } from "./site-url";
@@ -31,14 +40,28 @@ import { absoluteUrl } from "./site-url";
  */
 
 /**
- * A page's absolute URL in every active locale, with the `hreflang` alternates
- * that a multilingual sitemap needs — and without them while there is one locale.
+ * A page's absolute URL in every active locale, each carrying the `hreflang`
+ * alternates that a multilingual sitemap needs.
  *
- * The alternates are emitted only from the second locale on. With one active
- * locale the block would be `<xhtml:link hreflang="fr" href="…"/>` next to the very
- * `<loc>` it points at, which says nothing and adds a line per URL. The shape is
- * already right for the day `en` is activated: `routing.locales` grows and this
- * function starts emitting pairs, with no diff here.
+ * **One `<url>` entry per locale, each listing all three plus `x-default`**, and
+ * that repetition is the format rather than an oversight: the sitemap protocol
+ * asks every localised version to be listed as its own `<loc>` and to name the
+ * whole set beside it, so a crawler reaching any one of them learns about the
+ * others. Naming only the default would leave `/en/...` looking like a page
+ * competing with `/fr/...` for the same subject.
+ *
+ * This function used to skip the alternates entirely while `fr` was the only
+ * active locale — a block reading `<xhtml:link hreflang="fr" href="…"/>` beside
+ * the very `<loc>` it points at says nothing and costs a line per URL. That
+ * branch is gone rather than kept as dead code: three locales are declared, and
+ * `src/i18n/routing.ts` is what decides it.
+ *
+ * `x-default` names the default locale's URL, for the same reason
+ * `src/app/share.ts` does in the document head — `/` redirects to `/fr` and there
+ * is no `Accept-Language` negotiation, so that IS the address for a reader we
+ * have no better answer for. The two files build the same set, one absolute and
+ * one relative; `tests/build/durable-urls.test.ts` holds the sitemap's `<loc>`
+ * list and the prerendered pages to each other in both directions.
  */
 function localisedEntry(
   path: string,
@@ -48,15 +71,15 @@ function localisedEntry(
     routing.locales.map((locale) => [locale, absoluteUrl(localePathname({ href: path, locale }))])
   );
 
-  const alternates =
-    routing.locales.length > 1
-      ? { languages: Object.fromEntries(byLocale) as Record<string, string> }
-      : undefined;
+  const languages: Record<string, string> = {
+    ...Object.fromEntries(byLocale),
+    "x-default": absoluteUrl(localePathname({ href: path, locale: routing.defaultLocale })),
+  };
 
   return [...byLocale.values()].map((url) => ({
     url,
     ...(lastModified === undefined ? {} : { lastModified }),
-    ...(alternates === undefined ? {} : { alternates }),
+    alternates: { languages },
   }));
 }
 
@@ -79,6 +102,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
    */
   const mostRecentEnd = trips[0]?.endDate;
 
+  /**
+   * The countries the carnet has been to (TIW-39), addressed exactly as the pages
+   * address themselves: `countrySlugsByCode` is the single derivation this file,
+   * `/pays` and `/pays/[slug]` all read, so a URL advertised here cannot be one
+   * that `generateStaticParams` did not build. It also throws — on a country whose
+   * published slug ICU has moved, and on two countries claiming one address —
+   * which fails `next build` here rather than shipping a sitemap full of 404s.
+   *
+   * **Every country the trips *reach*, not the ones they are filed under.** The
+   * pages take the same reading, and the sitemap has to agree with the pages: a
+   * country crossed by one journey has a page, so it has an entry.
+   *
+   * Sorted by slug, so two builds of the same carnet write the same file.
+   */
+  const countrySlugs = [
+    ...countrySlugsByCode(
+      trips.flatMap((trip) => trip.countryCodes),
+      (code) => countryNameOf("fr", code)
+    ).values(),
+  ].sort();
+
   return [
     ...localisedEntry("/", mostRecentEnd),
     ...localisedEntry(tripsPath(), mostRecentEnd),
@@ -96,6 +140,29 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
      * deploy — which is exactly how a sitemap stops being believed.
      * `localisedEntry` omits the element entirely for `undefined`.
      */
+    /**
+     * The places listing (TIW-38). It takes the most recent trip's end date for
+     * the same reason the two entries above it do: it is a list, and what changes
+     * a list is a trip arriving — a new journey adds its places to this page as
+     * surely as it adds its card to the catalogue.
+     */
+    ...localisedEntry(placesPath(), mostRecentEnd),
+    /**
+     * The countries index and its five pages (TIW-39). They take the most recent
+     * trip's end date for the reason the three entries above do: they are lists,
+     * and what changes a list is a trip arriving — a new journey adds a country to
+     * the index, or a town to a country's page, as surely as it adds a card to the
+     * catalogue.
+     *
+     * **A country page is here although not one of its trips has a récit**, which
+     * is the same call `/voyages` and `/villes` already embody and NOT the one
+     * `hasStory` governs below. That filter is about a *story* being advertised at
+     * an address `tripStaticParams` never built; these pages are lists, they are
+     * built, and they are the answer to "where has he been" that a crawler should
+     * find.
+     */
+    ...localisedEntry(countriesPath(), mostRecentEnd),
+    ...countrySlugs.flatMap((slug) => localisedEntry(countryPath(slug), mostRecentEnd)),
     ...localisedEntry(aboutPath(), undefined),
     /**
      * **The trips that have a page, and not every trip in the list** (TIW-18).

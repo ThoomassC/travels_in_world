@@ -1,0 +1,209 @@
+/* =============================================================================
+   The listing filter: a radio group above a list, and the resting state of the
+   count lines the generated sheet reveals.
+
+   WHAT IS **NOT** HERE, and why the split is where it is. The rules that hide an
+   entry name a token — `country-FR`, `year-2024` — and the tokens are a function
+   of the content, so they are generated per page by `facet-stylesheet.ts`. This
+   file holds everything that does not depend on what the journal contains: the
+   layout, the pills, the count line at rest. A reader looking for "what makes the
+   filtering happen" is one file away, and this one stays readable.
+
+   No colour is declared here. The pairs this file paints — `--text-body`,
+   `--text-muted` and `--text-strong` on `--surface`, and `--control-border`
+   against the page — are the ones `trip-card.module.css` and
+   `villes/page.module.css` already measure and register in
+   `tests/styles/colour-contract.test.ts`. They are reused rather than restated,
+   so there is one measured table for them and not three that can drift.
+   ============================================================================ */
+
+/**
+ * A plain block and not a flex column with a `gap`.
+ *
+ * The count lines are `display: none` until a choice is made, so their container
+ * has no height at rest — and a flex `gap` would still reserve its space on both
+ * sides of it, leaving a hole between the control and the list that nothing
+ * explains. Margins on the parts that are actually painted cannot do that.
+ */
+.scope {
+  display: block;
+}
+
+/**
+ * `border: 0` and `min-inline-size: 0`.
+ *
+ * A `<fieldset>` carries a UA border this design does not want — the `<legend>`
+ * already says where the control begins — and, less obviously, an automatic
+ * minimum size of `min-content` that no other element has. Left alone it refuses
+ * to shrink below its widest pill, which puts a horizontal scrollbar on a narrow
+ * phone: the reflow defect (WCAG 1.4.10) `main`'s own grid comment records paying
+ * for once already.
+ */
+.filter {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.legend {
+  padding-inline: 0;
+  color: var(--text-strong);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+
+.axis {
+  margin: 0;
+  margin-block-start: var(--space-4);
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+/**
+ * The axis label is quieter than the control's own: it names a reading of one
+ * choice, not a second control. `--text-muted` is the same weight of grey the
+ * counts use, which is the level this project already spends on a qualifier.
+ */
+.axisLegend {
+  padding-inline: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+/**
+ * Wrapping pills, sized by their content. `auto-fill` columns were the other
+ * option and they are wrong here: a country name and a year are two and eight
+ * characters apart, and a grid would give both the same track — a row of boxes
+ * mostly full of nothing, in which the eye cannot find the short one.
+ */
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+}
+
+/**
+ * One choice. The radio is native and visible: the browser's focus ring, its
+ * checked mark and its arrow-key navigation are exactly what is wanted, and
+ * hiding it behind a styled box would mean rebuilding all three.
+ *
+ * `min-block-size: 2.75rem` — 44 px at the root size, in `rem` so it grows with a
+ * reader's larger default — the number the map's markers, the country pills and
+ * the `/villes` rows already carry. WCAG 2.2 asks 24 px of 2.5.8; matching what
+ * the rest of the site spends costs nothing and keeps one number in the project.
+ */
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 2.75rem;
+  padding-inline-start: var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  transition: background-color 120ms ease;
+}
+
+/**
+ * **Hover and the checked state move the fill and never the border**, which is a
+ * decision this project took once and not here. The map's country pills measured
+ * the alternative in a stylesheet since deleted: swapping the border to
+ * `--accent-quiet-border` took the pill's only visible boundary below the 3:1 of
+ * 1.4.11 in both themes, so pointing at it made it *less* delimitable.
+ *
+ * Two different fills, deliberately: a pill under the pointer and the pill that
+ * is on must not look the same, or hovering would read as having chosen. And the
+ * choice is never carried by colour alone — the radio's own mark is what states
+ * it (1.4.1), which is the second reason the control is not hidden.
+ */
+.option:hover {
+  background: var(--panel-surface-hover);
+}
+
+.option:has(input:checked) {
+  background: var(--accent-quiet);
+}
+
+/**
+ * The label fills the rest of the pill so the target is the pill and not the
+ * word. `flex: 1` rather than `inline-size: 100%`: the pill is sized by its
+ * content, and a percentage width inside an auto-sized box is a loop the layout
+ * resolves by ignoring it.
+ */
+.label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  flex: 1;
+  gap: var(--space-1) var(--space-2);
+  padding-block: var(--space-2);
+  padding-inline-end: var(--space-3);
+  color: var(--text-body);
+  cursor: pointer;
+}
+
+.option:has(input:checked) .label {
+  color: var(--text-strong);
+  font-weight: var(--weight-medium);
+}
+
+/**
+ * The count. `--text-sm` and not `--text-xs`, which at 12 px would be the one
+ * thing on the control a reader has to lean in for — the same call
+ * `villes/page.module.css` makes on its own counts. `nowrap` because "7 voyages"
+ * breaking between the digit and the word is the one break here that reads as a
+ * bug.
+ */
+.count {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+/**
+ * The count lines, at rest.
+ *
+ * `display: none` is the resting state and the generated sheet reveals exactly
+ * one — never the other way round. A document in which no radio is checked, which
+ * nothing can produce since the reset is checked at render, then shows the
+ * unfiltered page instead of every line of the filter at once.
+ */
+.status {
+  display: none;
+  margin-block-start: var(--space-5);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/**
+ * The container of those lines has no box of its own, deliberately: it is a live
+ * region that has to exist from the first paint — one created at the moment its
+ * text appears is one screen readers do not announce — and it must cost no space
+ * while it is empty.
+ */
+.statuses {
+  margin: 0;
+}
+
+.listing {
+  margin-block-start: var(--space-5);
+}
+
+/**
+ * A group whose every entry is hidden is hidden with them, and its count would
+ * then be the only thing left saying "12 voyages" over three. It is dropped for
+ * as long as a choice is active — the count line above the list carries the true
+ * number, and it is the one a reader has just changed.
+ *
+ * The literal `all` is the reset's token, declared once in `facets.ts` and
+ * spelled here because a CSS Module cannot import it. It is the only value of
+ * this vocabulary that is fixed rather than derived from the content, which is
+ * why this rule can live in a static sheet at all.
+ */
+.scope:has(input:checked:not([value="all"])) [data-facet-total] {
+  display: none;
+}

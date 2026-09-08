@@ -29,8 +29,14 @@ import { readDatasetGeometries } from "./support";
 
 const geometries = readDatasetGeometries();
 
-/** The three territories world-atlas 110m ships with no `id` at all. */
-const UNIDENTIFIED_TERRITORY_NAMES = ["Kosovo", "N. Cyprus", "Somaliland"];
+/** The territories world-atlas 50m ships with no `id` at all — three at 110m. */
+const UNIDENTIFIED_TERRITORY_NAMES = [
+  "Indian Ocean Ter.",
+  "Kosovo",
+  "N. Cyprus",
+  "Siachen Glacier",
+  "Somaliland",
+];
 
 const ALPHA2_PATTERN = /^[A-Z]{2}$/;
 const NUMERIC_PATTERN = /^\d{3}$/;
@@ -132,26 +138,26 @@ describe("the table against the dataset it has to join with", () => {
    * The failure names the orphans, because "expected 174, got 173" is not
    * actionable and "OrphanedNumeric 704 (Vietnam)" is.
    */
-  it("resolves exactly 174 of the 177 geometries to an alpha-2 code", () => {
+  it("resolves exactly 236 of the 241 geometries to an alpha-2 code", () => {
     const byNumeric = alpha2ByNumeric();
     const identified = geometries.filter((geometry) => geometry.id !== null);
     const orphaned = identified
       .filter((geometry) => geometry.id !== null && !byNumeric.has(geometry.id))
       .map((geometry) => `${geometry.id} (${geometry.name})`);
 
-    expect(geometries).toHaveLength(177);
-    expect(identified).toHaveLength(174);
+    expect(geometries).toHaveLength(241);
+    expect(identified).toHaveLength(236);
     expect(orphaned).toEqual([]);
   });
 
   /**
-   * The other half of the same count. Three geometries have no id in this vintage
+   * The other half of the same count. Five geometries have no id in this vintage
    * and can never be joined — they are drawn as background and nothing else. If a
-   * fourth appears, or one of these three gains an id, the "174" above stops
+   * sixth appears, or one of these five gains an id, the "236" above stops
    * meaning what it says, and the map's handling of unjoinable shapes needs
    * revisiting rather than the number being nudged.
    */
-  it("leaves exactly Kosovo, N. Cyprus and Somaliland unidentified", () => {
+  it("leaves exactly the five unnamed territories unidentified", () => {
     const unidentified = geometries
       .filter((geometry) => geometry.id === null)
       .map((geometry) => geometry.name)
@@ -161,7 +167,7 @@ describe("the table against the dataset it has to join with", () => {
   });
 
   /**
-   * A second, independent opinion on the same 174 rows, from ICU rather than from
+   * A second, independent opinion on the same 236 rows, from ICU rather than from
    * the dataset. `Intl.DisplayNames` falls back to echoing the input when it does
    * not recognise a region, so a code that ICU cannot name — `"XK"`, a typo, an
    * alpha-3 slipped into the column — comes back identical to what went in.

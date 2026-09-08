@@ -1,12 +1,16 @@
 /* =============================================================================
    The header lock-up — no colour of its own, like every module here.
 
-   It reads FOUR tokens and no literal: `--logo-ink`, `--logo-accent`,
-   `--accent-quiet` and the spacing scale. The first two are the contract
-   `src/styles/tokens.css` declares for exactly this file: they are redeclared in
-   all three theme states, so a visitor in dark mode gets the light ink and the
-   bright accent without this file knowing that dark mode exists — and a page can
-   override either one locally without a fork of the component.
+   It reads THREE tokens and no literal: `--logo-ink`, `--accent-quiet` and the
+   spacing scale. The first is the contract `src/styles/tokens.css` declares for
+   exactly this file: it is redeclared in all three theme states, so a visitor in
+   dark mode gets the light ink without this file knowing that dark mode exists —
+   and a page can override it locally without a fork of the component.
+
+   `--logo-accent` is no longer read here. The mark the owner supplied on
+   7 September 2026 has no accented part: one ink, one silhouette. The token still
+   exists in `tokens.css` for whatever comes next; this file simply stopped using
+   it.
    ============================================================================ */
 
 /**
@@ -17,32 +21,41 @@
  * same reason as `.link` in `./site-nav.module.css` and `.skip` in the layout's
  * module — three targets in the chrome, one number.
  *
- * The negative inline-start margin cancels this element's own padding so the
- * mark's left edge lands on `main`'s measure rather than 8 px inside it: the
- * padding exists for the hover pill, not for the layout.
+ * No inline padding and no negative margin to cancel one: the mark's left edge is
+ * placed by `.brandZone` in `./site-nav.module.css`, which is the file that knows
+ * where the window's edge is. An earlier version of this comment described a
+ * margin that was not in the rule below.
  */
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   min-block-size: 2.75rem;
-  margin-inline-start: calc(var(--space-2) * -1);
-  padding-inline: var(--space-2);
-  border-radius: var(--radius-pill);
-  color: var(--logo-ink);
-  /* No underline: this is a logo, and the mark plus the pill below carry the
-     affordance. The same argument `./site-nav.module.css` makes for the two nav
+  color: var(--text-on-accent);
+  /* No underline: this is a logo, and the mark plus the medallion carry the
+     affordance. The same argument `./site-nav.module.css` makes for the three nav
      entries — a link that is the site's identity is chrome, not prose. */
   text-decoration: none;
-  transition: background-color 120ms ease;
-}
 
-.brand:hover {
-  background: var(--accent-quiet);
+  /**
+   * **The lock-up sits on the accent bar, so its ink is re-pointed here rather
+   * than forked.** `src/styles/tokens.css` declares `--logo-ink` precisely so a
+   * page can re-point it locally without a second copy of the component, and this
+   * is that case: the default follows `--text-strong`, which is near-invisible on
+   * a teal fill.
+   *
+   * It becomes `--text-on-accent`, the pair the header bar is already under
+   * contract for. And the constraint `brand-art.ts` used to document — the
+   * aeroplane and its trajectory may not share an edge, because ink against
+   * accent measures 1.56:1 — no longer has a subject: there is no trajectory, and
+   * the needle inside the silhouette is a *hole*, so what shows through it is the
+   * medallion rather than a second ink.
+   */
+  --logo-ink: var(--text-on-accent);
 }
 
 /**
- * The mark.
+ * The aeroplane.
  *
  * `height` and not `block-size`, and that is not a lapse: `tokens.css` sets
  * `img, svg { height: auto }`, and a logical property is a *different* property
@@ -50,24 +63,41 @@
  * auto` standing, with the winner decided by stylesheet order rather than by
  * specificity. A class beating an element selector is decided by neither.
  *
- * 2 rem is a floor as much as a size: the trajectory is a row of 3-unit dots in a
- * 32-unit box, so at 2 rem each dot is 3 px with 3 px of air. Take the mark much
- * below that and the dots stop reading as dots — which is the whole reason the
- * favicon (`src/app/icon.svg`) drops the trajectory and keeps the comet alone.
+ * **2.25 rem, and the number comes from the wordmark rather than from the bar.**
+ * The lock-up is the aeroplane beside two lines of text; the mark reads as part
+ * of the same object only if its height is close to theirs. Two lines at
+ * `--text-md` and `--text-xs` with their leading measure ~2.2 rem, so the
+ * aeroplane matches them and the whole thing sits inside the bar's 4 rem with
+ * room above and below.
+ *
+ * It was 3.25 rem while the mark lived in a 6.5 rem disc that hung below the bar.
+ * The disc is gone (see `./site-brand.tsx`), so the constraint that set that
+ * number is gone too.
+ *
+ * **`aspect-ratio` and not `width: auto`, and this cost a rendering.**
+ *
+ * An `<svg>` with a `viewBox` and no `width`/`height` attribute has no
+ * intrinsic size. As a grid item inside the old medallion that did not matter:
+ * the disc gave it a box. As a **flex item** of the lock-up, `width: auto`
+ * resolves through `flex-basis: auto` to the content size, and the aeroplane
+ * came out zero wide — measured on a production build, the lock-up was 97 px,
+ * which is the wordmark alone. The drawing was in the DOM, painted nothing, and
+ * no unit test could see it.
+ *
+ * The ratio is the viewBox's own, so the two cannot drift: `BRAND_PLANE_VIEWBOX`
+ * is `0 0 72 100`.
  */
 .mark {
-  height: 2rem;
+  height: 2.25rem;
+  aspect-ratio: 72 / 100;
   width: auto;
+  flex: none;
   /* Nothing in this SVG is interactive, and the anchor above owns the pointer. */
   pointer-events: none;
 }
 
-.comet {
+.plane {
   fill: var(--logo-ink);
-}
-
-.track {
-  stroke: var(--logo-accent);
 }
 
 /**
@@ -78,12 +108,8 @@
  * to it, whatever the reader's chosen scheme.
  */
 @media (forced-colors: active) {
-  .comet {
+  .plane {
     fill: LinkText;
-  }
-
-  .track {
-    stroke: LinkText;
   }
 }
 
@@ -98,15 +124,60 @@
  * because a single line of display type has no leading to distribute, and the
  * anchor's `align-items: center` is what puts it beside the mark.
  */
+/**
+ * **The name, on two lines, and the two lines are one name.**
+ *
+ * A flex column rather than a `<br>`: the second line is a different size, a
+ * different tracking and a different case, so it is a box and not a line break.
+ *
+ * `line-height: 1` on both, with the gap declared once: leading that belongs to
+ * running text is what made the bar 86 px tall the last time this file trusted
+ * it, and the note on `.brandZone` in `./site-nav.module.css` records the
+ * measurement.
+ */
 .word {
+  display: flex;
+  flex-direction: column;
+  gap: 0.14em;
+  /* "Travels in World" is a name: breaking it across more lines than the two it
+     is composed of makes it more things. It fits beside the mark at 320 px, the
+     narrowest layout `tokens.css` supports, and the header wraps the nav below it
+     rather than this. */
+  white-space: nowrap;
+}
+
+/**
+ * The first time — the display serif at full size. This is the word a reader
+ * keeps, and the only part of the lock-up set in the display family.
+ */
+.wordLead {
+  font-family: var(--font-display);
   font-size: var(--text-md);
   font-weight: var(--weight-semibold);
-  letter-spacing: -0.012em;
+  letter-spacing: -0.01em;
   line-height: 1;
-  /* "Travels in World" is a name: breaking it across two lines makes it two
-     things. It fits beside the mark at 320 px, the narrowest layout `tokens.css`
-     supports, and the header wraps the nav below it rather than this. */
-  white-space: nowrap;
+}
+
+/**
+ * The second time — small, letterspaced, uppercased **by CSS**.
+ *
+ * The capitals are a rendering and not a spelling: the DOM says "in World", so a
+ * screen reader announces the name and not an initialism spelled letter by
+ * letter. `letter-spacing` is what makes a small uppercase line legible rather
+ * than a smudge; `0.28em` is the tracking the mock-up sheet used, and it is wide
+ * because the line is short.
+ */
+.wordTail {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.28em;
+  line-height: 1;
+  text-transform: uppercase;
+  /* The tracking adds a space after the last letter that the eye reads as a
+     misalignment with the line above. Pulling it back by one tracking unit is
+     what optical alignment means here. */
+  margin-inline-end: -0.28em;
+  opacity: 0.85;
 }
 
 /**

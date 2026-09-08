@@ -7,7 +7,11 @@ import {
   REGENERATE_COMMAND,
 } from "@/basemap-coverage";
 import { NUMERIC_BY_ALPHA2 } from "@/iso-3166";
-import { DATASET_VINTAGES, readDatasetGeometries, SHIPPED_DATASET_VINTAGE } from "./support";
+import {
+  DATASET_VINTAGES,
+  readDatasetGeometries,
+  SHIPPED_DATASET_VINTAGE,
+} from "./support";
 import type { DatasetVintage } from "./support";
 
 /**
@@ -77,10 +81,28 @@ describe("the generated coverage of the shipped basemap", () => {
     expect(sorted(FINER_VINTAGE_COUNTRY_CODES)).toEqual(sorted(finer));
   });
 
+  /**
+   * **This compared two sorted sets until 50m shipped, and it could not survive
+   * that.** With 110m shipped, "the shipped vintage plus the finer ones" happened
+   * to be every vintage the package carries, so equality was enough. Shipping the
+   * middle vintage leaves 110m *coarser* — accounted for, and deliberately not in
+   * `FINER_BASEMAP_VINTAGES`, because offering "switch to a coarser dataset" as
+   * the way out for an undrawable country would be nonsense.
+   *
+   * So the invariant is stated as what it always meant: `DATASET_VINTAGES` is
+   * ordered coarse to fine, and it is exactly the coarser ones, then the shipped
+   * one, then the finer ones. A vintage the package adds and the generator forgets
+   * still fails here.
+   */
   it("covers every vintage the package ships, so nothing is silently ignored", () => {
-    expect([BASEMAP_VINTAGE, ...FINER_BASEMAP_VINTAGES].sort()).toEqual(
-      [...DATASET_VINTAGES].sort()
-    );
+    const shippedAt = DATASET_VINTAGES.indexOf(BASEMAP_VINTAGE as DatasetVintage);
+
+    expect(shippedAt).toBeGreaterThanOrEqual(0);
+    expect([
+      ...DATASET_VINTAGES.slice(0, shippedAt),
+      BASEMAP_VINTAGE,
+      ...FINER_BASEMAP_VINTAGES,
+    ]).toEqual([...DATASET_VINTAGES]);
   });
 
   /**
@@ -101,18 +123,27 @@ describe("the generated coverage of the shipped basemap", () => {
    * the measurement says 75 of the 249 assigned codes, which is what ruled out
    * documenting them one by one in `content/README.md`.
    */
-  it("leaves 75 assigned codes with no shape at all, Singapore among them", () => {
+  it("leaves 14 assigned codes with no shape at all, Martinique among them", () => {
     const undrawable = [...NUMERIC_BY_ALPHA2.keys()].filter(
       (code) => !DRAWABLE_COUNTRY_CODES.has(code)
     );
 
-    expect(undrawable).toHaveLength(75);
-    expect(undrawable).toContain("SG");
+    /**
+     * **75 at 110m, 14 here, and Singapore is no longer one of them.** The switch
+     * to 50m drew every micro-state the coarse vintage omitted — SG, MC, MT, SM,
+     * LI, AD, BH, MV — which is the whole reason this count moved. What is left is
+     * mostly what no vintage of this package draws at all: the French overseas
+     * départements and a handful of dependencies, which the case below pins
+     * separately.
+     */
+    expect(undrawable).toHaveLength(14);
+    expect(undrawable).toContain("MQ");
+    expect(undrawable).not.toContain("SG");
   });
 
   /**
-   * The eleven codes no vintage of this package draws — French overseas
-   * départements and a handful of dependencies. They are why the refusal message
+   * The codes no vintage of this package draws — French overseas départements and
+   * a handful of dependencies. They are why the refusal message
    * has two shapes: telling the author of a trip to Martinique to "switch to the
    * 50m vintage" would be sending them to buy 152 KB of paths that still would
    * not draw their country.
@@ -150,8 +181,8 @@ describe("a coverage artefact that no longer matches the dataset", () => {
   async function buildWith(codes: readonly string[]): Promise<() => unknown> {
     vi.resetModules();
     vi.doMock("@/basemap-coverage", () => ({
-      BASEMAP_VINTAGE: "110m",
-      FINER_BASEMAP_VINTAGES: ["50m", "10m"] as const,
+      BASEMAP_VINTAGE: "50m",
+      FINER_BASEMAP_VINTAGES: ["10m"] as const,
       DRAWABLE_COUNTRY_CODES: new Set(codes),
       FINER_VINTAGE_COUNTRY_CODES: new Set(codes),
       REGENERATE_COMMAND: "npm run basemap:coverage",
@@ -162,10 +193,16 @@ describe("a coverage artefact that no longer matches the dataset", () => {
     return () => buildWorldGeometry({ visitedCountryCodes: ["JP"], locale: "fr" });
   }
 
+  /**
+   * `GI` and no longer `SG`: the 50m vintage draws Singapore, so claiming it is no
+   * longer a claim the dataset can contradict. Gibraltar is one of the three codes
+   * only 10m carries, which is what this case needs — a real code the shipped
+   * vintage has no shape for.
+   */
   it("refuses to draw when the list claims a country the dataset has no shape for", async () => {
-    const build = await buildWith([...DRAWABLE_COUNTRY_CODES, "SG"]);
+    const build = await buildWith([...DRAWABLE_COUNTRY_CODES, "GI"]);
 
-    expect(build).toThrow(/SG/);
+    expect(build).toThrow(/GI/);
     expect(build).toThrow(/basemap:coverage/);
   });
 
@@ -186,11 +223,11 @@ describe("a coverage artefact that no longer matches the dataset", () => {
    * worse than no memo. Caught here, by asserting twice on the same fault.
    */
   it("keeps refusing on every call, not only on the first", async () => {
-    const build = await buildWith([...DRAWABLE_COUNTRY_CODES, "SG"]);
+    const build = await buildWith([...DRAWABLE_COUNTRY_CODES, "GI"]);
 
     expect(build).toThrow();
     expect(build).toThrow();
-    expect(build).toThrow(/SG/);
+    expect(build).toThrow(/GI/);
   });
 
   it("draws normally when the list matches", async () => {

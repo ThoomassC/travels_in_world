@@ -5,8 +5,8 @@
  *
  * **The question this answers, and why it needs a file.** `src/iso-3166.ts` says
  * whether ISO 3166-1 assigns a code; it says nothing about whether a *map* can
- * draw it. At the 110m vintage, 75 of the 249 assigned codes have no shape
- * at all — every micro-state, Singapore and Hong Kong included. Before TIW-30
+ * draw it. At the 50m vintage, 14 of the 249 assigned codes have no shape
+ * at all — BQ, BV, CC, CX, GF, GI, GP, MQ, RE, SJ, TK, TV, UM, YT. Before TIW-30
  * `npm run validate:content` cleared them and `buildWorldGeometry` threw halfway
  * through the prerender of `/fr`.
  *
@@ -35,41 +35,52 @@
  */
 
 /** The vintage `src/map/dataset.ts` imports. */
-export const BASEMAP_VINTAGE = "110m";
+export const BASEMAP_VINTAGE = "50m";
 
 /**
  * The finer vintages the same package already ships. Switching to one costs
- * bundle weight, not a dependency — and the price is steep: the whole 50m vintage
- * projects to 182.5 KB brotli of paths against the 34 KB ceiling of
- * `tests/map/world.test.ts`. Named here so a refusal can quote the way out with
- * its cost instead of implying it is free.
+ * bundle weight, not a dependency — and the price is steep: the shipped 50m
+ * vintage already projects to 182.6 KiB brotli of paths against the 200 KiB
+ * ceiling of `tests/map/world.test.ts`, and 10m measures 512.6 KiB, which is
+ * two and a half times the whole budget. Named here so a refusal can quote the
+ * way out with its cost instead of implying it is free.
  */
-export const FINER_BASEMAP_VINTAGES = ["50m", "10m"] as const;
+export const FINER_BASEMAP_VINTAGES = ["10m"] as const;
 
 /** The command that rewrites this file, quoted by both guards when they fail. */
 export const REGENERATE_COMMAND = "npm run basemap:coverage";
 
 /**
- * The 174 countries the 110m vintage draws — the set the validator gates on.
+ * The 235 countries the 50m vintage draws — the set the validator gates on.
  */
 export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
+  "AD",
   "AE",
   "AF",
+  "AG",
+  "AI",
   "AL",
   "AM",
   "AO",
   "AQ",
   "AR",
+  "AS",
   "AT",
   "AU",
+  "AW",
+  "AX",
   "AZ",
   "BA",
+  "BB",
   "BD",
   "BE",
   "BF",
   "BG",
+  "BH",
   "BI",
   "BJ",
+  "BL",
+  "BM",
   "BN",
   "BO",
   "BR",
@@ -84,17 +95,21 @@ export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "CG",
   "CH",
   "CI",
+  "CK",
   "CL",
   "CM",
   "CN",
   "CO",
   "CR",
   "CU",
+  "CV",
+  "CW",
   "CY",
   "CZ",
   "DE",
   "DJ",
   "DK",
+  "DM",
   "DO",
   "DZ",
   "EC",
@@ -107,19 +122,27 @@ export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "FI",
   "FJ",
   "FK",
+  "FM",
+  "FO",
   "FR",
   "GA",
   "GB",
+  "GD",
   "GE",
+  "GG",
   "GH",
   "GL",
   "GM",
   "GN",
   "GQ",
   "GR",
+  "GS",
   "GT",
+  "GU",
   "GW",
   "GY",
+  "HK",
+  "HM",
   "HN",
   "HR",
   "HT",
@@ -127,23 +150,32 @@ export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "ID",
   "IE",
   "IL",
+  "IM",
   "IN",
+  "IO",
   "IQ",
   "IR",
   "IS",
   "IT",
+  "JE",
   "JM",
   "JO",
   "JP",
   "KE",
   "KG",
   "KH",
+  "KI",
+  "KM",
+  "KN",
   "KP",
   "KR",
   "KW",
+  "KY",
   "KZ",
   "LA",
   "LB",
+  "LC",
+  "LI",
   "LK",
   "LR",
   "LS",
@@ -152,14 +184,23 @@ export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "LV",
   "LY",
   "MA",
+  "MC",
   "MD",
   "ME",
+  "MF",
   "MG",
+  "MH",
   "MK",
   "ML",
   "MM",
   "MN",
+  "MO",
+  "MP",
   "MR",
+  "MS",
+  "MT",
+  "MU",
+  "MV",
   "MW",
   "MX",
   "MY",
@@ -167,22 +208,29 @@ export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "NA",
   "NC",
   "NE",
+  "NF",
   "NG",
   "NI",
   "NL",
   "NO",
   "NP",
+  "NR",
+  "NU",
   "NZ",
   "OM",
   "PA",
   "PE",
+  "PF",
   "PG",
   "PH",
   "PK",
   "PL",
+  "PM",
+  "PN",
   "PR",
   "PS",
   "PT",
+  "PW",
   "PY",
   "QA",
   "RO",
@@ -191,18 +239,25 @@ export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "RW",
   "SA",
   "SB",
+  "SC",
   "SD",
   "SE",
+  "SG",
+  "SH",
   "SI",
   "SK",
   "SL",
+  "SM",
   "SN",
   "SO",
   "SR",
   "SS",
+  "ST",
   "SV",
+  "SX",
   "SY",
   "SZ",
+  "TC",
   "TD",
   "TF",
   "TG",
@@ -211,6 +266,7 @@ export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "TL",
   "TM",
   "TN",
+  "TO",
   "TR",
   "TT",
   "TW",
@@ -220,9 +276,15 @@ export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "US",
   "UY",
   "UZ",
+  "VA",
+  "VC",
   "VE",
+  "VG",
+  "VI",
   "VN",
   "VU",
+  "WF",
+  "WS",
   "YE",
   "ZA",
   "ZM",
@@ -235,7 +297,7 @@ export const DRAWABLE_COUNTRY_CODES: ReadonlySet<string> = new Set([
  * Its only job is to keep a refusal from becoming a dead end: 11 assigned codes —
  * BQ, BV, CC, CX, GF, GP, MQ, RE, SJ, TK, YT — are drawn by
  * *no* vintage of `world-atlas`, so telling their author to switch would be
- * telling them to buy 152 KB of paths that still would not draw their country.
+ * telling them to buy 330 KiB of paths that still would not draw their country.
  */
 export const FINER_VINTAGE_COUNTRY_CODES: ReadonlySet<string> = new Set([
   "AD",

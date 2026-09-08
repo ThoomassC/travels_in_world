@@ -155,8 +155,12 @@ pages (3/3)`, et le HTML servi est identique — seul `.next/server/app/fr.html`
 `.next/prerender-manifest.json` et exige `/fr` et `/_not-found`. Elle exige un build avant
 elle et ne le fait pas à votre place (branchée en CI par TIW-22). Le même fichier porte le
 budget de charge utile, désormais appliqué aux **deux** routes prérendues et non à `/fr`
-seule : 37,3 Ko brotli de HTML sur `/fr` — les tracés du planisphère, en ligne dans le
-document — et 1,3 Ko sur `/_not-found`, pour un plafond de 100 Ko ; et pour un plafond de 150 Ko de JS
+seule : les tracés du planisphère, en ligne dans le document. Ce chiffre annonçait 37,3 Ko
+sur `/fr` pour un plafond de 100 Ko ; les deux ont changé avec le passage au millésime 50m et
+la valeur est aujourd'hui de **181,6 Kio de tracés dans un document de 196,0 Kio**, pour un
+plafond de 240 Kio réservé aux trois routes qui portent la carte (`MAP_HTML_BUDGET_BYTES`).
+`AGENTS.md` porte le détail et l'histoire de ce budget. `/_not-found` reste à 1,3 Ko sous son
+plafond de 100 Ko ; et pour un plafond de 150 Ko de JS
 initial, 123,2 Ko sur `/fr` (7 chunks) et 111,2 Ko sur `/_not-found` (5 chunks) — chunk
 `noModule` exclu, c'est le bundle de compatibilité que jamais aucun navigateur moderne
 n'exécute et il vaut 34 Ko à lui seul. Chiffres relevés sur `develop` @ `5c5bf34`, après
@@ -194,8 +198,11 @@ conséquences assumées :
 corrige pas : mesuré, une URL sans route correspondante part au 404 global et n'atteint
 jamais la limite du segment. Le contournement par catch-all `[locale]/[...rest]` corrige la
 langue mais introduit une route dynamique `ƒ` et rend `<html id="__next_error__">` — refusé.
-L'alarme est le test unitaire « declares exactly one active locale » : il passe au rouge dès
-qu'une seconde locale est déclarée, et son commentaire liste ce qu'il faut traiter d'abord.
+Ce compromis a été **assumé en TIW-38**, quand `en` et `es` sont devenus actifs : le 404 répond
+en français sous les trois préfixes, et le catch-all qui le corrigerait coûte une route `ƒ`,
+donc l'invariant du prérendu. L'alarme d'alors — le test « declares exactly one active locale »
+— a fait son travail et a été remplacée par deux gardes plus utiles dans `tests/smoke.test.tsx` :
+chaque locale déclarée a son catalogue, et chaque catalogue porte tout le jeu de clés.
 
 **Adresses durables et aperçus de partage.** Le slug d'un voyage publié est **définitif**.
 Le renommer est autorisé et coûte une entrée dans `src/i18n/slug-history.ts`, pour toujours :
@@ -328,11 +335,71 @@ composant. **Depuis TIW-37 ce fichier ne porte plus la palette** : il importe ce
 README n'est pas un garde. Le garde, désormais, est
 `tests/styles/colour-contract.test.ts`.
 
-**La marque est provisoire, et remplaçable sans toucher au code.** Le logotype est une
-comète en `--logo-ink` — une seule masse connexe — accompagnée d'une trajectoire en
-pointillé en `--logo-accent`, et du nom composé dans la pile de polices du site. C'est une
-marque **typographique**, assumée comme telle : il n'y a ni police propre, ni dessin de
-lettres. Cinq fichiers, et une seule source de vérité :
+**La marque est remplaçable sans toucher au code.** Le logotype est un **avion vu de face,
+droit**, en `--logo-ink`, une aiguille de compas découpée dans son fuselage, suivi du nom sur
+**deux lignes** : « Travels » dans la serif d'affichage à taille pleine, « IN WORLD » petit et
+très espacé dessous. C'est le verrouillage « Deux temps », choisi par le propriétaire le
+7 septembre 2026 parmi huit, et retenu pour une raison qui n'est pas esthétique : **c'est le
+seul dont la hiérarchie tienne sans couleur** — taille, casse et famille disent la même chose
+trois fois, donc il survit au noir et blanc, à l'impression et à un lecteur qui ne sépare
+aucune teinte. Les sept autres reposaient sur un aplat, un contour ou une pastille, tous des
+objets dont le contraste doit être mesuré et tenu.
+
+C'est le troisième dessin du projet — une comète que la plupart des lecteurs prenaient pour
+une plume, puis un avion incliné à 21° volant en tête d'une trajectoire pointillée, puis
+celui-ci — et le premier à porter le nom dans la marque elle-même. **Deux choses ont disparu
+avec ce choix**, notées ici parce qu'elles ont chacune coûté une correction :
+
+- **le médaillon**, le disque de 6,5 rem à la couleur de la barre qui débordait sous elle. Un
+  verrouillage qui épelle le nom n'a pas besoin d'une plaque, et un disque à côté d'un
+  logotype sur deux lignes fait deux centres de gravité dans un même coin. Sa disparition a
+  fait maigrir la barre empilée de 28 px, ce que `--chrome-height` continuait d'ignorer : le
+  garde de `tests/e2e/map-interaction.spec.ts` l'a dit dès la première exécution ;
+- **le nom posé à côté de la marque.** Il fait maintenant partie du verrouillage, donc le
+  garder aurait imprimé « Travels in World » deux fois dans le même coin.
+
+Le nom est **deux clés** (`brand.nameLead`, `brand.nameTail`) et non une seule coupée au
+rendu : une coupure au rendu serait une règle sur le français qu'aucun traducteur ne peut
+changer. Les capitales de la seconde ligne sont un `text-transform` et non une saisie, pour
+que l'arbre d'accessibilité reçoive « in World » et non « IN WORLD », que certains lecteurs
+d'écran épellent lettre à lettre. Et un espace explicite sépare les deux éléments : mesuré,
+sans lui le nom accessible se concatène en « Travelsin World ».
+
+**Ce qui n'a PAS changé : le favicon reste l'avion seul.** À 16 px un nom sur deux lignes est
+illisible, et une seconde coupe simplifiée serait un second logo. La carte de partage, elle,
+porte le même verrouillage que l'en-tête, en grand — un seul dessin sur toutes les surfaces,
+ce qui était l'argument principal de la proposition retenue.
+
+**Le dessin a changé le 7 septembre 2026, et c'est le premier de ce dépôt qui n'a pas été
+dessiné ici.** Le propriétaire a fourni un PNG de 1600 × 1200 : un avion **vu de face,
+droit**, avec une aiguille de compas **découpée** dans le fuselage. L'ancienne marque — un
+avion incliné à 21° volant en tête d'un filet pointillé — a été retirée, et avec elle les
+trois constantes du filet.
+
+Deux choses à savoir avant d'y toucher :
+
+1. **Le chemin a deux contours et se peint en `fill-rule: evenodd`.** Le premier est la
+   cellule, le second est l'aiguille, et l'aiguille est un **trou**. Peinte avec la règle
+   non nulle par défaut, elle se remplit et la marque perd son seul détail — sans erreur,
+   sans avertissement. `tests/components/site/brand-art.test.ts` refuse qu'un des deux
+   fichiers qui dessinent ce chemin oublie la règle.
+2. **La cellule a été retracée puis réécrite à la main.** Le traceur donnait un bout d'aile
+   gauche à x 0 et un droit à x 360,435 ; un logo asymétrique à 0,12 % reste un logo
+   asymétrique. Chaque arête droite est exacte, les deux courbes de nez sont les mêmes deux
+   cubiques en miroir, et la symétrie autour de x 36 est une propriété de la construction et
+   non une mesure. L'aiguille, elle, est le contour tracé mis à l'échelle 1/5 : il est
+   ressorti symétrique à 0,01 près, il n'y avait rien à corriger.
+
+Ce que la nouvelle coupe donne à 16 px, mesuré : **34,4 % de la boîte encrée**, 44 pixels sur
+256 au-delà d'alpha 200, contre 14,6 % et 22 pixels pour l'avion incliné. Une silhouette
+droite vue de face est bien plus dense qu'une croix inclinée. En regard, **l'aiguille
+disparaît à cette taille** — 2,4 unités dans une boîte de 72, donc un demi-pixel — et la
+marque se dégrade en silhouette pleine, qui se lit encore comme un avion ; l'aiguille revient
+à 32 px. C'est une acceptation, pas un oubli : une seconde coupe simplifiée pour les petites
+tailles serait un second logo.
+
+C'est une marque **typographique**, assumée comme telle : il n'y a ni police propre, ni dessin
+de lettres. Cinq fichiers, une seule source de vérité, et **une commande** :
 
 | Fichier                                     | Ce qu'il porte                                       |
 | ------------------------------------------- | ---------------------------------------------------- |
@@ -341,28 +408,45 @@ lettres. Cinq fichiers, et une seule source de vérité :
 | `src/app/apple-icon.png`                    | 180 × 180, opaque, sur la plaque `--logo-bg`         |
 | `public/opengraph-default.png`              | 1200 × 630, l'image de partage par défaut du site    |
 | `src/components/site/site-brand.module.css` | les tailles et les états du verrouillage d'en-tête   |
+| `scripts/generate-brand-rasters.ts`         | **redessine les deux PNG** depuis la géométrie       |
 
 Pour substituer un dessin définitif : remplacer les chaînes de `brand-art.ts`, recopier le
-même `d` dans `icon.svg`, régénérer les deux PNG. Aucun composant, aucun test et aucune
-feuille de style n'a besoin d'être modifié. **Ce qui casse si les proportions changent** : le
-`viewBox` du verrouillage décide de la largeur de la marque pour une hauteur de `2rem` (la
-boîte est plus large que haute, c'est ce qui l'empêche de dominer le nom) ; la plaque de
-l'icône Apple porte la seule couleur en dur du lot, parce qu'un PNG ne suit aucun thème ; et
-l'image de partage **doit** rester en 1200 × 630, sans quoi `og:image:width` /
-`og:image:height` mentent et la carte se réagence après le chargement.
-`tests/build/brand.test.ts` refuse ce dernier cas en lisant l'en-tête du PNG.
+même `d` dans `icon.svg`, puis `npm run brand:rasters`. Aucun composant, aucun test et aucune
+feuille de style n'a besoin d'être modifié.
 
-Deux contraintes de dessin sont mesurées et ne se contournent pas. **Encre contre accent ne
-vaut que 1,56:1 en clair et 1,45:1 en sombre** : aucune forme ne peut donc reposer sur cette
-frontière, et c'est pourquoi la comète et la trajectoire sont deux objets séparés par du fond
-nu — chacun se lit contre la page (encre 10,28:1 clair et 12,01:1 sombre, accent 6,60:1 et
-8,30:1) et jamais contre l'autre. Ces quatre chiffres sont recalculés par
+**Cette commande n'existait pas avant le 7 septembre 2026**, et c'est ce qui rendait la phrase
+ci-dessus fausse en pratique : les deux PNG avaient été faits à la main, le README disait « les
+régénérer » sans dire comment, et la géométrie avait une source de vérité que les rasters
+n'avaient pas. Elle ne vit pas dans `npm test` — un garde qui réécrit l'artefact qu'il garde ne
+peut pas échouer, et une suite qui touche `public/` à chaque exécution rend `git status`
+inutilisable. Ce qui vérifie les rasters, c'est `tests/build/brand.test.ts`, qui lit leurs
+en-têtes.
+
+**Ce qui casse si les proportions changent** : le `viewBox` de la marque décide de sa largeur
+pour une hauteur donnée (0,72 : 1 — plus haute que large, contrairement à l'ancienne, d'où le
+médaillon qui la porte plutôt qu'une boîte carrée) ; la plaque de l'icône Apple porte la seule
+couleur en dur du lot, parce qu'un PNG ne suit aucun thème ; et l'image de partage **doit**
+rester en 1200 × 630, sans quoi `og:image:width` / `og:image:height` mentent et la carte se
+réagence après le chargement. `tests/build/brand.test.ts` refuse ce dernier cas en lisant
+l'en-tête du PNG.
+
+Une contrainte de dessin est mesurée et ne se contourne pas — et une deuxième a disparu avec
+l'ancienne marque, ce qui vaut d'être dit plutôt que silencieusement omis. **Encre contre
+accent ne vaut que 1,56:1 en clair et 1,45:1 en sombre** : c'est ce qui interdisait à l'avion
+incliné et à sa trajectoire de partager une arête, et ce qui les séparait par 6,68 unités de
+fond nu. La marque actuelle n'a **aucune partie accentuée** — une encre, une silhouette, et un
+trou qui laisse voir le médaillon — donc cette frontière n'existe plus nulle part dans le logo.
+Ce qui reste dû, c'est la lecture de l'encre contre la page : **8,97:1 en clair et 10,28:1 en
+sombre**. Ces chiffres sont recalculés par
 `tests/styles/colour-contract.test.ts` ; la palette partagée de TIW-37 a **resserré** la
 contrainte plutôt que de la desserrer (1,99 → 1,56 en clair), parce que l'accent y est un
 seul teal dans les deux thèmes au lieu d'un teal sombre et d'un cyan clair.
 
-**Le favicon abandonne la trajectoire** : à 16 px ses points et leurs vides passent sous le
-pixel, alors que la masse de la comète tient. Le relevé de 10,31 au pire sur les huit gris
+**Le favicon ne porte plus de trajectoire, et il n'y en a plus nulle part.** Ce que la coupe
+actuelle encre à 16 px est mesuré plus haut — 34,4 % de la boîte, 44 pixels sur 256 au-delà
+d'alpha 200 — contre 14,6 % et 22 pixels pour l'avion incliné, et 28,8 % pour la comète encore
+avant. Le sens de la série a donc changé deux fois : la marque s'était allégée, elle est
+redevenue dense. Le relevé de 10,31 au pire sur les huit gris
 de barres d'onglets de Chrome, Firefox et Safari **n'a pas été refait pour la nouvelle
 encre** et n'est donc plus valable : la liste de ces huit gris n'est consignée nulle part
 dans le dépôt, seul son résultat l'est (`docs/adr/0013`). Ce qui est mesuré, c'est le sens de
@@ -407,31 +491,35 @@ Trois choses à savoir avant d'y toucher, chacune détaillée dans
 
 Les couleurs viennent toutes de `tokens.css`, mais pas de n'importe lesquelles : le trait de
 côte et la bordure de la carte sont en `--control-border` (le jeton documenté `>= 3:1`) parce
-que `--border-subtle` mesure 1,33:1 et que la forme du monde est l'objet graphique
+que `--border-subtle` mesure 1,17:1 et que la forme du monde est l'objet graphique
 nécessaire à la compréhension ; la distinction visité / non visité est portée par un contour
 en `--text-accent` **et par son épaisseur**, parce qu'aucune valeur de remplissage ne dépasse
 3:1 en thème clair et qu'un canal non coloré est nécessaire.
 
-**L'équivalent textuel de la carte est un composant à part, pas un bloc masqué**
-(`src/components/map/visited-countries.tsx`, TIW-15) : sous la carte, les pays
-atteints par les voyages publiés avec le nombre de voyages de chacun, chaque pays
-étant un lien. Quatre choses à savoir avant d'y toucher :
+**L'équivalent textuel de la carte, c'est la liste des balises — plus une liste de
+pays.** Jusqu'au 7 septembre 2026, `src/components/map/visited-countries.tsx`
+(TIW-15) rendait sous la carte les pays atteints par les voyages publiés, chacun
+avec son nombre de voyages et son lien. **Le propriétaire a fait retirer ce bloc de
+l'onglet Carte** ; l'inventaire vit désormais sur les onglets **Pays** (`/voyages`,
+groupé par pays) et **Villes** (`/villes`, index alphabétique des lieux). Le
+composant, sa feuille de style et ses tests ont été supprimés avec lui.
 
-1. **Il lit les voyages, jamais la géométrie.** C'est ce qui rend le critère « carte
-   en échec » atteignable : `buildWorldGeometry` **jette** pour un code déclaré
-   qu'il ne sait pas dessiner, donc un état sans forme de pays est un état sans code
-   déclaré — et une liste alimentée par le sous-ensemble teinté aurait été vide
-   exactement dans les états où le dessin manque. Une panne, deux canaux perdus.
-2. **Il relie, il ne duplique pas.** `/voyages` est déjà l'inventaire complet de
-   « quels voyages, où ». Ce qui manquait était le **compte par pays**, qui
-   n'existait dans aucun canal. Le lien d'une ligne va vers ce qui existe à coup
-   sûr : **le voyage lui-même** quand le pays n'en porte qu'un, la liste complète
-   sinon. Jamais un fragment. La première version pointait
-   `/voyages#pays-<code>` et **ça pendait dans le vide** — `buildCatalogue` classe
-   un voyage sous son **pays de première arrivée** seulement, donc un pays
-   seulement _traversé_ n'a aucune section, et `#pays-bo` ne correspondait à rien
-   (mesuré sur un build de production). Un fragment sans cible n'échoue pas : il
-   dépose le lecteur en haut d'une longue page.
+Ce qui porte l'équivalent aujourd'hui, et ce que ça change :
+
+1. **Les balises.** Une par voyage, un vrai `<a href>`, nommée « titre, lieu » — et
+   « — récit à venir » pour un voyage sans récit. Le `<svg>` est `aria-hidden`
+   (ADR 0003), donc c'est cette liste-là, plus le `<figcaption>` compté, qui
+   satisfait la 1.1.1. Elle est dans le HTML que le serveur envoie :
+   `tests/e2e/map-equivalent.populated.spec.ts` le vérifie octet par octet.
+2. **Une dette de 1.4.1, nommée et datée.** Depuis TIW-38 la distinction
+   raconté / non raconté dans le dessin est cuivre contre teal — une différence de
+   teinte seule — et c'était la liste supprimée qui la portait aussi en toutes
+   lettres, visiblement. Elle est **inerte aujourd'hui** : les treize voyages
+   publiés sont tous `story: unwritten`, donc la carte ne peint qu'une teinte. Elle
+   devient réelle **au premier récit publié**, et la réparation est alors une
+   différence de _forme_ dans le dessin, pas une liste à faire défiler.
+   `src/components/map/world-map.module.css` et `src/app/[locale]/page.tsx` la
+   portent tous les deux.
 3. **La légende ne promet plus le monde quand le cadre est recadré.** `frameAround`
    plancher un cadre à 30 % de la largeur du monde, donc avec **un** voyage publié
    la carte montrait un continent sous « Carte du monde : 1 voyage, 1 pays ». Deux
@@ -443,11 +531,180 @@ atteints par les voyages publiés avec le nombre de voyages de chacun, chaque pa
    verrouillé contenant du vide, sans une erreur ni une ligne de console.
    `WorldMap` ne rend alors pas la boîte du tout : une phrase prend sa place.
 
+Et la leçon qui a survécu à la suppression, parce qu'elle vaut pour tout lien de ce
+dépôt : **jamais un fragment vers une section qui peut ne pas exister.** La liste
+supprimée pointait `/voyages#pays-<code>` et **ça pendait dans le vide** —
+`buildCatalogue` classe un voyage sous son **pays de première arrivée** seulement,
+donc un pays seulement _traversé_ n'a aucune section, et `#pays-bo` ne
+correspondait à rien (mesuré sur un build de production). Un fragment sans cible
+n'échoue pas : il dépose le lecteur en haut d'une longue page. La mesure est
+conservée dans l'en-tête de `tests/e2e/dead-links.populated.spec.ts`, le garde
+qu'elle a payé.
+
 L'énumération masquée des pays visités qui vivait dans le `<figcaption>` a été
-**retirée** : un `<figcaption>` est le **nom accessible** du `<figure>` (HTML-AAM),
-et quarante noms de pays dans un nom accessible n'est pas un libellé. La liste
-visible la remplace sur tous les plans. `docs/adr/0003-carte-svg-inerte-et-balises-html.md`
-en décrit encore l'ancienne version : à reprendre avec TIW-27.
+**retirée** dès TIW-15 : un `<figcaption>` est le **nom accessible** du `<figure>`
+(HTML-AAM), et quarante noms de pays dans un nom accessible n'est pas un libellé.
+Elle n'est pas revenue avec la suppression de la liste, et
+`tests/components/map/world-map.test.tsx` est ce qui l'en empêche.
+`docs/adr/0003-carte-svg-inerte-et-balises-html.md` en décrit encore l'ancienne
+version : à reprendre avec TIW-27.
+
+**La recherche de l'en-tête est le TROISIÈME `'use client'` du jalon**, et c'est la seule
+chose de ce dépôt qui ait dépassé le budget de deux. L'argument est dans l'en-tête de
+`src/components/search/site-search.tsx` ; le résumé tient en trois points.
+
+1. **Ce qui a été demandé est de l'interaction.** Filtrer une liste à chaque frappe, sans
+   aller-retour serveur — et il ne peut pas y en avoir : toutes les routes sont prérendues,
+   donc une page de résultats `?q=` se rendrait à la demande, ce qui est l'invariant 1.
+2. **La frontière est aussi mince que possible.** Tout ce qui n'est pas de l'interaction vit
+   dans `src/components/search/entries.ts`, un module pur avec vingt cas : construction de
+   l'index, pliage des accents, règle de correspondance. Le composant client n'a qu'une
+   boucle de filtre, une carte de touches et deux écouteurs.
+3. **Les lignes ne sont pas des props.** Elles arrivent en `children`, déjà rendues par le
+   serveur — le même geste que `MapViewport` avec ses balises et ses cartes. L'index existe
+   donc **une seule fois**, en HTML, et n'est jamais aussi sérialisé dans la charge utile.
+
+**LE CHAMP EST OUVERT EN PERMANENCE ET LA DIVULGATION EST DU CSS**, depuis que le
+propriétaire a choisi cette direction sur une planche de cinq. Il n'y a plus de `<summary>` :
+un champ de 20 rem vit dans la barre, et ce qui ouvre le panneau est `:focus-within` dans la
+feuille de style. Le lecteur sans JavaScript tabule dans le champ et **l'index complet du site
+apparaît** — chaque voyage, chaque lieu, chaque pays, chaque page, en liens réels — sans un
+clic. C'est strictement mieux que la divulgation que ça remplace. Le script n'a qu'un mot à
+dire : `data-dismissed`, écrit sur Échap, effacé à la frappe suivante. Le cadre du champ est
+un `<label>` et non un `<div>`, ce qui rend toute la pastille cliquable sans une ligne de
+script — et c'est ce qui la sauve sur une barre étroite, où l'entrée fait zéro pixel de large.
+
+**Les lignes sortent de l'ordre de tabulation, et c'est le CLIENT qui les en sort** — le seul
+endroit du dessin où les deux lecteurs reçoivent un DOM différent. Le panneau s'ouvrant au
+focus, la tabulation suivante entrait dedans : mesuré, `map-equivalent.populated.spec.ts`
+n'atteignait plus les balises de la carte en trente pressions, vingt et une suggestions
+s'étant intercalées entre l'en-tête et la page — sur chaque document du site. Un
+`tabIndex={-1}` rendu par le serveur réparerait ça et casserait l'autre lecteur, celui pour
+qui ce panneau **est** l'index et Tab la seule façon d'y circuler. L'attribut est donc écrit
+au montage : avec script, le marché du combobox — les flèches pour entrer, Entrée pour suivre,
+Tab pour passer outre ; sans script, une liste entièrement tabulable. Les flèches déplacent le
+**vrai focus** sur le **vrai lien**, donc Entrée, clic du milieu et Cmd-clic marchent parce que
+ce *sont* des liens.
+
+**Les suggestions d'un voyage sont illustrées** — la seconde moitié du choix du propriétaire.
+Une vignette et une seconde ligne « pays · N étapes · année ». **La vignette est le vrai pays**,
+au 50m, ajusté à son propre cadre par `src/map/country-tile.ts`, avec le point sur la ville de
+départ — le point même où la carte ancre sa balise.
+
+Deux pièges valaient d'être mesurés. Le premier ajustement prenait **tout** le tracé : la
+France du 50m porte la Guyane, la Réunion, la Martinique et Mayotte, si bien que la métropole
+sortait à huit unités de large dans une boîte de quarante, Rouen et la Corse à 3,8 unités l'un
+de l'autre. L'ajustement se fait donc en deux passes — sur la plus grande masse, puis sur elle
+plus les anneaux qui tombent près du cadre : la Corse, les Baléares et la Crète entrent, la
+Guyane et les Canaries restent dehors. Et le tracé brut pesait 23,6 Ko pour cinq pays :
+Douglas-Peucker à un tiers de pixel, puis grille au demi-pixel, le ramène à **3,3 Ko** — trois
+fois moins qu'une grille seule, pour un écart que personne ne voit. Un `<symbol>` par pays,
+donc neuf voyages français coûtent une France.
+
+Un fanion volait au bout de chaque ligne ; le propriétaire l'a fait retirer. Rien n'est perdu
+pour un lecteur qui ne voit pas la couleur, et c'est la seule raison qui l'autorisait : la
+seconde ligne finit déjà par les mots « récit à venir ».
+
+**La complétion en ligne** est native et non un fantôme posé à côté du champ : l'entrée porte
+le libellé entier et la part au-delà de ce qui a été tapé est **sélectionnée**, donc la frappe
+suivante la remplace. Une seconde boîte devrait être alignée à la main sur une fonte
+proportionnelle ; une sélection l'est par construction. Jamais sur une suppression — sinon
+Retour arrière remet le texte qu'on l'a pressé pour retirer. Et la décision se prend dans le
+gestionnaire de frappe, pas dans un effet : mesuré, l'effet rendait une fois avec la nouvelle
+requête et l'ancienne complétion, si bien que deux Retour arrière sur « Islande, cercle d'or »
+laissaient « i » au lieu de « Is ».
+
+**Ce que ça coûte, mesuré.** L'index est dans le HTML de **chaque** document, parce que le
+chrome l'est. Sur le contenu réel — 13 voyages, 36 lignes — c'est **11,7 Kio de balisage**,
+qui portent une page de contenu de 7,7 à 10,0 Kio brotli, et **+1,3 Kio de JavaScript initial**
+(`/fr` passe de 123,2 à 124,6 Kio pour un plafond de 150). C'est linéaire dans le contenu :
+soixante voyages font environ cent lignes et 32 Kio de balisage. Le plafond est donc posé —
+24 Kio dans `tests/build/prerender.test.ts` — avec sa porte de sortie chiffrée : au-delà,
+l'index devient un fichier JSON committé que le panneau va chercher au premier focus, ce qui
+coûte une requête, un mode de panne et un fichier à tenir en phase.
+
+**Il n'y a aucun corps de récit à indexer, et c'est une propriété du modèle.**
+`src/domain/schema.ts` donne à un voyage un titre, des lieux, des étapes, des photos et des
+tags — rien qui porte de la prose. « Chercher dans le texte des récits » se résout donc aux
+**légendes des photos et aux tags**, seul texte libre qu'un récit possède, et les deux sont
+repliés dans la botte de foin du voyage. Le jour où un champ de corps existe, c'est
+`buildSearchEntries` qui l'accueille : un cas de `tests/components/search/entries.test.ts` le
+dit en toutes lettres, pour que l'absence soit une décision consignée et non un manque que
+quelqu'un redécouvrira.
+
+Quatre défauts que seul le navigateur a vus, notés parce qu'ils se reproduiraient.
+**Les intitulés de groupe étaient des `<h2>`** et, l'en-tête précédant `<main>`, ils faisaient
+commencer le plan de titres de chaque page au niveau 2 — cinq cas de
+`heading-order.populated.spec.ts` d'un coup ; ce sont des `<p>` reliés par `aria-labelledby`.
+**Le panneau s'ouvrait sous le logo** : `.inner` est une grille à trois colonnes dont celle
+du milieu centre la navigation, un quatrième enfant a pris la première cellule, vide par
+construction. La recherche et le menu de langue partagent maintenant une même zone à droite.
+**Vingt et une suggestions s'étaient glissées dans le parcours clavier** de chaque page, dit
+plus haut. Et **la région défilante n'était plus atteignable au clavier** une fois les lignes
+sorties de la tabulation — `scrollable-region-focusable`, sérieux, dans les deux thèmes : le
+défilement, le nom accessible et un unique `tabindex="0"` sont maintenant sur le même élément,
+un arrêt juste après le champ qui annonce les suggestions et passe la main aux flèches.
+
+**Les filtres des deux listings n'ont PAS pris de quatrième `'use client'`**, et c'est la
+décision à connaître avant d'en toucher un. `/fr/voyages` et `/fr/villes` portent un groupe
+de boutons radio au-dessus de leur liste ; ce qui masque les entrées est une **feuille de
+style générée au build**, une règle par choix, imprimée dans le document. Le budget reste
+donc à **trois**.
+
+1. **Pourquoi pas d'état.** Toutes les routes sont prérendues, donc une page `?pays=FR` se
+   rendrait à la demande — l'invariant 1. Et un filtre est une _sélection_, pas une
+   interaction : un groupe de radios se souvient tout seul de ce qui est coché, les flèches
+   y déplacent le choix, un `<label>` élargit la cible. `:has()` lit l'état depuis le CSS.
+   Rien de tout cela n'a à être réécrit.
+2. **Un seul choix actif, tous axes confondus**, et ce n'est pas une limitation subie :
+   toutes les radios d'une page partagent un `name`, donc choisir une année efface un pays.
+   Deux propriétés en découlent. Le nombre écrit sur chaque pastille est **exactement** ce
+   qui reste — croisé avec un second axe, il faudrait un nombre par combinaison, ce que le
+   CSS ne sait pas calculer — et **un résultat vide devient inatteignable** plutôt
+   qu'arbitré, puisqu'un choix n'existe que pour une valeur que la collection porte. C'est
+   le même geste que les deux bandeaux mutuellement exclusifs de l'accueil.
+3. **Les axes sont choisis sur le contenu réel, pas sur l'habitude.** `/voyages` filtre par
+   **pays traversé** et par **année de départ** ; `/villes` par **pays**. Continent, état du
+   récit et tags ont été écartés parce qu'ils n'ont qu'une valeur aujourd'hui — et c'est
+   `buildFacetIndex` qui les écarte, pas un `if` : un groupe à une seule valeur est
+   supprimé, donc l'axe réapparaîtra tout seul le jour où le carnet sortira d'Europe.
+   Le pays est celui de **toutes** les étapes et non celui du classement : `buildCatalogue`
+   range un voyage sous sa première arrivée et notait le prix de ce compromis — « le jour
+   où ça devient le mauvais arbitrage est le jour où les filtres arrivent ».
+
+**Ce que ça coûte, et ce qui le prouve.** La feuille générée est linéaire dans le nombre de
+choix — deux règles par valeur — et vaut aujourd'hui une poignée de lignes sur `/fr/voyages`.
+Zéro octet de JavaScript : il n'y a rien à hydrater. Le seul garde possible est un navigateur,
+parce qu'aucune assertion Node ne distingue une feuille appliquée d'une feuille absente :
+`tests/e2e/filters.populated.spec.ts` coche un filtre sur un build réel, compte ce qui reste,
+passe axe, et **refait la même chose avec JavaScript désactivé** — ce dernier cas est le garde
+du budget de frontières, pas une politesse.
+
+**La quatrième teinte de la carte — les pays « à venir »** (Croatie, Italie, Portugal,
+Monténégro) — tient dans `content/wishlist.yaml`, quatre lignes de codes ISO que
+`npm run validate:content` juge avant chaque build : un code que le fond de carte 50m ne
+sait pas dessiner est nommé un par un, et un pays déjà visité est refusé parce que la carte
+peint une forme une fois et que les deux teintes se recouvriraient.
+
+**Le survol n'a pas rendu le dessin interactif**, ce qui était l'écueil : le SVG reste
+`aria-hidden` et sans `pointer-events`, et la note est du HTML posé dessus, sur un point
+que `src/map/anchor.ts` calcule à l'intérieur de la forme — la même mécanique qu'une
+balise, donc les deux zooment ensemble. `docs/adr/0003` porte l'arbitrage complet ; les
+trois points qui décident du reste :
+
+- **l'étiquette est dans le document en permanence**, masquée visuellement, et le survol ne
+  fait que la peindre. Une synthèse vocale lit les quatre notes au repos — c'est ce qui
+  autorise l'absence de `tabindex`, car un arrêt de tabulation dont le seul effet serait de
+  révéler un texte déjà lu est un arrêt qui n'existe pour personne ;
+- **une phrase visible dans la légende** pour le lecteur que ni le survol ni les notes ne
+  servent : celui qui voit et n'a pas de survol. Elle est `aria-hidden`, parce qu'une
+  `<figcaption>` est le nom accessible de la figure et que la phrase dans ce nom a fait
+  rougir trois cas d'un coup ;
+- **la teinte ne porte pas l'état seule** : le contour est tireté, donc la différence
+  survit au niveau de gris et aux deux thèmes.
+
+WCAG 1.4.13 est mesuré et non affirmé : `tests/e2e/wished.populated.spec.ts` révèle une
+note et vérifie balise par balise qu'elle n'en recouvre aucune.
 
 **Dépendances écartées** (délibérément, ne pas les rajouter sans ticket) : bibliothèque de
 carte côté client (Leaflet, MapLibre), gestionnaire d'état (Redux, Zustand), client HTTP ou

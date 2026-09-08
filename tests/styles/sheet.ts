@@ -76,3 +76,39 @@ export function theme(name: MeasuredTheme): Theme {
 export function siteToken(name: MeasuredTheme, token: string): string {
   return resolveToken(theme(name), token);
 }
+
+/**
+ * The paper grain's opacity, **read from the stylesheet that declares it** rather
+ * than repeated here.
+ *
+ * This is what lets a texture exist in a repository whose colour argument rests
+ * on flat substrates: the grain is bounded, so the worst ground an ink can meet
+ * is computable — and it is computable *from the source*, so raising the opacity
+ * in `paper-grain.module.css` moves every measurement instead of quietly
+ * invalidating them. A number copied into this file would have been the third
+ * copy of a value, which is the failure mode this whole suite exists to refuse.
+ */
+export function grainOpacity(): number {
+  const css = readFileSync(path.join(SRC, "components/site/paper-grain.module.css"), "utf8");
+  const declared = /--grain-opacity:\s*([0-9.]+)\s*;/.exec(css)?.[1];
+
+  if (declared === undefined) {
+    throw new Error(
+      "`--grain-opacity` is not declared in paper-grain.module.css — the grain's bound is what makes it measurable, so a missing one is not a default, it is a broken contract"
+    );
+  }
+
+  return Number(declared);
+}
+
+/**
+ * The grain's own ink, per theme, and it is not a token: `feTurbulence`
+ * synthesises greyscale noise from pure black to pure white, and the blend mode
+ * decides which end does the work. `multiply` in the light theme keeps only the
+ * dark end, `screen` in the dark theme keeps only the light one — so the worst
+ * ground is black in light and white in dark, at `grainOpacity()`.
+ */
+export const GRAIN_INK: Readonly<Record<MeasuredTheme, string>> = {
+  light: "#000000",
+  "dark-os": "#ffffff",
+};

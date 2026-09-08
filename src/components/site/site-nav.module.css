@@ -1,69 +1,782 @@
 /* =============================================================================
-   Site header — the brand lock-up and two nav entries, no JavaScript, no colour
-   of its own.
+   Site header — a full-bleed accent bar carrying the brand medallion, three nav
+   entries and the language menu. No JavaScript, no colour of its own.
 
    Only tokens from `src/styles/tokens.css` are used, which is what keeps the
-   dark theme working without this file knowing that it exists.
+   dark theme working without this file knowing that it exists. The one exception
+   is the three national flags, which are drawn in `./site-nav.tsx` and carry
+   literal colours — the note is there, at the exact place they are written.
+
+   TIW-38 turned this from a transparent row inside the page's measure into a bar
+   that paints edge to edge, after `nicoailleurs.com`. Two boxes rather than one,
+   and the split is load-bearing: a `max-width` that centres the content also
+   stops the background, so `.bar` paints and sticks while `.inner` holds the
+   measure the rest of the page is aligned on.
    ============================================================================ */
 
-.header {
-  /* Aligned on `main`'s own measure (`tokens.css`) so the header's first letter
-     sits above the page's first letter rather than floating. `--space-5` is
-     `main`'s inline padding; the block padding is deliberately smaller than
-     `--section-space`, because a header is chrome and not a section. */
-  max-width: var(--content-max-width);
-  margin-inline: auto;
-  padding: var(--space-4) var(--space-5) 0;
+/**
+ * **`--accent-active` in a flat fill, and the change from `--accent` is a
+ * measurement rather than a taste.**
+ *
+ * The entries are meant to sit quiet and go white under the pointer, which means
+ * the resting label is `--text-on-accent` at 80 %. On the old `--accent` bar that
+ * ink measures **4.09:1** — below the 4.5 threshold for text, in both themes,
+ * because `--accent` is the same ink in light and dark. On `--accent-active` the
+ * very same 80 % white measures **5.43:1** in light and **4.79:1** in dark, and
+ * the full white it becomes on hover measures **7.51:1** and **6.52:1**. So the
+ * quiet state clears the threshold and the loud one clears it by a wide margin,
+ * which is the only arrangement in which "greyed" is allowed to mean anything.
+ *
+ * The shared sheet still reserves the solid fill to the teal — "l'aplat plein est
+ * réservé au teal" — and `--accent-active` is that same teal under pressure, not
+ * a second hue. The copper stays decor, which is also why the reference's warm
+ * bar is not transposed literally.
+ *
+ * The same colour in both themes would have been the older claim; it is no longer
+ * true, because `--accent-active` is a slightly different ink in each. What is
+ * still true is the thing that mattered: the bar is a teal fill in both, so the
+ * medallion's mark does not change meaning at dusk.
+ */
+.bar {
   /**
-   * Two groups on one line, pushed apart — and `wrap`, because they do not fit on
-   * one line at every width. Measured in Chromium at 320 px, the narrowest layout
-   * `tokens.css` supports: the lock-up is ~205 px and the two nav pills ~245 px,
-   * so somewhere under 500 px the nav drops to a second line. That is the right
-   * failure — the brand keeps the first line, nothing is clipped and nothing
-   * scrolls sideways.
+   * Sticky and not fixed: fixed takes the bar out of the flow, so every page
+   * below would need a top padding equal to a height this file owns — a number
+   * two stylesheets would have to agree on forever. Sticky keeps the space it
+   * occupies and costs nothing to the pages.
    *
-   * The row gap is deliberately smaller than the column gap. Wrapped, the two
-   * become two rows of the same thing — the chrome — and should read as one
-   * block; side by side they are two different things and need more air between
-   * them than there is inside either.
+   * The stacking context matters more than the number: `z-index: 20` sits above
+   * the map's marker layer (10 in `world-map.module.css`). It used to sit above
+   * the **skip link** too, which is exactly the bug an audit found on
+   * 7 September 2026 — the bar painted over the one control a keyboard reader
+   * meets first. The skip link is at 30 now (`layout.module.css`, which carries
+   * the measurement); this bar must stay below it.
    */
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-5);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+  background: var(--accent-active);
+
+  /**
+   * **The quiet ink of the bar, declared once.**
+   *
+   * `color-mix` and emphatically NOT `opacity`. The shared library measured and
+   * refused the opacity recipe — it dims the element and everything inside it,
+   * so a flag, a focus ring and a label all fade together, and the same rule ends
+   * up with one contrast in light and another in dark. A mix with `transparent`
+   * touches the text colour and nothing else; the ratio it lands on is written in
+   * the block above and registered in `tests/styles/colour-contract.test.ts`.
+   */
+  --nav-ink-quiet: color-mix(in srgb, var(--text-on-accent) 80%, transparent);
+
+  /**
+   * The medallion hangs below the bar's own box, so nothing here may clip. This
+   * is the one rule that makes the lock-up read as a badge pinned on the bar
+   * rather than as a logo inside it.
+   */
+  overflow: visible;
+
+  /**
+   * **One cell, and two children stacked in it** (TIW-38, second pass).
+   *
+   * The owner asked for the medallion against the left edge of the WINDOW while
+   * everything else keeps the page's measure. Those two are incompatible inside
+   * one centred box: above `--content-max-width` the measure's left edge is not
+   * the window's, and the distance between them is `(100vw - measure) / 2` — a
+   * number this project is not allowed to write. `100vw` counts the scrollbar,
+   * and a negative margin derived from it pushes the mark past the glass and puts
+   * a horizontal scrollbar on every page; `src/styles/tokens.css` records that
+   * defect at length, because it has already been paid for once here.
+   *
+   * So the mark is not inside the measure at all. `.bar` is a one-column grid,
+   * `.brandZone` and `.inner` are both placed in that single cell, and the mark
+   * aligns to the start of the CELL — which is the window. Nothing computes a
+   * viewport width, so nothing can disagree with the scrollbar.
+   */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
+/**
+ * The mark sits hard against the left edge of the window, over the measure's
+ * empty first column rather than inside it.
+ *
+ * `align-self: start` and not `center`: the medallion is taller than the bar and
+ * must hang DOWNWARD only. Centred, half the overflow would go up and be cut by
+ * the top of the viewport as soon as the bar is stuck there.
+ *
+ * `display: flex` for one measured reason: the lock-up is an `inline-flex`, so in
+ * a block box it sits on a LINE, and the line box adds the font's descent under
+ * it. Measured at 1440 px: the bar came out 86 px tall instead of 64, and
+ * `--chrome-height` — which the home page's map subtracts — stopped describing
+ * the bar. A flex parent blockifies its child and there is no line box left.
+ *
+ * `z-index` on a grid item, with no `position`: the spec makes grid items
+ * paintable by z-index, and this one needs it. `.inner` comes later in the DOM
+ * and covers the measure, so without this it would take the clicks on the right
+ * end of the wordmark — an element with no background still answers the pointer.
+ */
+.brandZone {
+  grid-area: 1 / 1;
+  justify-self: start;
+  align-self: center;
+  z-index: 1;
+  display: flex;
+  /**
+   * **The lock-up needs a gutter now, where the medallion did not.**
+   *
+   * A disc hard against the window's edge reads as deliberate: it is a shape,
+   * and its own curve is the margin. A wordmark hard against the edge reads as
+   * broken — measured on a production build, "Travels" started at x = 0.
+   *
+   * **It aligns with the MEASURE and not with the window**, at the owner's
+   * request to move it right, and the expression is what makes that a rule rather
+   * than a nudge. `.inner` centres a `--content-max-width` box and pads it by
+   * `--space-5`, so its content begins at `(100% - measure) / 2 + space-5`; the
+   * same arithmetic here puts the lock-up's left edge on the same vertical as the
+   * page's first column, and on the same vertical as the language menu's right
+   * edge at the other end. Measured at 1280 px: 88 px, where the flag sits 88 px
+   * from the right.
+   *
+   * `max()` is the narrow case, not a flourish: below the measure the first term
+   * goes negative, and without the floor the mark would slide under the window's
+   * left edge. There it falls back to the plain gutter, which is what `.inner`
+   * does too.
+   *
+   * The zone stays OUTSIDE `.inner` even though they now agree on where the mark
+   * starts. Folding it in would put the lock-up in the same flex row as the nav
+   * and the language menu, and the nav is centred on the *window* — the note on
+   * `.inner` records that a `margin-inline: auto` there cost 400 px of drift once.
+   * Two boxes in one grid cell keeps the two alignments independent.
+   *
+   * `align-self: center` and no longer `start`: the reason for `start` was that
+   * the medallion was taller than the bar and had to hang DOWNWARD only. Nothing
+   * overflows the bar any more, so centring is what puts the lock-up on the bar's
+   * own axis instead of against its top edge.
+   */
+  padding-inline-start: max(
+    var(--space-5),
+    calc((100% - var(--content-max-width)) / 2 + var(--space-5))
+  );
+}
+
+.inner {
+  grid-area: 1 / 1;
+  /**
+   * **The bar's row spans the window, not `main`'s measure** — and that changed
+   * with the owner's report: *« le sélecteur de langue doit être bien à droite »*.
+   *
+   * It used to be capped at `--content-max-width` so the language menu landed on
+   * the page's right edge. On a wide screen that is 168 px short of the bar's own
+   * edge (measured at 1440), and the bar is a full-width band of colour: a control
+   * floating 168 px inside a coloured strip reads as misplaced, not as aligned.
+   * The row is the window now, less one gutter.
+   *
+   * **The mark keeps the measure and that asymmetry is the decision, not an
+   * oversight.** `.brandZone` above aligns the lock-up with the page's text,
+   * because the owner asked for exactly that and a mark belongs with what it
+   * names. The right end is a toolbar, and a toolbar belongs to the window. Below
+   * `--content-max-width` the two coincide anyway: at 1280 both gutters measure
+   * 88 px, at 1100 both measure 24.
+   *
+   * `justify-self: center` plus `inline-size: 100%`, and NOT `margin-inline:
+   * auto`: an auto margin on a grid item suppresses the stretch, so the box shrank
+   * to its content — measured at 873 px instead of 1152 — and the language menu
+   * drifted 400 px inside the page.
+   */
+  justify-self: center;
+  inline-size: 100%;
+  padding-inline: var(--space-5);
+  /**
+   * A height rather than block padding: the medallion is taller than the bar and
+   * is pulled out of the flow by its own margin, so a padding-derived height
+   * would follow the medallion instead of the nav. `--chrome-height` is declared
+   * in the token sheet because the home page's map subtracts it.
+   */
+  min-block-size: var(--chrome-height);
+  /**
+   * **Three zones, and the middle one is genuinely centred** (TIW-38): the mark
+   * over the left column, navigation in the middle, language on the right.
+   *
+   * A grid and not `justify-content: space-between`, which is what this was: with
+   * three flex children of different widths, "space between" centres nothing — it
+   * puts the nav wherever the two outer blocks leave room, so it drifts every
+   * time a label changes length. `1fr auto 1fr` pins the middle column to the
+   * page's centre line and lets the two outer columns be whatever they are.
+   *
+   * **The first column is now EMPTY**, and the named areas are what make that
+   * survivable. The lock-up left this box so that it could reach the window's
+   * edge, so the grid went from three children to two — and with implicit
+   * placement the nav simply slid into the vacant first column and stopped being
+   * centred at all (measured at 1440 px: it started at 307 instead of 536).
+   * Naming the tracks means the two remaining children ask for the column they
+   * want instead of taking the next free one.
+   *
+   * The empty column is kept rather than removed because it is what balances the
+   * language menu on the right and keeps the nav on the page's centre line
+   * instead of on the centre of what is left over.
+   *
+   * The outer two are `minmax(0, 1fr)` rather than `1fr`: a bare `1fr` has an
+   * `auto` minimum, so a long language label would push the centre off-centre
+   * instead of letting its own column shrink.
+   */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: "mark links language";
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.inner > nav {
+  grid-area: links;
+}
+
+/**
+ * **The four destinations, with room between them** — 4 px was what the owner
+ * read as cramped, and they were right: each label already carries 12 px of its
+ * own padding, so a 4 px gap put two 44 px targets 28 px apart edge to edge and
+ * the four read as one long word.
+ *
+ * `--space-3` puts 36 px between two labels, which is the same rhythm the pills of
+ * the listings' filters use. The room comes from the bar spanning the window now
+ * rather than the measure: 144 px of it appeared on each side at 1440.
+ */
 .list {
   margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
+/**
+ * **Uppercase and tracked**, after the reference, and both are set here rather
+ * than in the markup: `text-transform` keeps the accessible name in its written
+ * case, so a screen reader still says "Voyages" and not "V-O-Y-A-G-E-S". Several
+ * screen readers spell a short upper-case *string* out letter by letter — the
+ * same trap `trip-card.module.css` records for its badge, and the reason that one
+ * is not upper-cased at all. Here the string in the DOM is untouched.
+ *
+ * Tracking is mandatory at this size and case, not decoration: upper-case letters
+ * set at a lower-case's default tracking read as a block. 0.08em is the smallest
+ * value that separates them at `--text-sm`.
+ */
 .link {
   display: inline-flex;
   align-items: center;
   /* 2.75rem = 44 px at the root size — WCAG 2.2 target size (minimum), in `rem`
-     so it grows with a reader's larger default size. The inline padding is what
-     makes the two entries distinguishable as targets rather than as words in a
-     sentence. */
+     so it grows with a reader's larger default size. */
   min-block-size: 2.75rem;
   padding-inline: var(--space-3);
-  border-radius: var(--radius-pill);
-  color: var(--text-accent);
-  font-weight: var(--weight-medium);
-  /* No underline here, and it is not a bare removal: these two are the only
-     links outside the page's prose, they are the sole content of a labelled
-     `<nav>`, and the pill below carries the hover state. WCAG 1.4.1 is about
-     conveying information by colour — a navigation landmark is structure, not
-     information inside a paragraph. */
+  border-radius: var(--radius-sm);
+  /* The quiet ink declared on `.bar` — 5.43:1 in light, 4.79:1 in dark, both
+     above the 4.5 threshold. */
+  color: var(--nav-ink-quiet);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  /* No underline at rest, and it is not a bare removal: these three are the sole
+     content of a labelled `<nav>`, and an underline here is spoken for — it is
+     what marks the current page, three rules below. WCAG 1.4.1 is about conveying
+     information by colour; a navigation landmark is structure, not information
+     inside a paragraph. */
   text-decoration: none;
-  transition: background-color 120ms ease;
+  transition: color var(--motion-color) var(--motion-ease);
 }
 
-.link:hover {
-  background: var(--accent-quiet);
+/**
+ * **Full white under the pointer and under the keyboard alike.**
+ *
+ * A colour and no longer a fill: the bar IS `--accent-active` now, so the plate
+ * this rule used to paint would be the same colour as the ground under it. The
+ * label going from 80 % white to full white is the whole feedback, and it moves
+ * the entry from 5.43:1 to 7.51:1 in light — pointing at an entry makes it more
+ * legible and never less, the same rule `trip-card.module.css` had to be
+ * corrected for.
+ *
+ * `:focus-visible` is here as well as `:hover`, and that pairing is not
+ * decoration: without it a keyboard reader gets the library's focus ring around a
+ * label that stayed dimmer than the one a mouse reader is looking at.
+ */
+.link:hover,
+.link:focus-visible {
+  color: var(--text-on-accent);
+}
+
+/**
+ * **The current page, underlined — in white, and the owner's colour was refused
+ * on a measurement.**
+ *
+ * The request was a secondary-colour underline. `--accent-secondary` measures
+ * **1.57:1** on the old teal bar and **1.14:1** on this darker one: at 1.14 the
+ * rule is not "discreet", it is invisible, and an indicator nobody can see is
+ * worse than none because it makes the page look like it has one. So the
+ * underline is `--text-on-accent`, the same 7.51:1 ink as a hovered label.
+ *
+ * The second channel is the label's own weight of white: the current entry is
+ * full white against its neighbours' 80 %, which measures **1.38:1** in light and
+ * **1.36:1** in dark. That is a *difference*, not a contrast — it is far too
+ * little to carry the marker on its own, and it is not asked to. The underline is
+ * a SHAPE, so 1.4.1 is satisfied without any colour at all; the brightness is
+ * what makes the shape look intentional rather than stray.
+ *
+ * **HOW THE BAR KNOWS, WITH NO JAVASCRIPT AND NO REQUEST READ.** Each page puts a
+ * `data-page` on its own `<main>`; this sheet reads it backwards through `:has()`
+ * on `<body>`. That is the third road the component's header says does not exist
+ * for a nav rendered by the layout — it does now, and it costs zero byte of JS,
+ * de-statifies nothing, and needs no prop threaded through every route.
+ *
+ * **WHAT IT DOES NOT BUY, and this is the honest half.** `aria-current="page"` is
+ * still absent, because CSS cannot set an ARIA attribute — only paint one. A
+ * screen reader gets nothing new here; what names each page is still its `<h1>`.
+ * This is a visual reinforcement for a returning reader, and calling it an
+ * accessibility fix would be a lie the next reviewer would have to unpick.
+ *
+ * **THE COUPLING, since it is silent.** The four strings below are the third
+ * copy of a vocabulary `./site-nav.tsx` exports as `PAGE_MARK` and the four
+ * pages write onto their `<main>`. A spelling that drifts loses the underline and
+ * breaks nothing else — it fails open, which is why a literal here is acceptable
+ * and a literal in the markup is not.
+ *
+ * `villes` is the places listing (TIW-38). It is the one mark whose page did not
+ * exist when this rule was written, which is the case the "fails open" note was
+ * about: a new page that forgets its `data-page` renders correctly and simply
+ * never underlines its own entry.
+ */
+:global(body:has(main[data-page="carte"])) .link[data-nav="carte"],
+/*
+  `pays` is the countries index; the tab that used to point at `/voyages` points
+  here now. The `voyages` line below it stays and matches nothing, on purpose:
+  `/voyages` is still a page — reached from the home listing, from every city row
+  and from every country page — it simply has no tab of its own any more, and a
+  page with no tab underlines nothing. Marking « Pays » current there would say
+  the reader is on the countries index when they are not.
+*/
+:global(body:has(main[data-page="pays"])) .link[data-nav="pays"],
+:global(body:has(main[data-page="voyages"])) .link[data-nav="voyages"],
+:global(body:has(main[data-page="villes"])) .link[data-nav="villes"],
+:global(body:has(main[data-page="a-propos"])) .link[data-nav="a-propos"] {
+  color: var(--text-on-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 0.125rem;
+  text-underline-offset: 0.35em;
+}
+
+/* =============================================================================
+   The language menu (TIW-38). Three locales, a native disclosure, zero byte of
+   JavaScript.
+   ============================================================================ */
+
+/**
+ * **A `<details>`, and that is the whole mechanism.**
+ *
+ * The alternative was a client component holding an `open` state, which would
+ * have put a React runtime on every route of the site to toggle a panel the
+ * browser toggles for free. `<details>` is keyboard-operable (the `<summary>` is
+ * focusable and answers Enter and Space), it exposes an expanded state to screen
+ * readers, and its contents leave the tab order when it is shut — all native, and
+ * the tab order was checked in Chromium rather than assumed: skip link, lock-up,
+ * three entries, the summary, then the page.
+ *
+ * **What it does NOT do, measured and not glossed over: a bare `<details>` does
+ * not close on `Escape`, and it does not close when the pointer goes elsewhere.**
+ * Both were checked in Chromium; the panel stays open until the summary is
+ * pressed again. Either behaviour is a keydown listener and a document listener,
+ * which is a client component — the price of the whole control. It is a
+ * disclosure and not a modal menu, nothing is trapped behind it, and the panel
+ * covers no navigation, so the cost of leaving it open is that it is open.
+ *
+ * `position: relative` so the panel can hang from it; the panel is the only thing
+ * on this bar that leaves the bar, and `.bar` already never clips.
+ */
+/**
+ * **The right-hand end of the bar**, holding the search and the language menu.
+ *
+ * One grid item for the two, because `.inner`'s middle column is what puts the
+ * nav on the page's centre line and a fourth child would have moved it. Measured
+ * before this box existed: an unnamed grid item takes the next free cell, the
+ * first column is empty by design, and the search's panel opened under the
+ * lock-up.
+ *
+ * **`stretch` and not `end`, which is a bug fix and not a preference.** With
+ * `justify-self: end` this box is sized by its content, so the 20 rem field could
+ * not be asked to shrink and simply overflowed its column *leftwards*, into the
+ * navigation: measured at 1100 px, the nav ended at 717 and the field began at
+ * 702 — fifteen pixels of overlap, on a real page. Stretched to the column and
+ * pushed right by `justify-content`, the pair sits exactly where `end` put it and
+ * the field shrinks when the column does.
+ *
+ * `min-inline-size: 0` is the other half: a flex item's floor is its content, so
+ * without it the field refuses to shrink however narrow the column gets.
+ */
+.chromeEnd {
+  grid-area: language;
+  justify-self: stretch;
+  justify-content: flex-end;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.language {
+  position: relative;
+}
+
+/**
+ * The summary carries the current locale's flag and nothing visible besides.
+ *
+ * `list-style: none` plus the WebKit pseudo-element removes the disclosure
+ * triangle in every engine — Safari still ships `::-webkit-details-marker` and
+ * ignores the standard property. The chevron drawn in the markup replaces it,
+ * because a control with no affordance at all is worse than the default triangle.
+ */
+.language > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* 2.75rem again — the same target size as a nav entry and as the lock-up. */
+  min-block-size: 2.75rem;
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--nav-ink-quiet);
+  cursor: pointer;
+  list-style: none;
+  transition: color var(--motion-color) var(--motion-ease);
+}
+
+.language > summary::-webkit-details-marker {
+  display: none;
+}
+
+.language > summary:hover,
+.language > summary:focus-visible {
+  color: var(--text-on-accent);
+}
+
+/** The chevron turns with the disclosure, which is the state made visible. */
+.chevron {
+  inline-size: 0.75rem;
+  block-size: auto;
+  transition: rotate var(--motion-color) var(--motion-ease);
+}
+
+.language[open] > summary .chevron {
+  rotate: 180deg;
+}
+
+/**
+ * The panel — the bar's own colour, hanging off its lower edge.
+ *
+ * Painting it `--accent-active` rather than `--surface` is what keeps this whole
+ * control inside one measured pair: every ink in it is the same 80 % / full white
+ * on the same ground as the nav beside it, so opening the menu introduces no
+ * substrate this repository has not already measured.
+ *
+ * `--elevation-2` is therefore doing the separating: without a shadow, a panel
+ * the exact colour of the bar reads as the bar growing rather than as something
+ * laid over the page.
+ */
+.languagePanel {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-1));
+  inset-inline-end: 0;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: 12rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--accent-active);
+  box-shadow: var(--elevation-2);
+}
+
+.languageTitle {
+  margin: 0;
+  padding-inline: var(--space-2);
+  color: var(--nav-ink-quiet);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/**
+ * One row per locale. The same two inks as a nav entry, for the same reason and
+ * with the same measurements.
+ */
+.languageLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 2.75rem;
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--nav-ink-quiet);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  transition: color var(--motion-color) var(--motion-ease);
+}
+
+.languageLink:hover,
+.languageLink:focus-visible {
+  color: var(--text-on-accent);
+}
+
+/**
+ * The language being read, marked the same way as the current page above — full
+ * white plus an underline — so the bar has one vocabulary for "you are here" and
+ * not two.
+ *
+ * `[aria-current]` and not a class: the attribute is what a screen reader reads,
+ * so styling from it makes the two channels impossible to get out of step. This
+ * one DOES carry the state to assistive technology, unlike the nav's underline —
+ * the component sets the attribute here, and only the paint comes from CSS.
+ */
+.languageLink[aria-current] {
+  color: var(--text-on-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 0.125rem;
+  text-underline-offset: 0.25em;
+}
+
+/**
+ * "Les récits restent en français."
+ *
+ * It is in the panel and not in a tooltip because it is the one thing a reader
+ * needs before choosing: the chrome is translated and the journals are not, and
+ * finding that out after the click is finding it out too late.
+ */
+.languageNote {
+  margin: 0;
+  padding-inline: var(--space-2);
+  max-inline-size: 18rem;
+  color: var(--nav-ink-quiet);
+  font-size: var(--text-xs);
+  line-height: var(--leading-body);
+}
+
+/**
+ * The flags. Sized here, drawn in `./site-nav.tsx`.
+ *
+ * A fixed `block-size` and `inline-size` rather than `height: auto`: these are
+ * three 3:2 rectangles and the row must not shift by a pixel between them.
+ * `tokens.css` sets `svg { height: auto }`, so the height has to be stated in the
+ * same physical property to win by specificity rather than by sheet order — the
+ * same trap `site-brand.module.css` records for the mark.
+ */
+.flag {
+  flex: none;
+  inline-size: 1.375rem;
+  height: calc(1.375rem * 2 / 3);
+  border-radius: 0.125rem;
+}
+
+/**
+ * Announced, never drawn — the summary's accessible name.
+ *
+ * Real text rather than an `aria-label`, the pattern `site-brand.module.css`
+ * argues for at length: a name that exists in the accessibility tree is one a
+ * voice-control user can say, and one a translation pipeline can see.
+ *
+ * A 1 px box with `clip-path`, never `display: none` nor `visibility: hidden`,
+ * both of which would take the text out of the accessibility tree and so out of
+ * the accessible name — which is the entirety of what this element is for.
+ */
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* =============================================================================
+   The stacked layout, last in the file so that every rule below is an override
+   of something declared above it. CSS Modules do not scope by specificity, so a
+   narrow-screen rule sitting ABOVE the base rule it means to undo simply loses —
+   measured: the language menu stayed pinned right at 320 px because
+   `justify-self: end` was declared thirty lines later than the `center` meant to
+   replace it.
+   ============================================================================ */
+
+/**
+ * Below the width where the mark and the centred nav stop clearing each other,
+ * the bar becomes one column and the three stack — mark, then nav, then language,
+ * in that order, which is the reading order the DOM already has.
+ *
+ * **58rem, and the number moved with the medallion.** It used to be 46rem, when
+ * the lock-up lived inside the measure and only had to avoid touching the nav.
+ * Now the mark starts at the window's edge and the nav is centred on the WINDOW,
+ * so the two meet much sooner. Measured in Chromium at the root size: the lock-up
+ * ends 253 px from the glass (a 104 px disc, a 12 px gap, a 137 px wordmark) and
+ * the nav is 368 px wide centred, so its left edge is at `(W - 368) / 2` and the
+ * two touch at **874 px**. 58 rem is 928 px — 27 px of slack at the boundary,
+ * widening from there, and a round number rather than the exact collision.
+ *
+ * `grid-area: auto` puts the two children back into their own rows: the overlay
+ * above exists to let the mark escape the measure, and there is no measure to
+ * escape once everything is centred in one column.
+ */
+@media (max-width: 58rem) {
+  .brandZone,
+  .inner {
+    grid-area: auto;
+  }
+
+  .bar {
+    row-gap: var(--space-2);
+    padding-block: var(--space-3);
+  }
+
+  .brandZone {
+    justify-self: center;
+    padding-inline: var(--space-5);
+  }
+
+  /**
+   * Two rows instead of three columns, and the named areas carry over unchanged —
+   * which is the reason they are named. `justify-self: end` on the language menu
+   * has to be undone by hand, though: it beats the container's `justify-items`,
+   * so without this line the menu stays pinned right while everything above it is
+   * centred.
+   */
+  .inner {
+    min-block-size: 0;
+    grid-template-columns: 1fr;
+    grid-template-areas: "links" "language";
+    justify-items: center;
+    gap: var(--space-2);
+  }
+
+  .language {
+    justify-self: center;
+  }
+
+  /**
+   * The panel hangs from the CENTRE of the summary here, not from its right edge.
+   *
+   * Measured at 320 px, the narrowest layout this sheet supports: the summary is
+   * centred, so a 12 rem panel pinned to its right edge started at **x = -3** —
+   * three pixels of it behind the left edge of the glass, silently, because
+   * content overflowing to the inline start does not lengthen `scrollWidth` and
+   * therefore does not show up as a horizontal scrollbar. Centring it puts the
+   * same panel at 64…256 with room on both sides.
+   */
+  .languagePanel {
+    inset-inline: 50% auto;
+    translate: -50%;
+  }
+
+  /* The three entries wrap onto two lines below ~24rem, and a wrapped flex line
+     is packed to the start by default — so the second row hung under the left
+     edge of a block that is itself centred. Centring the line puts the orphan
+     entry under the middle of the ones above it. */
+  .list {
+    justify-content: center;
+  }
+}
+
+/**
+ * **Two rows instead of three, everywhere the bar is not wide.**
+ *
+ * Same `58rem` as the block above, and deliberately so. Scoped to `48rem` first —
+ * phones only — this left a discontinuity a reader would meet by resizing a
+ * window: 768 px gave a 112 px bar and 769 px gave 172, so a *wider* window was
+ * served the worse layout. 58 rem is where this sheet already decides the bar is
+ * not wide; above it, at 960 px and beyond, nothing here applies and the desktop
+ * bar stays the 64 px it has always been. Measured at 769, 800 and 928.
+ *
+ * The block above stacks the bar into three rows under 58 rem: the mark on its
+ * own line, then the links, then the language menu. Measured on a phone, that
+ * came to **228 px, 27 % of a 390 × 844 screen**, before a single word of the
+ * page — and it pushed the map, which is the whole point of this site, down to a
+ * 170 px strip.
+ *
+ * Two rows instead of three. The mark and the toolbar share the first line: they
+ * are on overlapping grid areas — the arrangement the wide layout already uses —
+ * so the mark sits at the inline start and the search and language controls at
+ * the inline end, with nothing between them to wrap. The links take the second.
+ */
+@media (max-width: 58rem) {
+  /* Back onto one another, undoing the `grid-area: auto` of the 58 rem block. */
+  .brandZone,
+  .inner {
+    grid-area: 1 / 1;
+  }
+
+  .bar {
+    row-gap: 0;
+    padding-block: var(--space-2);
+  }
+
+  .brandZone {
+    justify-self: start;
+    align-self: start;
+    /* The wide rule reserves a gutter wide enough to line the mark up with the
+       page's measure. There is no measure to line up with at this width. */
+    padding-inline: var(--space-3);
+  }
+
+  .inner {
+    min-block-size: 0;
+    padding-inline: var(--space-3);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "language" "links";
+    gap: var(--space-2);
+  }
+
+  /* The toolbar keeps the inline end of the first row; the links get the whole
+     of the second. Set per area rather than through `justify-items`, which would
+     shrink the nav to its content and un-centre it. */
+  .chromeEnd,
+  .language {
+    justify-self: end;
+  }
+
+  .inner > nav {
+    justify-self: stretch;
+  }
+
+  /**
+   * `--space-3` is the rhythm the wide bar uses, and it is what made the four
+   * entries wrap onto two lines here — « À PROPOS » alone on the second, under
+   * the left edge of a centred block. `--space-2` fits the four on one line at
+   * 360 px, which is the narrowest phone this sheet is measured at, and each
+   * label keeps the 12 px of padding that makes its target.
+   */
+  .list {
+    justify-content: center;
+    gap: var(--space-2);
+  }
+
+  /**
+   * **Eleven pixels, and they are the whole difference between one line and
+   * two.** Phones only — above 30 rem the four labels have room to spare, and a
+   * padding trimmed where it is not needed is a target shrunk for nothing.
+   * Measured at 360 px, the narrowest common phone: the four labels come
+   * to 323 px and three `--space-2` gaps to 24, against 336 px of room. Trimming
+   * two pixels of padding from each side of each label gives back 16 and the row
+   * fits.
+   *
+   * The padding is trimmed and never the tracking or the size: 0.08em is already
+   * the smallest tracking that keeps a short upper-case string from reading as
+   * one block, and `--text-sm` is the floor for a label. What is left — 10 px
+   * each side on a 14 px line — still gives every entry a target taller and wider
+   * than the 24 px WCAG 2.5.8 asks of it, which is checked below.
+   *
+   * At 320 px the four still wrap, and that is accepted rather than fixed: the
+   * room is not there without shrinking the type, and a wrapped second line
+   * centred under the first costs 52 px on a layout that has just given back 116.
+   */
+  @media (max-width: 30rem) {
+    .link {
+      padding-inline: calc(var(--space-2) + 2px);
+    }
+  }
 }

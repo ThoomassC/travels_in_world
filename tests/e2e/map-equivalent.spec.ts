@@ -1,11 +1,20 @@
 import { expect, test } from "@playwright/test";
 import frMessages from "../../src/i18n/messages/fr.json" with { type: "json" };
 import { auditPage, describeViolations } from "./support/axe";
+import { MAP_DRAWING } from "./support/map";
 
 /**
- * The map's accessible equivalent, on the content the repository really ships:
- * `content/trips` is empty, so this file asserts the **fallback** half of TIW-15
- * — the state a reader gets today, and the state the drawing degrades to.
+ * The map's accessible equivalent, on an **empty** journal — the state the
+ * drawing degrades to when there is nothing to mark.
+ *
+ * **What that equivalent is changed on 7 September 2026.** Until then it was « Les
+ * pays visités », a counted list under the drawing, and this file asserted its
+ * heading, its empty sentence and its way out. The owner removed that block from
+ * the map tab; the inventory lives on the Pays and Villes tabs now. So what stands
+ * in for the drawing here is the `<figcaption>` — which counts in words — and the
+ * "Le carnet commence ici" block below it. The assertions moved to those; the
+ * criterion they serve did not move: **never a bordered rectangle with a heading
+ * over nothing.**
  *
  * The populated half lives in `map-equivalent.populated.spec.ts`, against a
  * second build; see the note in `playwright.config.ts` for why there are two.
@@ -28,7 +37,8 @@ test("the map container carries a role and an accessible name", async ({ page })
    * The name is asserted as the counter and nothing more. Until TIW-15 the
    * caption also carried a visually hidden enumeration of every visited country,
    * which meant the figure's accessible *name* grew with the journal — forty
-   * country names in a label. `VisitedCountries` carries them now.
+   * country names in a label. The marker list carries the trips now, and the Pays
+   * tab carries the countries.
    */
   const figure = page.getByRole("figure", {
     name: "Carte du monde : aucun voyage publié, aucun pays",
@@ -41,7 +51,7 @@ test("no country of the drawing is a tab stop, and the map traps no focus", asyn
   await page.goto("/fr");
 
   // The drawing is really there: 177 shapes of the 110m dataset.
-  const paths = page.locator("figure svg path");
+  const paths = page.locator(`${MAP_DRAWING} path`);
   expect(await paths.count()).toBeGreaterThan(100);
 
   /**
@@ -52,7 +62,7 @@ test("no country of the drawing is a tab stop, and the map traps no focus", asyn
    * `<svg>` plus no interactive descendant is the mechanism, and this is the
    * outcome.
    */
-  const svg = page.locator("figure svg");
+  const svg = page.locator(MAP_DRAWING);
   await expect(svg).toHaveAttribute("aria-hidden", "true");
   await expect(svg).toHaveAttribute("focusable", "false");
   expect(await svg.locator("a, button, [tabindex], title, [role]").count()).toBe(0);
@@ -84,46 +94,48 @@ test("no country of the drawing is a tab stop, and the map traps no focus", asyn
 
   // Not a trap: the focus really moved through distinct elements rather than
   // cycling inside one region. With an empty journal the page offers the skip
-  // link, two navigation links and the way out of the fallback block.
+  // link and the navigation, and nothing inside the figure.
   expect(new Set(visited).size).toBeGreaterThan(2);
 });
 
-test("the fallback block stands in for the drawing rather than leaving an empty frame", async ({
-  page,
-}) => {
+test("an empty journal says so in words rather than leaving an empty frame", async ({ page }) => {
   await page.goto("/fr");
 
   /**
-   * The acceptance criterion, on the state that reaches it today: no visited
-   * country, so the equivalent says so in words and offers the complete listing.
-   * "Never an empty frame" means never a bordered rectangle with a heading over
-   * nothing — so the heading, the sentence and the way out are all asserted.
+   * The acceptance criterion, on the state that reaches it today: no published
+   * trip, so the page says it twice in words — once in the caption the figure
+   * takes its accessible name from, once in the block that used to be "Derniers
+   * voyages".
+   *
+   * The caption is asserted here and not only in the first test of this file for
+   * a reason the first test cannot cover: there it is the figure's *name*, which
+   * a screen reader announces; here it is *visible text*, which is what makes the
+   * frame not-empty for someone who sees it.
    */
+  await expect(page.locator("figcaption")).toHaveText(
+    "Carte du monde : aucun voyage publié, aucun pays"
+  );
+
   await expect(
-    page.getByRole("heading", { level: 2, name: frMessages.map.countriesHeading })
+    page.getByRole("heading", { level: 2, name: frMessages.home.emptyHeading })
   ).toBeVisible();
-  await expect(page.getByText(frMessages.map.countriesEmpty)).toBeVisible();
+  await expect(page.getByText(frMessages.home.emptyBody)).toBeVisible();
 
-  const out = page.getByRole("link", { name: frMessages.map.allTrips });
-  await expect(out).toBeVisible();
-
-  // An empty list is not announced at all — "liste, 0 élément" over a map that is
-  // simply not populated yet is worse than no list. Asserted inside the block's
-  // own landmark, so the page's other lists (the navigation) do not mask it.
-  await expect(
-    page.getByRole("region", { name: frMessages.map.countriesHeading }).getByRole("list")
-  ).toHaveCount(0);
-
-  await out.click();
-  await expect(page).toHaveURL(/\/fr\/voyages$/);
+  /**
+   * And no list is announced over nothing. « liste, 0 élément » under a map that
+   * is simply not populated yet is worse than no list at all — the assertion that
+   * survived the removal of « Les pays visités », now pointed at `<main>` so the
+   * header's navigation does not mask it.
+   */
+  await expect(page.locator("main").getByRole("list")).toHaveCount(0);
 });
 
-test("the fallback block is readable with JavaScript disabled", async ({ browser, baseURL }) => {
+test("the empty state is readable with JavaScript disabled", async ({ browser, baseURL }) => {
   /**
    * Trivially true and asserted anyway. The map layer ships zero bytes of
    * JavaScript — the milestone's two sanctioned `'use client'` boundaries belong
    * to TIW-14 and TIW-17, and neither is this — so there is no script to fail.
-   * This test is what keeps that true: the day someone makes the equivalent
+   * This test is what keeps that true: the day someone makes this block
    * interactive, it goes red here instead of on a reader's machine.
    */
   const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
@@ -134,9 +146,11 @@ test("the fallback block is readable with JavaScript disabled", async ({ browser
 
     expect(response?.status()).toBe(200);
     await expect(
-      page.getByRole("heading", { level: 2, name: frMessages.map.countriesHeading })
+      page.getByRole("heading", { level: 2, name: frMessages.home.emptyHeading })
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: frMessages.map.allTrips })).toBeVisible();
+    await expect(page.locator("figcaption")).toHaveText(
+      "Carte du monde : aucun voyage publié, aucun pays"
+    );
   } finally {
     await context.close();
   }

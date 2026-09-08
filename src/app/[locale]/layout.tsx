@@ -3,11 +3,16 @@ import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { buildSearchEntries } from "@/components/search/entries";
+import { countryTile } from "@/map";
+import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { JournalNotice } from "@/components/site/journal-notice";
+import { PaperGrain } from "@/components/site/paper-grain";
 import { SiteNav } from "@/components/site/site-nav";
-import { listTripSummaries } from "@/content/trips";
+import { listTripSummaries, loadTrips } from "@/content/trips";
 import { holdsNoStory } from "@/domain/trip";
 import { localePathname } from "@/i18n/pathname";
+import { aboutPath, countriesPath, placesPath, tripPath, tripsPath } from "@/i18n/paths";
 import { routing } from "@/i18n/routing";
 import "@/styles/tokens.css";
 import { shareMetadata } from "../share";
@@ -67,7 +72,7 @@ export async function generateMetadata({
     metadataBase: SITE_URL,
     ...shareMetadata({
       locale,
-      path: localePathname({ href: "/", locale }),
+      href: "/",
       title: siteName,
       description: t("description"),
       siteName,
@@ -123,9 +128,109 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
    */
   const noRecitYet = holdsNoStory(await listTripSummaries());
 
+  /*
+    The search's own catalogue. A second namespace rather than reaching into
+    `t` above: `trips` and `search` are two vocabularies, and a row that read a
+    card's wording would drift the day the card's changed.
+  */
+  const search = await getTranslations({ locale, namespace: "search" });
+
+  /**
+   * **The search index, built once per document and rendered as markup.**
+   *
+   * `loadTrips()` and not `listTripSummaries()`, which is the one unusual call
+   * added here. The summary carries the countries and a single `firstArrival`;
+   * the full list of a trip's places, its tags and its photographs' alt text —
+   * the only free text a récit owns — live on the detail alone. The façade
+   * memoises its parse for the whole build and both doors project from the same
+   * parsed trips, so this is a second projection and never a second read of the
+   * disk. `src/app/[locale]/villes/page.tsx` records the same trade for the same
+   * reason.
+   *
+   * **Built in the layout because the search lives in the chrome**, and the
+   * chrome is on every route. Two consequences worth stating rather than
+   * discovering: the index lands in the HTML of every document — measured in this
+   * ticket's report, and `tests/build/prerender.test.ts` is what caps it — and
+   * every page pays the projection, which is arithmetic over already-parsed
+   * objects.
+   *
+   * The naming and the collation come from the listing's own helpers, so a
+   * country reads the same here, on `/voyages`, on `/villes` and under the map,
+   * and so `buildSearchEntries` stays a pure function that knows no locale.
+   */
+  const searchEntries = buildSearchEntries({
+    trips: await loadTrips(),
+    labels: {
+      countryName: (code) => countryNameOf(locale, code),
+      compare: collatorFor(locale).compare,
+      /*
+        The plural is resolved here and never in `entries.ts`: plural rules are a
+        property of the language, next-intl owns them, and a pure module that
+        picked a form would be a second implementation of French and Spanish.
+        One call per trip, at build time.
+      */
+      stepCount: (count) => search("stepCount", { count }),
+      unwritten: search("unwritten"),
+    },
+    tripHref: (slug) => localePathname({ href: tripPath(slug), locale }),
+    /*
+      An untold trip has no page — `tripStaticParams` never built one — so its row
+      addresses its entry in the listing instead. The same branch the map's
+      markers take, and for the same reason: a row pointing at a 404 would be in
+      the suggestions of every document on the site.
+    */
+    tripEntryHref: (slug) =>
+      localePathname({ href: `${tripsPath()}#voyage-${slug}`, locale }),
+    /*
+      **The vignette's geometry, and the only place it can be computed.**
+      `@/map` is server-only and `entries.ts` is pure, so the projection is handed
+      over as a callback exactly as the country's name is. `countryTile` memoises
+      per code, so thirteen trips over five countries build five projections.
+    */
+    tilePointOf: (place) => countryTile(place.countryCode)?.place(place.coordinates),
+    countriesHref: localePathname({ href: countriesPath(), locale }),
+    placesHref: localePathname({ href: placesPath(), locale }),
+    pages: [
+      { label: t("navMap"), href: localePathname({ href: "/", locale }) },
+      { label: t("navCountries"), href: localePathname({ href: countriesPath(), locale }) },
+      { label: t("navPlaces"), href: localePathname({ href: placesPath(), locale }) },
+      { label: t("navAbout"), href: localePathname({ href: aboutPath(), locale }) },
+    ],
+  });
+
+  /**
+   * **One outline per country the suggestions reach, deduplicated here.**
+   *
+   * Nine of this carnet's thirteen trips are French, and the panel is in the HTML
+   * of every document on the site: as one `<symbol>` referenced nine times that
+   * country costs 658 bytes rather than six thousand. Derived from the entries
+   * rather than from the trips, so a trip whose country the dataset cannot draw
+   * simply has no `art` and contributes no outline — the row keeps its words.
+   *
+   * `Map` and not a `Set` of codes plus a second lookup: the order is the order
+   * the trips arrive in, which is the content façade's sort, which is what keeps
+   * the prerendered markup byte-identical between two builds.
+   */
+  const searchCountries = [
+    ...new Map(
+      searchEntries
+        .map((entry) => entry.art?.country)
+        .filter((code): code is string => code !== undefined)
+        .map((code) => [code, countryTile(code)])
+    ),
+  ].flatMap(([code, tile]) => (tile === undefined ? [] : [{ code, path: tile.path }]));
+
   return (
     <html lang={locale}>
       <body>
+        {/*
+          The grain (TIW-38). First in the document and `position: fixed` behind
+          everything, so it is one paint under the whole site rather than a
+          background each block has to remember. It is `aria-hidden` decoration
+          with nothing focusable in it, so it does not disturb the tab order the
+          note below describes — the skip link is still the first focusable thing.
+        */}
+        <PaperGrain />
         {/*
           The skip link, and it is the first focusable thing in the document
           because that is the entirety of what it does.
@@ -171,7 +276,11 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
             subtree as the pages means one place decides what "the current locale"
             is.
           */}
-          <SiteNav locale={locale} />
+          <SiteNav
+            locale={locale}
+            searchEntries={searchEntries}
+            searchCountries={searchCountries}
+          />
           {/*
             The journal-state notice (TIW-35), and its three positions in this file
             are each a decision.

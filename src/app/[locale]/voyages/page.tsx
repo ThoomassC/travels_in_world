@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { FacetFilter } from "@/components/filters/facet-filter";
+import { buildFacetIndex, byLabel, byValueDescending } from "@/components/filters/facets";
+import { PAGE_MARK } from "@/components/site/site-nav";
+import { tripFacetEntries } from "@/components/trips/facets";
+import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { TripCatalogue } from "@/components/trips/trip-catalogue";
 import { listTripSummaries } from "@/content/trips";
 import { freshestTrip } from "@/domain/freshness";
@@ -25,9 +30,14 @@ type LocaleParams = { locale: string };
  * `@/i18n/navigation` — the last one is what would have shipped next-intl's
  * client `Link` to a page made entirely of plain anchors (measured at 3.8 KB
  * brotli and two chunks on `/fr`; see
- * `docs/adr/0005-getpathname-sans-le-link-client.md`). Filters and search are out
- * of this ticket's scope, which is what makes zero client JavaScript the natural
- * outcome and not an achievement.
+ * `docs/adr/0005-getpathname-sans-le-link-client.md`).
+ *
+ * **That survived the filter**, which is the interesting part, because a filter
+ * is where a listing usually acquires its first client boundary. This one is a
+ * group of radio buttons and a generated stylesheet: no state to hold, nothing to
+ * hydrate, and the keyboard behaviour comes from the browser. The argument is in
+ * `src/components/filters/facets.ts`; the axes this page offers, and why the two
+ * others were refused, are in `src/components/trips/facets.ts`.
  *
  * **On sharing a directory with TIW-16.** `/voyages/[slug]` is the trip page and
  * belongs to that ticket; this file is `/voyages`, the index of the collection
@@ -82,7 +92,7 @@ export async function generateMetadata({
    */
   return shareMetadata({
     locale,
-    path: localePathname({ href: tripsPath(), locale }),
+    href: tripsPath(),
     title: t("metaTitle"),
     description: t("metaDescription"),
     siteName: site("title"),
@@ -112,14 +122,36 @@ export default async function AllTripsPage({ params }: { params: Promise<LocaleP
    */
   const fresh = freshestTrip(trips, buildDay());
 
+  /**
+   * The choices above the listing. Built from the same collection the catalogue
+   * groups, so a count on a pill and the cards under a heading cannot disagree,
+   * and named with the same helpers — `countryNameOf` and the locale's collator —
+   * so a country reads the same on the pill, in the heading and on the card.
+   *
+   * A group holding a single value is dropped by `buildFacetIndex`, and with one
+   * country or one year that is every group: the control then disappears rather
+   * than offering a button that changes nothing.
+   */
+  const facets = buildFacetIndex(
+    tripFacetEntries(trips, { countryName: (code) => countryNameOf(locale, code) }),
+    [
+      { key: "country", legend: t("filterCountry"), compare: byLabel(collatorFor(locale).compare) },
+      { key: "year", legend: t("filterYear"), compare: byValueDescending },
+    ]
+  );
+
   return (
     /*
       The landing point of the layout's skip link — the same `id` and the same
       `tabIndex={-1}` as the home page, from the same constant. See
       `../layout.tsx` for why the attribute is needed and why the `id` cannot
       live in the layout.
+
+      `data-page` marks this page for the header's current-entry underline — the
+      same mechanism, and the same limits, as the home page's; the long note is
+      there and in `SiteNav`'s header.
     */
-    <main id={MAIN_CONTENT_ID} tabIndex={-1}>
+    <main id={MAIN_CONTENT_ID} tabIndex={-1} data-page={PAGE_MARK.trips}>
       <header className={styles.header}>
         <h1 className={styles.title}>{t("allHeading")}</h1>
         {/*
@@ -147,7 +179,22 @@ export default async function AllTripsPage({ params }: { params: Promise<LocaleP
           </a>
         </section>
       ) : (
-        <TripCatalogue trips={trips} locale={locale} freshSlug={fresh?.slug} />
+        <FacetFilter
+          id="filtre-voyages"
+          name="filtre-voyages"
+          legend={t("filterLegend")}
+          allLabel={t("filterAll")}
+          index={facets}
+          countLabel={(count) => t("filterCount", { count })}
+          statusLabel={(count) => t("filterShowing", { count })}
+        >
+          <TripCatalogue
+            trips={trips}
+            locale={locale}
+            freshSlug={fresh?.slug}
+            facetTokens={facets.groups.length === 0 ? undefined : facets.tokens}
+          />
+        </FacetFilter>
       )}
     </main>
   );

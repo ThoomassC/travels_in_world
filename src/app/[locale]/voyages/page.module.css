@@ -31,7 +31,7 @@
   padding: var(--space-5);
   background: var(--surface);
   /* `--control-border` and not `--border-subtle`, which its own declaration in
-     the shared sheet marks `décoratif seul` at 1.33:1. This box is the entire
+     the shared sheet marks `décoratif seul` at 1.17:1. This box is the entire
      content of the page; its edge has to be perceivable. */
   border: 1px solid var(--control-border);
   border-radius: var(--radius-md);

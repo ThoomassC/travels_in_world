@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { CountryCode } from "@/domain/geo";
 import { TripSchema } from "@/domain/schema";
 import type { Trip } from "@/domain/schema";
 import { detailOf, hasStory, summaryOf } from "@/domain/trip";
@@ -7,12 +8,19 @@ import { displayPath, readTripCollection } from "./collection";
 import type { TripFile } from "./collection";
 import { describeField } from "./finding";
 import type { FieldPath } from "./finding";
+import { loadWishedCountries } from "./wishlist";
 
 /**
  * The loading façade: the one seam that makes "content in files" a reversible
- * decision. Four functions, and nothing else in the application knows where a
- * trip comes from — the day the content moves to PostgreSQL, only these four
+ * decision. Five functions, and nothing else in the application knows where the
+ * journal comes from — the day the content moves to PostgreSQL, only these five
  * implementations change and no caller is touched.
+ *
+ * Four of them are about a trip. The fifth, `listWishedCountries` (TIW-39), reads
+ * `content/wishlist.yaml` — the countries the journal *wants* to reach, which are
+ * content without being voyages — and it is here for the one thing it shares with
+ * the others: `contentRoot()` below, the single place that resolves
+ * `TIW_CONTENT_DIR`.
  *
  * **Why they are `async` when the read is synchronous.** That reversibility is
  * the whole reason. `readTripCollection` is `fs`-synchronous today, so nothing
@@ -714,6 +722,31 @@ export async function loadTrips(): Promise<readonly TripDetail[]> {
  */
 export async function listTripSummaries(): Promise<readonly TripSummary[]> {
   return publishedTrips().map(summaryOf);
+}
+
+/**
+ * **The countries the journal wants to reach** — `content/wishlist.yaml`, TIW-39.
+ *
+ * A fifth door, and the first that is not about a trip. It is here rather than in
+ * `./wishlist` for one reason: `contentRoot()` is the single place that reads
+ * `TIW_CONTENT_DIR`, and a second copy of that resolution — with its `.trim()`,
+ * its empty-string trap and its CLI contract — is exactly the drift the header of
+ * that function spends thirty lines refusing. `./wishlist` therefore takes the
+ * directory as an argument and stays testable from a temporary folder; this is
+ * the one line that knows where the site's own content is.
+ *
+ * `async` like the four above, and for the same reason: the seam is the
+ * signature, not the implementation.
+ *
+ * **Not memoised, unlike the trips**, and it is a measurement rather than an
+ * omission: the file is four lines, it is read once per rendered page instead of
+ * once per build, and the collection memo exists because a *directory of
+ * documents* was being re-parsed. Adding a second `Map` here would buy a few
+ * microseconds and owe the same `next dev` caveat the trip memo has to carry —
+ * an edited `wishlist.yaml` invisible until the server restarts, intermittently.
+ */
+export async function listWishedCountries(): Promise<readonly CountryCode[]> {
+  return loadWishedCountries(contentRoot(), repositoryRoot());
 }
 
 /**

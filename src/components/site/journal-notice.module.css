@@ -1,104 +1,219 @@
 /* =============================================================================
-   The journal-state notice — one line under the header, on every page under
-   `[locale]`, for as long as the journal holds no récit (TIW-35).
+   The journal-state notice — a full-bleed advisory band under the header, on
+   every page under `[locale]`, for as long as the journal holds no récit
+   (TIW-35, restyled).
 
    No colour is declared here; every value comes from `src/styles/tokens.css`,
    which is what keeps the dark theme working without this file knowing that it
-   exists. No animation, no icon, no border and no plate: the client asked for
-   "une ligne, pas un encart", and a sentence needs none of those to be read.
+   exists.
+
+   **THIS FILE USED TO ARGUE THE OPPOSITE, AND THE ARGUMENT IS KEPT RATHER THAN
+   DELETED.** TIW-35 shipped the notice as one muted sentence in the whitespace
+   that already existed above the `<h1>` — « une ligne, pas un encart » — and the
+   fold arithmetic that decided it is still below, because it is still true. What
+   changed is not the measurement: it is the owner's call. A line the reader does
+   not notice does not answer the question the line exists to answer, and a reader
+   landing on a working map with nothing to read has to be told, plainly, that the
+   carnet is being written rather than broken.
+
+   So this is now a band. It is louder in four channels at once — a washed plate,
+   a full-strength rule under it, a glyph, and type at reading size and weight
+   instead of muted `--text-sm` — and the section below pays for it out of
+   whitespace rather than out of the map.
    ============================================================================ */
 
 /**
- * **A line, aligned on the page's own measure.**
+ * **The plate, bleeding to both edges of the glass.**
+ *
+ * Full-bleed and not boxed on the content measure, because a band that stops
+ * short of the edges reads as a card inside the page — one block among others,
+ * which is exactly the register the previous version was trying to stay in. Edge
+ * to edge, directly under the sticky bar, it reads as chrome the page is wearing.
+ *
+ * **A wash and a rule, and NOT a filled amber plate — measured, not preferred.**
+ * (The two figures below are written without their `:1` because they measure a
+ * version of this rule that no longer exists — the repository's convention for a
+ * historical number, and what keeps them out of the contract's citation table.)
+ * The first cut of this band filled it with `--warning` and set the text in
+ * `--text-on-accent`. In the light theme that measured 6.57 and looked right.
+ * In the dark theme it measured **1.69**: the shared palette's semantic colours
+ * are *inks*, so `--warning` is a dark ochre on paper and a pale amber on the
+ * night ground, while `--text-on-accent` is white in both. White on pale amber is
+ * not text. There is no filled-plate pairing in this sheet that survives the
+ * theme flip, which is the reason this rule looks the way it does.
+ *
+ * So the amber stays an ink and the plate is a wash of it. `color-mix` over
+ * `--site-background` keeps both operands theme-aware, so the wash darkens the
+ * paper in the light theme and lightens the night ground in the dark one, and the
+ * ink on top is `--text-strong` either way — the pairing every heading on this
+ * site already uses on the page's own ground. Same trick, and the same reason, as
+ * `.untold path` in `world-map.module.css`.
+ *
+ * The rule at the bottom is the join with the page: `--warning` at full strength
+ * against its own wash, so the edge is a shape rather than a second colour. It is
+ * on the bottom edge only — a rule on the top would land against the header's
+ * teal, where an amber hairline reads as an artefact of the bar rather than the
+ * top of a band.
+ *
+ * **36 % is a ceiling, not a taste.** The wash was swept against both themes at
+ * once, because the two fail at opposite ends: in the light theme the amber
+ * darkens the paper and it is the GLYPH that runs out of room against its own
+ * wash, in the dark theme the amber lightens the ground and it is the SENTENCE
+ * that does. At 45 % the glyph is already under the 3 that WCAG 1.4.11 asks of a
+ * graphical object in the light theme, and the sentence is under the 4.5 of 1.4.3
+ * in the dark one. 36 % is the last step where both clear their thresholds in
+ * both themes — and it is nearly twice as separated from the page as the 20 %
+ * this band first shipped with, which is the whole point of raising it.
+ *
+ * No ratio is transcribed in this file. `tests/e2e/journal-notice.spec.ts` audits
+ * the served page with axe in both schemes, which is the guard that caught the
+ * filled plate — a number written in a comment would only have repeated what it
+ * already measures.
+ */
+.notice {
+  background: color-mix(in srgb, var(--warning) 36%, var(--site-background));
+  color: var(--text-strong);
+  border-block-end: 2px solid var(--warning);
+}
+
+/**
+ * The sentence back on the page's measure, inside a band that is not.
  *
  * `max-width` / `margin-inline` / `padding-inline` are copied from `.header` in
  * `site-nav.module.css` and from the global `main` rule, so the notice's first
  * letter sits above the header's first letter and above the page's first letter.
- * Three different alignments in the top 100 px of every page would read as a
- * mistake.
+ * Three different alignments in the top 150 px of every page would read as a
+ * mistake, and it is the reason this inner box exists at all.
  *
- * `--text-muted` on the page background, which is the pairing `.intro` on the home
- * page already uses on the same background — so it is a contrast this repository's
- * axe audits have measured in both themes rather than one this file is asking to
- * be trusted on. It is redeclared under both dark blocks of `tokens.css`, and
- * `tests/e2e/journal-notice.spec.ts` audits the served page in the two schemes.
+ * **Centred, and that is the one thing here not derived from the page's grid.**
+ * Every other first letter of the document starts at the content column's left
+ * edge; this one does not, at the owner's direction. A centred line in a
+ * full-bleed band is the shape a notice has — it reads as addressed to the reader
+ * rather than as the first paragraph of the page — and the box above still bounds
+ * it, so on a wide screen the sentence is centred *within the measure* rather
+ * than floating between two edges of glass.
  *
- * The one thing that marks this as chrome rather than prose is its size and its
- * position, not a colour — nothing here is the only channel for anything (WCAG
- * 1.4.1), because the sentence *is* the information.
+ * No flex row here any more, and that is the same story from the other end: with
+ * the group centred, a glyph pinned beside a paragraph bounded by `--measure` hung
+ * two hundred pixels to its left on a wide screen. It went into the text flow
+ * instead — see `./journal-notice.tsx` — so this box does nothing but hold the
+ * measure and the padding.
  */
-.notice {
+.inner {
   max-width: var(--content-max-width);
   margin-inline: auto;
-  padding: var(--space-2) var(--space-5) 0;
-}
-
-.body {
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  /**
-   * Tighter than the document's 1.6 and deliberately so: this is a single line of
-   * chrome, not a paragraph to read at length, and 1.6 spends 8 px of the first
-   * screen on air inside one line.
-   *
-   * **And no `max-width`, which is the opposite of what every other paragraph in
-   * this repository does — measured, not assumed.** The first version carried
-   * `max-width: 70ch`, the measure `.intro` uses; at `--text-sm` that is about
-   * 490 px, so the sentence wrapped to two lines and the band came out at **47 px**
-   * instead of 28. A measure exists to stop a reader losing the start of the next
-   * line, and it earns its keep on a paragraph; here it bought a second line on a
-   * one-sentence notice the client asked to keep to one. The sentence renders at
-   * about 690 px, so it fits on one line in the 1104 px content column from roughly
-   * 740 px of viewport upwards, and wraps below that — which is where the wrapping
-   * belongs.
-   */
-  line-height: 1.4;
+  padding: var(--space-3) var(--space-5);
 }
 
 /**
- * **The whole of why this notice costs nothing at the fold, and it is a
- * measurement rather than a preference.**
+ * The advisory glyph — a triangle, a bar and a dot, drawn rather than typed.
  *
- * TIW-13's criterion asks the first screen to carry a sentence, the map and the
- * start of the latest-trips block, and TIW-19 already had to compact its own banner
- * from 122 px to 40 px to keep it. Measured on the served build of the empty
- * journal, before a line of this file existed, the map's `<figure>` ends at:
+ * Drawn and not a character, for the reason a `⚠` costs more than it looks:
+ * the emoji presentation of that codepoint is picked by the platform, so the same
+ * markup is a flat outline on one machine and a full-colour emoji on the next,
+ * at a size the stylesheet does not control. Three paths and one stroke colour
+ * are the same shape everywhere.
+ *
+ * Sized in `em` and not in `rem`, because it now lives inside the sentence: it
+ * has to track the type size rather than a root the sentence does not follow.
+ * Both axes are said explicitly — the global base sheet sets `svg { height: auto }`,
+ * which would otherwise re-derive the height from the viewBox and ignore the line.
+ *
+ * `stroke` and `fill: none`: an outlined triangle keeps its inner void at every
+ * size, where a filled one with a knocked-out bar would need a second colour to
+ * punch the hole — and the hole would have to be the wash behind it, which moves
+ * with the theme.
+ *
+ * `--warning` and not `currentcolor`: the glyph is the one element here that is
+ * *allowed* to be the amber itself. It is a graphical object carrying meaning, so
+ * it owes the 3 of WCAG 1.4.11 against the wash it sits on, rather than the 4.5 the
+ * sentence owes — full-strength ink on a 20 % wash of itself clears that in both
+ * themes, and the same axe audit checks it.
+ */
+.glyph {
+  display: inline-block;
+  vertical-align: -0.22em;
+  margin-inline-end: 0.45em;
+  inline-size: 1.35em;
+  block-size: 1.35em;
+  fill: none;
+  stroke: var(--warning);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/**
+ * The sentence, at reading size.
+ *
+ * `--text-base` at `--weight-medium`, where the pre-band version used `--text-sm`
+ * at the regular weight in `--text-muted`. One step of size and one of weight is
+ * the difference between "chrome you skim past" and "chrome you read"; the plate,
+ * the rule and the glyph do the rest, so the type does not have to shout as well.
+ *
+ * **No `--measure`, and that is what buys the single line.** Every other paragraph
+ * in this repository is bounded at 66ch, and this one was too until the owner asked
+ * for it smaller and on one line: at `--text-md` inside 66ch the sentence wrapped
+ * onto two, which is what made the band 89 px tall. Unbounded on the content column
+ * it sets on one line from roughly 1000 px of viewport upwards and wraps below
+ * that, where wrapping is the only honest answer.
+ *
+ * `text-wrap: balance` for exactly those narrow widths: when it does wrap, it wraps
+ * into halves of similar length rather than a full line and an orphan. It costs
+ * nothing where the sentence fits on one line, which is the case this rule is for. The previous version deliberately refused a measure — at `--text-sm` a
+ * 70ch bound wrapped a one-line notice onto two and doubled the band. That
+ * trade-off is gone with the type size: at `--text-md` the sentence already
+ * wraps on any viewport narrower than the content column, so the bound costs
+ * nothing and stops the line from running the full 1104 px on a wide screen,
+ * where an unbounded line of chrome is genuinely hard to track back from.
+ */
+.body {
+  margin: 0;
+  text-align: center;
+  text-wrap: balance;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  line-height: 1.35;
+}
+
+/**
+ * **Where the band is paid for, and it is still not the map.**
+ *
+ * The arithmetic TIW-35 recorded has not changed and is repeated here because it
+ * is what makes this rule a measurement rather than a nudge. TIW-13's criterion
+ * asks the first screen to carry a sentence, the map and the start of the
+ * latest-trips block; measured on the served build of the empty journal, before
+ * any notice existed, the map's `<figure>` ended at:
  *
  *   1152 x 800   bottom 715   ->  85 px of room under the fold
  *   1280 x 720   bottom 696   ->  24 px of room under the fold
  *
- * **24 px** is what decided this rule. A band added under the header costs a line
- * of text plus its air — 28 px at the very least — so it fitted at 1152 x 800 and
- * *overflowed* at 1280 x 720. Compressing the type until 24 px was enough would
- * mean 12 px of body copy on every page of the site to buy 15 px on one, which is
- * a bad trade.
+ * **24 px** is the number every version of this file has had to respect. The old
+ * line cost about 28 px and took them out of `main`'s decorative top padding by
+ * cutting it to `--space-7`; the band costs about 72 px, so it takes the rest.
  *
- * So the notice does not create a band: it sits in the one that already existed.
- * `main { padding-block-start: var(--section-space) }` is 92 px at 1152 and 102 px
- * at 1280 of pure decoration above the `<h1>`, and this rule spends part of it.
+ * `--space-2` and not `0`: at zero the `<h1>` of every page sits flush against
+ * the amber, which reads as the band having swallowed the heading. 8 px is the
+ * smallest gap that separates them without giving back space the fold needs.
  *
- * Two properties of the selector, both load-bearing:
+ * The two properties of the selector are the ones TIW-35 wrote it for, and both
+ * still hold:
  *
  * - **it undoes itself.** It is an adjacency, so the day `holdsNoStory` answers
  *   `false` the notice is not rendered, `main` has no preceding sibling, and the
  *   full `--section-space` comes back. There is nothing to remember to revert —
- *   which is the same reasoning as deriving the banner from the content in the
- *   first place (`docs/le-bandeau-des-recits-a-venir.md`).
- * - **`--space-7` is `3rem`, exactly the floor of `--section-space`'s `clamp()`.**
- *   So where the whitespace was already at its minimum — narrow viewports, where
- *   vertical room is scarcest and the sentence wraps to two or three lines — this
- *   rule takes nothing away. It bites only where the band was generous. That is
- *   why it is this token and not a smaller one.
+ *   the same reasoning as deriving the banner from the content in the first place
+ *   (`docs/le-bandeau-des-recits-a-venir.md`).
+ * - **it is scoped by the class**, so it reaches `<main>` only in documents where
+ *   the notice is present. `main` is an element selector inside a CSS Module, so
+ *   it is not hashed and really does reach the page's `<main>`; the specificity
+ *   (0,1,1) beats the global `main` rule in `tokens.css` (0,0,1) without an
+ *   `!important`.
  *
- * `main` is an element selector inside a CSS Module, so it is not hashed and the
- * rule really does reach the page's `<main>`; the class is what scopes it to
- * documents where the notice is present. The specificity (0,1,1) beats the global
- * `main` rule in `tokens.css` (0,0,1) without an `!important`.
- *
- * The figures after this rule are in the ticket's report, and the guard that keeps
- * them true is `tests/e2e/journal-notice.spec.ts`, which measures the served page
- * at both viewports. A measured number with no test drifts.
+ * The guard is `tests/e2e/journal-notice.spec.ts`, which measures the served page
+ * at both reference viewports. A measured number with no test drifts, and this
+ * file has now been measured twice for two different answers.
  */
 .notice + main {
-  padding-block-start: var(--space-7);
+  padding-block-start: var(--space-2);
 }

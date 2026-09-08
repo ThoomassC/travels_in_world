@@ -2,18 +2,11 @@ import type { ReactElement } from "react";
 import { useTranslations } from "next-intl";
 import { localePathname } from "@/i18n/pathname";
 import type { Locale } from "@/i18n/routing";
-import {
-  BRAND_LOCKUP_COMET_TRANSFORM,
-  BRAND_LOCKUP_TRACK_DASH,
-  BRAND_LOCKUP_TRACK_PATH,
-  BRAND_LOCKUP_TRACK_WIDTH,
-  BRAND_LOCKUP_VIEWBOX,
-  BRAND_COMET_PATH,
-} from "./brand-art";
+import { BRAND_PLANE_PATH, BRAND_PLANE_VIEWBOX } from "./brand-art";
 import styles from "./site-brand.module.css";
 
 /**
- * The header lock-up: the comet, the trajectory, the name — and the link home.
+ * The header lock-up: the aeroplane and the name on two lines — and the link home.
  *
  * **No `'use client'`, and no JavaScript at all.** One `<a href>` wrapping an
  * inline `<svg>` and a `<span>`. The milestone's two client boundaries belong to
@@ -39,10 +32,20 @@ import styles from "./site-brand.module.css";
  * visitor's theme, which is an acceptance criterion. Inline is also what lets the
  * *page* override the two tokens, which is the other half of that criterion.
  *
- * WHAT THE INLINE SVG COSTS, since it lands in the HTML of every route: 471 bytes
- * of markup, 172 bytes brotli. Measured against the budgets in
- * `tests/build/prerender.test.ts` — `/fr` went from 36.26 KB to 36.36 KB brotli
- * against a 100 KB ceiling.
+ * WHAT THE INLINE SVG COSTS, since it lands in the HTML of every route. The old
+ * lock-up — a banked aeroplane plus a dotted trajectory — was 471 bytes of markup.
+ * The mark the owner supplied on 7 September 2026 is a shorter *document* (one
+ * `<path>` instead of two, no `<g>`, no transform, no dash attributes) and a much
+ * longer *path*, because the airframe carries two nose curves and the needle is a
+ * second contour: **1343 bytes of markup**, measured in the built HTML.
+ *
+ * On the page, that is **+0.3 KiB brotli per document** — `/fr/a-propos` 7.4 to
+ * 7.7, `/fr/voyages` 8.4 to 8.6, `/fr/villes` 7.7 to 7.9 — against a 100 KiB
+ * ceiling. The figure is quoted with a caveat the README earns: this repository
+ * measured a 74-byte spread between two builds of an identical tree, so a
+ * document delta this size is only worth stating because it moved the same way on
+ * three routes at once and has an obvious cause. `tests/build/prerender.test.ts`
+ * is what actually holds the line.
  */
 export function SiteBrand({ locale }: { readonly locale: Locale }): ReactElement {
   const t = useTranslations("brand");
@@ -60,41 +63,62 @@ export function SiteBrand({ locale }: { readonly locale: Locale }): ReactElement
         `focusable="false"` is not redundant with `aria-hidden` — old Trident and
         Edge put SVG elements in the tab order regardless. It costs 18 bytes.
       */}
+      {/*
+        **THE LOCK-UP IS "DEUX TEMPS", CHOSEN BY THE OWNER ON 7 SEPTEMBER 2026**,
+        and the medallion is gone with the choice.
+
+        The aeroplane, then the name on two lines: "Travels" at full size in the
+        display serif, "in World" small and letterspaced under it. The hierarchy
+        is made by size, case AND family at once, which is the reason it was
+        recommended and it is not an aesthetic one — it is the only one of the
+        eight proposals that survives greyscale, a bad projector and a reader who
+        separates no hues, because none of it rests on a fill, a rule or a plate
+        whose contrast has to be measured and held.
+
+        **The disc is deleted rather than kept empty.** It was a plate for a mark
+        that carried no name; a lock-up that spells the name needs no plate, and a
+        6.5 rem disc hanging under the bar beside a two-line wordmark is two
+        centres of gravity in one corner. What it cost is recorded rather than
+        lost: the disc was the header's own colour, so it was invisible on the bar
+        and read as the bar continuing below it. Nothing replaces that gesture;
+        the bar simply ends where it ends.
+      */}
       <svg
         className={styles.mark}
-        viewBox={BRAND_LOCKUP_VIEWBOX}
+        viewBox={BRAND_PLANE_VIEWBOX}
         aria-hidden="true"
         focusable="false"
       >
-        {/*
-          The trajectory first, so the comet paints over it if a future placement
-          ever brings them within a hair of each other. They are ~7 units apart
-          today; `./brand-art.ts` records why that clearance is the load-bearing
-          number of this mark.
-        */}
-        <path
-          className={styles.track}
-          d={BRAND_LOCKUP_TRACK_PATH}
-          fill="none"
-          strokeWidth={BRAND_LOCKUP_TRACK_WIDTH}
-          strokeLinecap="round"
-          strokeDasharray={BRAND_LOCKUP_TRACK_DASH}
-        />
-        <g transform={BRAND_LOCKUP_COMET_TRANSFORM}>
-          <path className={styles.comet} d={BRAND_COMET_PATH} />
-        </g>
+        <path className={styles.plane} d={BRAND_PLANE_PATH} fillRule="evenodd" />
       </svg>
 
       {/*
-        `lang="en"` on the name, in a `lang="fr"` document. The brand is three
-        English words, and a French screen reader reading them with French
-        phonemes says something that is not the name of this site. The criterion
-        asks for a pronounceable accessible name — "travels in world", and
-        emphatically not the repository's `travels_in_world`, which a screen
-        reader spells out underscore by underscore.
+        **The name is real text in two elements, and it is still ONE name.**
+
+        `lang="en"` on the pair, in a `lang="fr"` document: the brand is three
+        English words and a French screen reader reading them with French phonemes
+        says something that is not the name of this site.
+
+        Two message keys and not one split at render, because a split would be a
+        rule about French that no translator can change — and the second line is
+        uppercased by CSS rather than typed in capitals, so what reaches the
+        accessibility tree is "in World" and not "IN WORLD", which some screen
+        readers spell out letter by letter.
+
+        **What this removed:** the separate wordmark that used to sit beside the
+        medallion. The lock-up spells the name itself now, and a mark plus a name
+        beside it would have printed "Travels in World" twice in the same corner.
       */}
       <span className={styles.word} lang="en">
-        {t("name")}
+        <span className={styles.wordLead}>{t("nameLead")}</span>
+        {/*
+          A space, deliberately, and it is not decoration. The accessible name of
+          this link is the concatenation of its descendants' text, and two
+          adjacent inline boxes can concatenate to "Travelsin World" — measured on
+          exactly this markup. `tests/e2e/brand.spec.ts` asserts the computed name
+          rather than trusting this.
+        */}{" "}
+        <span className={styles.wordTail}>{t("nameTail")}</span>
       </span>
 
       {/*

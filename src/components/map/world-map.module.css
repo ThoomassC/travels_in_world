@@ -38,8 +38,13 @@
    * NOT `overflow: hidden` on the canvas, which is the obvious fix and the wrong
    * one: it would clip both the interaction target and the focus ring of every
    * edge marker.
+   *
+   * `--space-6` (32 px) since TIW-38, where 8 px was enough before: the figure no
+   * longer paints outside its own box (see `overflow-clip-margin` below), so the
+   * whole 26 px a marker needs has to fit inside the padding rather than half of
+   * it hanging out.
    */
-  padding-inline: var(--space-2);
+  padding-inline: var(--space-6);
 
   /**
    * The map's height cap, moved here from the home page's `.mapFrame` by TIW-14.
@@ -61,8 +66,6 @@
    * declaration is invalid, and the map is simply full width again.
    */
   inline-size: 100%;
-  max-inline-size: min(100%, calc(45vh * var(--world-aspect)));
-  margin-inline: auto;
 
   /**
    * The tooltip's containment, and the one thing this ticket had to clip.
@@ -76,8 +79,20 @@
    * `overflow-x: clip` and not `hidden`: `clip` creates no scroll container, so
    * `overflow-y` stays genuinely `visible` (with `hidden` or `auto` the other
    * axis is forced to `auto`) and a bubble drawn ABOVE the map is not cut off.
-   * `overflow-clip-margin` then buys back the bleed the markers need — half a
-   * 44 px target plus its 4 px focus ring is 26 px, so 2 rem is comfortable.
+   *
+   * **`overflow-clip-margin` was 2 rem and is now 0, and TIW-38 is why.** The
+   * margin bought back the bleed a marker needs — half a 44 px target plus its
+   * 4 px focus ring is 26 px — by letting the figure paint *outside* its own box.
+   * That was free while the figure sat inside a measured column: outside the box
+   * was still inside the page. On the full-bleed track the box IS the viewport,
+   * so the same 2 rem paints past the glass and gives the document a horizontal
+   * scrollbar — WCAG 1.4.10, caught by
+   * `tests/e2e/map-interaction.populated.spec.ts` at 320 px before this line was
+   * written, which is exactly what that test is for.
+   *
+   * The bleed is bought back by the `padding-inline` above instead, which pushes
+   * the drawing inwards rather than the paint outwards. Same room for the marker,
+   * inside the page rather than beyond it.
    *
    * Accepted cost, stated because it is real: the bubble of a marker sitting at
    * the very edge of the frame is clipped on its outer side. The text is not
@@ -85,16 +100,87 @@
    * status bar both still give in full.
    */
   overflow-x: clip;
-  overflow-clip-margin: 2rem;
+  overflow-clip-margin: 0;
 }
 
 /**
- * The positioning context for everything the reader can act on: the canvas, the
- * three zoom controls and the ephemeral wheel hint. Rendered by the client
- * component, which is also the only thing that can put a control in it.
+ * The positioning context for everything the reader can act on: the drawing, its
+ * markers and the zoom slider. Rendered by the client component, which is also
+ * the only thing that can put a control in it.
+ *
+ * **This box is the drawing's box, and that is new.** The first-screen width
+ * calculation below used to live on `.canvas`; it moved up here when the slider
+ * arrived, and the move is what makes the control sit *on* the map's right edge
+ * rather than tens of pixels off it. At every width where the `dvh` term binds
+ * rather than `100%` — which is most desktop widths — the canvas is narrower than
+ * the figure, so a control positioned against a full-width stage would float in
+ * the margin beside the drawing. Measured at 1280 × 720 before the move: 70 px
+ * of daylight on each side.
+ *
+ * The custom properties the calculation reads are written on THIS element by the
+ * component for the same reason — an element cannot read a custom property
+ * declared on its own child. They inherit downwards, so `.canvas`, the `<svg>`
+ * and every marker still resolve the same four digits the `viewBox` carries.
  */
 .stage {
   position: relative;
+
+  /**
+   * **The whole map on the first screen, without a scroll** (TIW-38) — and the
+   * frame's ratio still exact while doing it, which the first cut of this rule
+   * did not manage.
+   *
+   * WHAT THIS REPLACED, AND WHY IT WAS A SILENT BREAK. The rule used to drive the
+   * height and let the width follow, guarded on the other axis by
+   * `max-inline-size: 100%`:
+   *
+   *     block-size: calc(100dvh - ...);
+   *     inline-size: auto;
+   *     max-inline-size: 100%;
+   *
+   * That is three constraints for two axes, and CSS resolves the conflict by
+   * **dropping `aspect-ratio`**: when an auto inline size is clipped by a max, the
+   * preferred aspect ratio no longer applies, and the box keeps its full driven
+   * height at a width the ratio never asked for. Measured at 390 x 844, where the
+   * ratio wants 1313 px of width and the viewport leaves 326: the box resolved to
+   * 326 x 684 instead of 326 x 170, the `<svg>` — which carries no
+   * `preserveAspectRatio`, so `xMidYMid meet` — painted its 326 x 170 frame
+   * centred inside it, and ~257 px of nothing sat above and below the drawing.
+   *
+   * The empty band was the visible half. The expensive half is that `.marks` is
+   * `inset: 0` on the canvas, so every marker resolves its percentages against the
+   * letterboxed height and lands off the country it names: measured, one marker
+   * 162 px above the drawing and one 74 px below it. That is the exact trap the
+   * comment on `.canvas`, `frame.ts` and ADR 0003 all name — and the old rule
+   * walked into it while its own comment said the map would simply "letterbox
+   * instead".
+   *
+   * WHAT DRIVES WHAT NOW. The **width** is driven and the height follows from the
+   * ratio, which is the one arrangement where no third constraint exists to drop:
+   * `min()` picks whichever of the two limits binds, and both terms are widths, so
+   * the ratio is never in competition with anything. The second term is the same
+   * first-screen budget as before — the viewport's own height, less the sticky bar
+   * and less the two block paddings `main` puts around its rows, each a declared
+   * token — converted to the width that budget buys at the current ratio. Below
+   * that width the map is as tall as the first screen allows; above it, the
+   * viewport is what binds and the page never scrolls sideways (WCAG 1.4.10).
+   *
+   * `dvh` and not `vh`: on a phone `vh` is the tallest the viewport ever gets, so
+   * the map would be cropped by exactly the height of the browser's own chrome for
+   * as long as it is shown — which is the whole time a reader is scrolling.
+   *
+   * The guard is `tests/e2e/map-interaction.populated.spec.ts`, which measures the
+   * canvas's ratio against `--frame-w / --frame-h` at a phone's width. It could not
+   * have caught the old rule: the Playwright project runs at 1280 x 720, where the
+   * derived width fits and nothing is ever clipped.
+   */
+  inline-size: min(
+    100%,
+    calc(
+      (100dvh - var(--chrome-height) - var(--section-space) * 2) * var(--frame-w) / var(--frame-h)
+    )
+  );
+  margin-inline: auto;
 }
 
 /**
@@ -103,19 +189,31 @@
  * a trip close to an edge of the frame would have half its interaction target
  * clipped away. The rounded corners are applied to the `<svg>` instead, which
  * clips its own drawing to its viewport anyway.
+ *
+ * It fills the stage exactly. The first-screen calculation that used to be here
+ * is one element up, where the slider can be positioned against it; the box a
+ * reader sees is unchanged to the pixel, and the two guards that measure it —
+ * the ratio cases in `tests/e2e/map-interaction.populated.spec.ts` — read this
+ * element and not the stage, deliberately, because this is the box `.marks` is
+ * `inset: 0` on.
  */
 .canvas {
   position: relative;
+  inline-size: 100%;
   /**
-   * Exactly the `viewBox`'s ratio — and now literally the same four numbers,
-   * because the client component writes `--frame-w` and `--frame-h` from the
-   * very values it formats the `viewBox` from. Any other ratio letterboxes the
-   * SVG and every marker drifts off the country it names, which is the trap
-   * `frameAround` and `clampViewport` both keep their aspect arithmetic exact
-   * for.
+   * Exactly the `viewBox`'s ratio — and literally the same four numbers, because
+   * the client component writes `--frame-w` and `--frame-h` from the very values
+   * it formats the `viewBox` from, on the stage, whence they inherit here. Any
+   * other ratio letterboxes the SVG and every marker drifts off the country it
+   * names, which is the trap `frameAround` and `clampViewport` both keep their
+   * aspect arithmetic exact for.
+   *
+   * The height is therefore derived from a width the stage already resolved,
+   * which is the one arrangement where no third constraint exists for CSS to drop
+   * the ratio in favour of — the note on `.stage` records what happened when
+   * there were three.
    */
   aspect-ratio: var(--frame-w) / var(--frame-h);
-  width: 100%;
 }
 
 /**
@@ -154,12 +252,20 @@
   /* Overrides the `img, svg { height: auto }` of the global base: the drawing
      has to fill the ratio-locked box, not re-derive a height from its own. */
   height: 100%;
-  background: var(--surface);
-  /* Same reason as the coastline below: `--border-subtle` measures 1.33:1
-     against the page background, so the map had no perceivable edge at all.
-     `--control-border` is the token documented `>= 3:1`. */
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-md);
+  /**
+   * **No plate and no frame since TIW-38: the sea IS the page.**
+   *
+   * The drawing used to sit on a `--surface` card with a `>= 3:1` border, because
+   * it was one block among others on a measured column. On the wide track there
+   * is nothing to separate it from — a border would be a line drawn across the
+   * viewport for no reader — and the page's own ground, grain included, is what
+   * the continents float on. That is the composition `nicoailleurs.com` uses and
+   * the reason the map reads as the page rather than as a widget on it.
+   *
+   * The consequence is measured rather than assumed: land is now the pale token
+   * and the sea the darker one, which restores the polarity TIW-37 had inverted.
+   */
+  background: transparent;
   /* The other half of "not actionable must not look like a button": with the
      shapes unable to answer a pointer at all, no country can be hovered,
      dragged or clicked — there is no rule left to forget. */
@@ -171,25 +277,30 @@
  * block or the next: a tint means "there is a trip here", it is information, and
  * an affordance would promise an interaction that does not exist until TIW-14.
  *
- * **The coastline carries the map, not the fill.** Measured: land composed over
- * sea is 1.10:1 in the light theme and 1.10:1 in the dark one — the continents
- * are, as fills, invisible. So the only thing that draws the world is this
- * stroke, which makes it a graphical object required to understand the content
- * (WCAG 1.4.11, 3:1). `--border-subtle` scored 1.33:1 and its own declaration in
- * the shared sheet says `décoratif seul`; `--control-border` is the token the
- * palette documents as `>= 3:1` and measures 4.64:1 against land and 5.13:1
- * against sea in the light theme, 6.02:1 and 6.64:1 in the dark one.
+ * **The coastline carries the map, not the fill.** Measured: land against sea is
+ * 1.23:1 in the light theme and 1.21:1 in the dark one — the continents are, as
+ * fills, invisible. So the only thing that draws the world is this stroke, which
+ * makes it a graphical object required to understand the content (WCAG 1.4.11,
+ * 3:1). `--border-subtle` scored 1.17:1 and its own declaration in the shared
+ * sheet says `décoratif seul`; `--control-border` is the token the palette
+ * documents as `>= 3:1` and measures 5.11:1 against land and 4.16:1 against sea
+ * in the light theme, 6.64:1 and 5.49:1 in the dark one.
  *
- * **The land is `--panel-surface`, and its polarity flipped with the palette.**
- * It used to be a project-local `--surface-muted`, a white veil that made the
- * continents a shade *lighter* than the sea; the shared sheet has no such token,
- * and its panel role sits a shade *darker* than a surface in the light theme, so
- * land now reads slightly darker than water there — the more conventional of the
- * two readings, and the dark theme is unchanged. What did not change is the
- * argument: at 1.10:1 either way, the fill was never what drew the world.
+ * **Land is `--surface` and the sea is the page**, since TIW-38 removed the
+ * plate. Two consequences worth having in one place. The continents are back to
+ * being *lighter* than the water in the light theme — the polarity TIW-37 had
+ * inverted when it swapped a project-local `--surface-muted` for the shared
+ * panel role, and the reason that swap is gone. And the sea now carries the
+ * paper grain while the land does not: land is an opaque fill painted over it,
+ * so the two are genuinely different substrates and the contract measures them
+ * as two rather than as one stack.
+ *
+ * The fill separation improved as a side effect — 1.10 before, 1.23:1 now —
+ * and it changes nothing: at that distance the fill was never what drew the
+ * world, which is the whole reason this stroke exists.
  */
 .land path {
-  fill: var(--panel-surface);
+  fill: var(--surface);
   stroke: var(--control-border);
 }
 
@@ -199,47 +310,92 @@
  *
  * The fill alone cannot do it: composed over neutral land, `--accent-quiet`
  * measures 1.14:1 in the light theme, and no alpha fixes it — measured, α=0.5
- * reaches 1.99:1 and α=0.8 only 3.19:1, by which point the map is a flat wash.
- * So the contrast is carried by the outline, in `--text-accent`: 6.43:1 against
- * neutral land in the light theme and 7.79:1 in the dark one, well past the 3:1
+ * reaches 2.08:1 and α=0.8 only 3.45:1, by which point the map is a flat wash.
+ * So the contrast is carried by the outline, in `--text-accent`: 7.08:1 against
+ * neutral land in the light theme and 8.59:1 in the dark one, well past the 3:1
  * of 1.4.11.
  *
- * And the outline is also **thicker**, which is the part that matters for 1.4.1
- * (use of colour): a heavier line is a non-colour visual cue, so the distinction
- * survives for a reader who cannot separate the two hues at all. The fill stays
- * as reinforcement, because it is what makes the map readable at a glance for
- * everyone else.
+ * **AND THE OUTLINE IS THICKER THAN THE UNTOLD ONE'S, WHICH IS THE PART THAT
+ * MATTERS FOR 1.4.1.** 3.5 device pixels against 2, both pinned by
+ * `non-scaling-stroke` below, so the ratio survives any crop.
+ *
+ * That sentence was in this file before and it was **false**: it said the outline
+ * was thicker while both states were declared at `stroke-width: 2`, and what it
+ * was really describing was the 2-against-1 difference with neutral *land*. An
+ * accessibility audit measured the two states at **1.08:1** in the light theme —
+ * and **1.02** simulated for a deuteranope, which is to say identical. (That
+ * second figure is a colour-blindness simulation and not a contrast of this
+ * sheet, so it is written without its `:1`; the first is registered in
+ * `tests/styles/colour-contract.test.ts` and recomputed on every run.) A comment
+ * claiming a channel that is not in the rule below it is worse than no comment: it
+ * is the reason nobody looked.
+ *
+ * **Why the TOLD state is the heavy one and not the untold one.** Today every
+ * published trip is `story: unwritten`, so `.visited` paints nothing and the map
+ * is entirely `.untold`; putting the weight there would have thickened every
+ * border on the site for a distinction that has no second term yet. This way the
+ * map looks exactly as it does now, and a country gains a heavier ring the day it
+ * gains a récit — which is also the right emphasis, since that is the country
+ * with something to read.
+ *
+ * `tests/e2e/map-equivalent.populated.spec.ts` is what keeps this true: it runs on
+ * the fixture, where four countries are told and one is not, and it reads the two
+ * computed widths off the page. The fill stays as reinforcement, because it is
+ * what makes the map readable at a glance for everyone else.
  */
 .visited path {
   fill: var(--accent-quiet);
   stroke: var(--text-accent);
-  stroke-width: 2;
+  stroke-width: 3.5;
 }
 
 /**
  * **A country every one of whose trips is untold** (TIW-18) — the third tint, and
  * the one the acceptance criterion asks to be "un état visuel distinct".
  *
- * **Distinct by the stroke's PATTERN, not by its hue**, and that is the whole
- * design. The visited state already spends both of the channels a fill and a
- * colour can offer — `--accent-quiet` over neutral land measures 1.14:1, which is
- * why the contrast is carried by a `--text-accent` outline and the
- * non-colour cue by its 2 px weight (see the note above). A third state cannot be
- * a third hue: it would be a colour-only distinction from the second, failing WCAG
- * 1.4.1 for exactly the reader the thick outline was chosen for.
+ * **Distinct by its HUE since TIW-38, and this paragraph used to argue the exact
+ * opposite.** It is rewritten rather than deleted, because the reasoning it
+ * replaced was right and what changed is a decision, not a fact.
  *
- * So the stroke is **dashed**, at the same colour and the same weight as a visited
- * country's. Solid means "there is something to read", dashed means "not yet
- * written" — a shape difference that survives greyscale, both themes, and a reader
- * who separates no hues at all. The fill is halved from `--accent-quiet` towards
- * the neutral surface so the shape reads as lighter at a glance, which is
- * reinforcement and never the channel.
+ * Until TIW-38 the third state was the visited stroke made *dashed*: same colour,
+ * same weight, a shape difference that survives greyscale and a reader who
+ * separates no hues at all. The argument against a third hue was that it would be
+ * a colour-only distinction from the second — which is true, and is what this
+ * state now is: a copper fill and a copper outline where the visited state is
+ * teal, after `nicoailleurs.com`, at the owner's explicit direction and against
+ * the recommendation recorded on the ticket.
  *
- * And the distinction is carried in **text** as well, which is what actually
- * satisfies 1.4.1: `VisitedCountries` beside the drawing says « récit à venir » on
- * the country's own row, and each untold marker's accessible name ends in the same
- * words. The `<svg>` is `aria-hidden` (ADR 0003), so no rule in this block is ever
- * a reader's only source.
+ * **1.4.1 HAS NO VISUAL CHANNEL ON THIS PAGE, AND THAT IS A KNOWN DEBT.**
+ *
+ * When TIW-38 made the two states two hues, the thing that saved 1.4.1 was « Les
+ * pays visités » beside the drawing, which wrote « récit à venir » in full on the
+ * country's own row: a *visual* means, so the page conveyed the state without
+ * colour even though the drawing alone did not. That block was removed from the
+ * map tab on 7 September 2026 at the owner's request — see the note in
+ * `src/app/[locale]/page.tsx`.
+ *
+ * What is left is the accessible name of every untold marker, which still ends in
+ * « récit à venir ». That is enough for a screen reader and NOT enough for 1.4.1,
+ * which is about what a sighted reader who separates no hues can perceive.
+ *
+ * **It is inert today and it will not stay that way.** Every published trip is
+ * `story: unwritten`, so `untoldOnlyCountryCodes` returns every visited country,
+ * `.visited` paints nothing, and there is no two-state distinction to carry. The
+ * debt comes due at the **first published récit**, and the fix then is a shape
+ * difference in the drawing — the dashed stroke described just above, which this
+ * block replaced — and not a list a reader has to scroll to find.
+ *
+ * The measured half is unchanged and is what makes the two hues legible at all:
+ * a fill cannot carry this — `--accent-quiet` over land is 1.14:1 — so the
+ * outlines do, at 7.08:1 for the teal and 7.65:1 for the copper against land,
+ * both far past the 3:1 of 1.4.11. The copper is the shared sheet's decor ink,
+ * which a country tint is; the teal keeps the markers, which are controls.
+ *
+ * The distinction is still carried in **text** for anyone using the
+ * accessibility tree: each untold marker's accessible name ends in « récit à
+ * venir ». The `<svg>` is `aria-hidden` (ADR 0003), so no rule in this block is
+ * ever a screen reader's only source — the gap named above is the sighted
+ * reader's, not theirs.
  *
  * `stroke-dasharray` is in **user units and scales with the crop**, which is
  * deliberate and is the one thing here `non-scaling-stroke` does not pin: the
@@ -248,16 +404,38 @@
  * *width* is still pinned, below, along with the other two layers.
  */
 .untold path {
-  fill: color-mix(in srgb, var(--accent-quiet) 50%, transparent);
+  fill: color-mix(in srgb, var(--accent-secondary) 18%, transparent);
+  stroke: var(--accent-secondary);
+  stroke-width: 2;
+}
+
+/**
+ * **The fourth tint: a country the carnet wants to reach** (TIW-39).
+ *
+ * `--text-accent` would have made it a fifth shade of "visited", and the state is
+ * the opposite of a fact about the past. The distinguishing channel is therefore
+ * a **hatch** and not only a hue: a repeating-linear-gradient painted through the
+ * shape, which survives greyscale, both themes and a reader who sees no colour at
+ * all — the same rule as the untold marker's hollow pennant.
+ *
+ * A gradient cannot fill an SVG path, so the hatch is an SVG `<pattern>`… and it
+ * is not: a pattern is a second definition to keep in step with a token, and this
+ * needs no second definition. The stroke carries the identity and the fill is the
+ * faintest wash of the same ink, dashed — `stroke-dasharray` on the *outline* is
+ * the hatch, and it reads at every crop because the width is pinned below.
+ */
+.wished path {
+  fill: color-mix(in srgb, var(--text-accent) 8%, transparent);
   stroke: var(--text-accent);
   stroke-width: 2;
-  stroke-dasharray: 6 4;
-  stroke-linecap: round;
+  stroke-dasharray: 5 3;
+  stroke-linejoin: round;
 }
 
 .land path,
 .visited path,
-.untold path {
+.untold path,
+.wished path {
   /* Stroke width is in user units, so a cropped frame would scale it: at the
      0.3-world-width floor `frameAround` applies to a single trip, a 1-unit
      border renders over 3 px. `non-scaling-stroke` pins it to device pixels
@@ -312,8 +490,20 @@
   left: calc((var(--mark-x) - var(--frame-x)) / var(--frame-w) * 100%);
   top: calc((var(--mark-y) - var(--frame-y)) / var(--frame-h) * 100%);
   /* The percentages place the marker's top-left corner; this pulls it back by
-     half its own size so the drawn dot sits on the projected point. */
-  transform: translate(-50%, -50%);
+     half its own size so the drawn dot sits on the projected point.
+
+     `--mark-nudge-*` is the coincidence spread, in rem, and it is added HERE
+     rather than to the position above — which is the whole reason the position
+     above is true. Folded into `--mark-x`, the offset was a distance on the
+     Earth: Annecy and Genève were drawn 150 km either side of the lake. As a
+     screen translate it is the same handful of pixels at every zoom, which is
+     what a 44 px target needed and all it needed. Zero for the markers that
+     share their spot with nobody, which is nearly all of them, so the property
+     is written on two markers rather than sixty. */
+  transform: translate(
+    calc(-50% + var(--mark-nudge-x, 0rem)),
+    calc(-50% + var(--mark-nudge-y, 0rem))
+  );
   /* Inverted DOM order, computed at build time: siblings paint in DOM order, so
      without this the first tab stop (the most recent trip) would be painted
      underneath every older marker overlapping it. */
@@ -353,15 +543,65 @@
   background: var(--accent-quiet);
 }
 
+/**
+ * The pin — `src/components/map/mark-art.ts` holds its geometry, the reason it is
+ * one closed contour, and why it replaced a pennant.
+ *
+ * A disc was anchored by its middle, which is correct for a disc and meaningless
+ * for a pin. That is the one behavioural difference between the two markers, and
+ * it is why the change was never only a new `d`.
+ *
+ * **The target box does not move.** `inline-size`/`block-size` on `.link` are
+ * untouched: the 44 px the reader aims at is still centred on the point, and the
+ * pin drawn above it is paint. A marker whose 44 px box followed the head would
+ * put the target where the place is not.
+ *
+ * `paint-order: stroke` is the ring, and it replaces the `box-shadow` a round dot
+ * could use: a shadow is a rectangle around an SVG box, so on a pin it would
+ * outline the air. Stroking the contour first and filling over it leaves the
+ * stroke showing as an even outline on the shape itself, which is what separates
+ * the marker from tinted land, neutral land and sea alike.
+ */
 .dot {
-  inline-size: var(--space-3);
-  block-size: var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  /* A ring, not a border: it separates the dot from whichever tint it lands on —
-     tinted land, neutral land or sea — without changing its size. */
-  box-shadow: 0 0 0 2px var(--text-on-accent);
+  /* 16 x 24 units at the root size, so one unit is one pixel and every number in
+     `mark-art.ts` is a pixel here. */
+  inline-size: 1rem;
+  block-size: 1.5rem;
+  /**
+   * **The tip lands on the point, and this is the whole rule.**
+   *
+   * `.mark` places the 44 px box centred on the projected point and `place-items`
+   * centres the glyph inside it, so the glyph's own centre — (8, 12) of a 16 x 24
+   * box — is on the point. The tip is at (8, 23). Moving the glyph up by the
+   * difference, 11 px, puts the tip there instead, and leaves the pin hanging
+   * straight above the place.
+   *
+   * No horizontal component, unlike the pennant this replaces: its foot was at
+   * x = 3 of an 18-unit box, so it needed a nudge sideways as well and the drawing
+   * still hung to one side. A tip on the centre line needs no such correction, and
+   * that absence is the improvement.
+   */
+  translate: 0 -0.6875rem;
+  fill: var(--accent);
+  /**
+   * The eyelet is a second contour inside the first, so the winding rule is what
+   * turns it into a hole rather than into a disc painted over the pin.
+   * `src/components/map/mark-art.ts` says why the pin has one at all.
+   */
+  fill-rule: evenodd;
+  stroke: var(--text-on-accent);
+  /**
+   * 1.6 and no longer 2.2, and the rod is what set the ceiling: the stroke sits
+   * astride the contour, so 0.8 of it eats into each flank of a 3.6-unit rod and
+   * leaves 2 of fill down the middle. At 2.2 the outline met itself and the rod
+   * rendered as a white line with no accent in it at all.
+   */
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  paint-order: stroke;
   transition: transform 120ms ease;
+  /* Grows from its own tip, so the point stays on the place while the head swells. */
+  transform-origin: 8px 23px;
 }
 
 .link:hover .dot,
@@ -393,14 +633,28 @@
  * venir », and the country under it is dashed.
  */
 .link[data-story="unwritten"] .dot {
-  /* `--surface`, the canvas the drawing sits on (line 157), and not
-     `transparent`: a transparent hole would show whichever country tint happens
-     to be underneath, so the same marker would read differently over sea, over
-     neutral land and over its own dashed country. */
-  background: var(--surface);
-  box-shadow:
-    0 0 0 2px var(--text-on-accent),
-    inset 0 0 0 3px var(--accent);
+  /**
+   * Hollow, exactly as the dot was: `--surface` inside, the accent as the
+   * contour. On a pennant the two swap roles rather than nesting — the fill
+   * becomes the page's own canvas and the stroke becomes the accent — which is
+   * the same "outline, not filled in" reading at the same size, in greyscale, in
+   * both themes.
+   *
+   * `--surface` and not `transparent`, for the reason the dot recorded: a
+   * transparent hole would show whichever country tint happens to be underneath,
+   * so the same marker would read differently over sea, over neutral land and
+   * over its own dashed country.
+   *
+   * The white separation ring is lost here, and that is the trade: two strokes on
+   * one contour is not a thing SVG can do without a second element. The accent
+   * contour is itself the separation — it is the token the map already measures
+   * against land and sea — and the state is never carried by paint alone: the
+   * accessible name of this marker ends in « — récit à venir », and the country
+   * under it is drawn in the copper of the untold tint.
+   */
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2.6;
 }
 
 /* =============================================================================
@@ -555,8 +809,9 @@
  * text from the tree, which would leave a link unnamed and a caption silent.
  *
  * Used once, for a marker's accessible name. It served the caption's hidden
- * enumeration of visited countries too until TIW-15 replaced that with the
- * visible `VisitedCountries` list. Out of flow, so it changes neither the 44 px
+ * enumeration of visited countries too until TIW-15 replaced that with a visible
+ * list, itself removed from this tab in September 2026. Out of flow, so it
+ * changes neither the 44 px
  * box of a marker nor the height of the caption, and `white-space: nowrap` inside
  * a 1 px box cannot scroll anything.
  */
@@ -572,9 +827,30 @@
   border: 0;
 }
 
+/**
+ * **Announced, never drawn** (TIW-38, at the owner's request).
+ *
+ * It is hidden and NOT deleted, and the difference is the whole point: a
+ * `<figcaption>` is the `<figure>`'s accessible *name* (HTML-AAM), so removing it
+ * would leave the map as an unnamed figure — and the counts it carries ("5
+ * voyages, 5 pays") are the only place a reader who does not see the drawing
+ * learns what was drawn.
+ *
+ * The hiding is the pattern this file records at length for `.visuallyHidden`
+ * below: a 1 px box with `clip-path`, never `display: none` nor
+ * `visibility: hidden`, both of which would take it out of the accessibility
+ * tree and so out of the name.
+ */
 .caption {
-  color: var(--text-muted);
-  font-size: var(--text-sm);
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /**
@@ -608,69 +884,265 @@
    ============================================================================ */
 
 /**
- * The zoom controls, over the top-right of the map. A sibling of `.canvas` and
- * not a child of it, deliberately: the canvas carries the pan and click
- * listeners, and a button inside it would start a drag on `pointerdown` and then
- * have to be excluded by name.
+ * The zoom slider, down the right edge of the drawing — and with it the keyboard
+ * path to the zoom that TIW-38 removed with the three buttons.
+ *
+ * A **sibling of `.canvas`** and not a child of it, for the reason the three
+ * buttons were: the canvas carries the pan and click listeners, so a control
+ * inside it would start a drag on `pointerdown` and then have to be excluded by
+ * name in the handler. Out of it, that class of bug cannot happen. It is still
+ * inside the `<figure>`, which is what `tests/e2e/support/axe.ts` confines the
+ * map's one `target-size` allowance to.
+ *
+ * `position: absolute`, so the control costs the drawing not one pixel: the map
+ * has just been sized to fit the first screen exactly and a control in the flow
+ * would push the bottom of it under the fold.
+ *
+ * PHYSICAL PROPERTIES, DELIBERATELY, AND THIS IS THE TRAP OF THE WHOLE RULE.
+ * Logical properties resolve against **the element's own** writing mode and
+ * direction — and both are overridden here. On this element `inset-block-start`
+ * would be the right-hand edge and `inline-size` would be the height, and
+ * `inset-inline-end` would flip to the left because of the `direction: rtl`
+ * below. Every declaration that positions or sizes this box is therefore written
+ * physically. It is the one rule in this file where that is the correct spelling
+ * rather than a lapse.
  */
-.controls {
+/**
+ * The rail: the `+`, the slider, the `−`, stacked and centred on the right edge
+ * of the drawing.
+ *
+ * **The positioning moved here from `.zoom` when the two signs arrived**, and it
+ * had to: with the input positioned absolutely, a sign placed above it would have
+ * been positioned against the stage instead and the three would have drifted
+ * apart the moment the slider's height changed. One positioned box holding three
+ * static children keeps them one object.
+ *
+ * **The plate moved from the input to this box**, at the owner's direction: the
+ * two signs were outside the pill, floating on the drawing above and below it,
+ * and they belong inside the control they describe. So the rail is now the plate
+ * — border, radius, surface, block padding — and the input inside it is a bare
+ * track that stretches to whatever height the two signs leave.
+ *
+ * `block-size` and not a content height: the input has to know how tall to be,
+ * and `flex: 1` can only give it the remainder of a box whose own height is
+ * settled. The 55 % is of the stage, which is what the input itself used before
+ * the signs arrived — it caps the rail so it never outgrows the drawing it sits
+ * on, and at a phone's width, where the map is about 133 px tall, the floor below
+ * is what applies instead.
+ */
+.zoomRail {
   position: absolute;
-  inset-block-start: var(--space-2);
-  inset-inline-end: var(--space-2);
+  top: 50%;
+  right: var(--space-2);
+  translate: 0 -50%;
   z-index: 3;
+
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-1);
-}
 
-.control {
-  display: grid;
-  place-items: center;
-  /* 2.75rem = 44 px at the root size, the same WCAG 2.5.8 minimum the markers
-     use, and in `rem` for the same reason: it grows with the reader's own size. */
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
+  inline-size: var(--target-min);
+  block-size: min(55%, 13rem);
+  min-block-size: 6.5rem;
+
+  padding-block: var(--space-2);
   border: 1px solid var(--control-border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text-strong);
-  /* A `<button>` inherits neither font: the UA stylesheet gives it its own. */
-  font-family: inherit;
-  font-size: var(--text-lg);
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 120ms ease;
-}
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
 
-.control:hover {
-  background: var(--accent-quiet);
+  /* Same reason as the input's own declaration below: the canvas beside it
+     declares `pan-y`, so a finger that started its drag on a sign rather than on
+     the thumb would scroll the page out from under the control. */
+  touch-action: none;
 }
 
 /**
- * The message the wheel earns when it is turned alone — the acceptance criterion
- * "on desktop the wheel alone does not zoom, and an ephemeral message says which
- * combination is expected".
+ * The two signs, which say which way the rail runs and nothing else.
  *
- * Over the bottom of the map rather than beside it, so the reader's eye is
- * already there, and `pointer-events: none` so it can never be the thing under
- * the cursor when the next notch arrives.
+ * `--text-accent` and not `--text-muted`: they sit on the map's own land and sea
+ * rather than on a panel, and the accent is the ink this palette documents as
+ * clearing the 4.5 of WCAG 1.4.3 against the ground. They are `aria-hidden` in the component, so this
+ * is a purely visual channel — which is exactly why it may not be the only one,
+ * and is not: the slider between them carries a name, an orientation and a
+ * spoken percentage.
+ *
+ * A fixed `line-height` and `text-align`, because the two glyphs have different
+ * ink heights: a `+` is centred on the maths axis and a `−` sits on it alone, so
+ * left to their own metrics they would not be the same distance from the track.
+ *
+ * `--text-base` and not `--text-md` since they moved inside the plate: at 19 px
+ * the two signs took 44 px of a 208 px rail between them, and the track they
+ * describe was the shortest thing on it.
  */
-.hint {
-  position: absolute;
-  inset-block-end: var(--space-3);
-  inset-inline-start: 50%;
-  translate: -50% 0;
-  z-index: 4;
-  max-inline-size: min(92%, 26rem);
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--text-body);
-  font-size: var(--text-sm);
+.zoomSign {
+  flex: none;
+  inline-size: 100%;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
   text-align: center;
-  pointer-events: none;
+  color: var(--text-accent);
+  user-select: none;
+}
+
+.zoom {
+  pointer-events: auto;
+
+  /**
+   * **Vertical the standard way, in 2026.** `writing-mode: vertical-rl` turns the
+   * slider's inline axis — the axis a range input runs along — vertical, and
+   * `direction: rtl` reverses it so the maximum is at the TOP, which is the only
+   * direction a zoom control can have.
+   *
+   * NOT `-webkit-appearance: slider-vertical`, which most of the web still
+   * suggests: it is non-standard, it never worked outside WebKit and Blink, and
+   * Chromium REMOVED it in 132 — a map shipped with it would silently be
+   * horizontal for most readers. The `writing-mode` recipe is what replaced it,
+   * and is supported in Chromium 126+, Firefox 129+ and Safari 15.4+.
+   */
+  writing-mode: vertical-rl;
+  direction: rtl;
+
+  /**
+   * 44 px across (WCAG 2.5.8, the same `--target-min` the markers use) and tall
+   * enough to aim inside, capped so it never outgrows the drawing it sits on: at
+   * a phone's width the map is about 133 px tall, which the floor plus the plate's
+   * own padding still fits inside.
+   *
+   * `height` and not `block-size`: see the note above.
+   */
+  width: var(--target-min);
+  /* The remainder of the rail, once the two signs have taken theirs. `height`
+     and not `block-size`: see the note above. */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 2.5rem;
+  margin: 0;
+
+  /**
+   * **The track is a background layer on the input** rather than a styled
+   * `::-webkit-slider-runnable-track`. The plate that used to live here is on
+   * `.zoomRail` above, so that the two signs sit inside it.
+   *
+   * The pseudo-element route needs the thumb re-centred by hand on the track's
+   * cross axis, with a different margin per engine and a third answer in vertical
+   * writing mode. A background layer has no cross axis to get wrong: it is a
+   * 6 px stripe, centred, over the content box, and the browser lays the thumb out
+   * on top of it wherever it likes. The two track pseudo-elements below are made
+   * transparent so nothing is painted twice.
+   *
+   * Both inks are measured against the rail's plate rather than against the map,
+   * which is why the plate exists at all: the sea is a grained page and the land a token,
+   * so an ink dropped straight on the drawing would have two backgrounds and no
+   * worst case. `tests/styles/colour-contract.test.ts` holds both pairs —
+   * `control-border/surface` for the track and the plate's own edge, and
+   * `accent/surface` for the thumb — each over 3:1 in both themes (WCAG 1.4.11:
+   * a track a reader cannot find is a control they cannot use).
+   */
+  border: 0;
+  /**
+   * No plate of its own any more, but it keeps the radius — and that is about the
+   * focus ring, not the fill. The library's recipe paints the ring on `outline`,
+   * which follows `border-radius`; with the plate moved to the rail the input
+   * briefly had none, and a focused zoom drew a hard rectangle inside a rounded
+   * plate. The ring is the one thing on this control a keyboard reader navigates
+   * by, and a ring that disagrees with the shape under it reads as a rendering
+   * fault.
+   */
+  border-radius: var(--radius-pill);
+  background-color: transparent;
+  background-image: linear-gradient(var(--control-border), var(--control-border));
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 6px 100%;
+
+  appearance: none;
+  cursor: pointer;
+  /**
+   * The canvas beside it declares `pan-y`, so a finger dragging the thumb
+   * downwards would otherwise scroll the page out from under itself. `none` hands
+   * the whole gesture to the control — which is the one place on this map where a
+   * one-finger drag is meant for the map rather than for the document.
+   */
+  touch-action: none;
+}
+
+/* No `:focus-visible` rule here, and that is deliberate: `@thomascaron/ui`
+   provides the recipe globally, and `src/styles/tokens.css` records why
+   redeclaring it on one site restores a bug the library fixed. */
+
+.zoom::-webkit-slider-runnable-track {
+  background: transparent;
+  border: 0;
+}
+
+.zoom::-moz-range-track {
+  background: transparent;
+  border: 0;
+}
+
+/**
+ * The thumb. A `--surface` ring around it so the accent never touches the track
+ * directly: two saturated shapes meeting at an edge read as one blob at a
+ * glance, and the ring is what keeps the position legible while the reader drags.
+ */
+.zoom::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid var(--surface);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.zoom::-moz-range-thumb {
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid var(--surface);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* The same affordance the removed buttons had, moved onto the one part of this
+   control that a pointer grabs. `--accent-hover` is further from `--surface` than
+   `--accent` in BOTH themes — darker in the light one, lighter in the dark one —
+   so the hover state cannot be the weaker of the two. */
+.zoom:hover::-webkit-slider-thumb {
+  background: var(--accent-hover);
+}
+
+.zoom:hover::-moz-range-thumb {
+  background: var(--accent-hover);
+}
+
+/**
+ * Forced colours: the tokens are dropped and the system's own pair is used.
+ *
+ * A styled control loses its author backgrounds in this mode, so without this
+ * block the track would be a 6 px stripe of nothing and the thumb an invisible
+ * circle — the failure mode a native `<input>` is supposed to make impossible.
+ * `CanvasText` for the track and the plate's edge, `Highlight` for the thumb: the
+ * same pairing the platform's own sliders use, so the control looks like every
+ * other one on the reader's screen.
+ */
+@media (forced-colors: active) {
+  .zoom {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background-color: Canvas;
+    background-image: linear-gradient(CanvasText, CanvasText);
+  }
+
+  .zoom::-webkit-slider-thumb {
+    border-color: Canvas;
+    background: Highlight;
+  }
+
+  .zoom::-moz-range-thumb {
+    border-color: Canvas;
+    background: Highlight;
+  }
 }
 
 /**
@@ -720,11 +1192,44 @@
  */
 @media (min-width: 769px) {
   .panel {
-    inset-block: var(--space-4);
+    /*
+      **Anchored at the top and grown by its content, not stretched between the
+      two edges.** `inset-block: var(--space-4)` pinned both ends, which was right
+      when a panel held every trip of a zone — six cards filled it. A panel now
+      holds one trip, and on this journal that is five lines: measured on the
+      served page, the drawn column was 850 px tall around 120 px of content, so
+      the panel read as a mostly empty sheet laid over the map.
+
+      `inset-block-end: auto` with a cap is what lets it hug: the cap is the same
+      travel the old rule allowed, so a trip with three photographs and a list of
+      neighbours still scrolls inside the panel instead of off the screen.
+    */
+    /*
+      **Anchored to the BOTTOM right, and that is an accessibility fix rather
+      than a taste.** Pinned 16 px from the top, the panel sat over the sticky
+      header — `z-index: 20` on both, and the portal appends to `document.body`,
+      so the panel painted last and won. Measured at four widths, panel open:
+      `#site-search-field` was covered whole every time (1440: the field spans
+      1068→1337, the panel 1040→1424), and Playwright refused to click it —
+      « panelHeader from div[role=dialog] subtree intercepts pointer events ».
+      The site's own search and language controls vanished under an opaque
+      surface, with nothing to say so.
+
+      Bottom-anchored, the panel cannot reach the header at any header height —
+      which is what makes this a fix and not a second number for two stylesheets
+      to keep in step, the trade `site-nav.module.css` refuses in its own header.
+      It also puts the desktop panel and the touch sheet on the same edge.
+
+      The cap keeps that true when a trip carries three photographs and a list of
+      neighbours: 70 % of the viewport, so the top of the screen — header
+      included — is never reached.
+    */
+    inset-block-start: auto;
+    inset-block-end: var(--space-4);
     inset-inline-start: auto;
     inset-inline-end: var(--space-4);
     inline-size: min(24rem, 42vw);
-    max-block-size: none;
+    max-block-size: min(70dvh, calc(100dvh - 2 * var(--space-4)));
     border-block-end: 1px solid var(--control-border);
     border-radius: var(--radius-lg);
     /* A pull-to-close gesture has no meaning with a pointer, and the component
@@ -771,13 +1276,20 @@
 
 .panelTitle {
   font-size: var(--text-md);
+  /* The heading is a trip's title now, which is content and not a fixed string:
+     a long one with no space in it would push the panel wider than the 24 rem
+     it is given and scroll the sheet sideways at 320 px (WCAG 1.4.10). The
+     neighbour rows below already carry this. */
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
 .panelClose {
   margin-inline-start: auto;
   display: grid;
   place-items: center;
-  /* The criterion's "at least 44 px", and the same square as the zoom controls. */
+  /* The criterion's "at least 44 px", the same `--target-min` the zoom
+     slider and the markers use. */
   inline-size: 2.75rem;
   block-size: 2.75rem;
   border: 0;
@@ -796,9 +1308,10 @@
 }
 
 /**
- * The cards. A vertical column with `overflow-x: hidden`, so "several trips in
- * the zone, all reachable without horizontal scrolling" is a property of the
- * layout rather than of where a scrollbar happens to be.
+ * The trip's body, and under it the « Aussi à cet endroit » block. A vertical
+ * column with `overflow-x: hidden`, so "all reachable without horizontal
+ * scrolling" is a property of the layout rather than of where a scrollbar happens
+ * to be.
  */
 .panelBody {
   display: flex;
@@ -810,4 +1323,250 @@
   /* The list is the scroller, so a one-finger drag here is a scroll and not a
      pull-to-close — the header owns that gesture. */
   overscroll-behavior: contain;
+}
+
+/* -----------------------------------------------------------------------------
+   « Aussi à cet endroit » — the way out of an overlap
+   -------------------------------------------------------------------------- */
+
+/**
+ * The panel's secondary block, and everything about it says "secondary".
+ *
+ * The panel is one trip's, and this is the answer to a different question: which
+ * OTHER markers the reader's finger was covering. Measured on this repository's
+ * content at 1440 px with 44 px targets, that question is real — annecy/geneve
+ * overlap by 44x24 px, paris/rouen by 30x36, and twelve more pairs besides — so
+ * the block has to be reachable and must not read as part of the trip above it.
+ *
+ * A rule above it and a hair of extra space, rather than a card or a tint: the
+ * separation is structural (a `<section>` with its own `<h3>`) and the paint only
+ * has to confirm it.
+ */
+.nearby {
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--border-subtle);
+}
+
+/**
+ * Smaller than the `<h2>` above it and set in the muted ink, because it labels a
+ * list of links rather than announcing a second subject. It stays a real `<h3>`:
+ * the heading outline is how a screen reader reader skips the trip's body to
+ * reach this, and a styled `<p>` would take that away for a saving of nothing.
+ */
+.nearbyHeading {
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.nearbyList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/**
+ * One row per overlapping trip, and **44 px tall because nothing here is exempt**.
+ *
+ * `tests/e2e/support/axe.ts` confines this map's one tolerated `target-size`
+ * allowance to the `<figure>`, and the panel is portalled to `document.body` —
+ * outside it. So the allowance does not reach these rows, deliberately: the whole
+ * point of the block is to be the target a reader gets when the 44 px markers on
+ * the drawing were too close together, and a 20 px row would answer an
+ * under-sized target with another one.
+ *
+ * `display: flex` with `align-items: center` rather than a line-height tall
+ * enough: the row keeps its height when the label wraps to two lines, which it
+ * does at 320 px on a long title.
+ *
+ * `overflow-wrap: anywhere` is what keeps a 24 rem panel — and a 320 px screen —
+ * free of horizontal scrolling on a title with no space in it to break at.
+ */
+.nearbyLink {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  padding-block: var(--space-1);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-accent);
+  overflow-wrap: anywhere;
+  transition: background-color 120ms ease;
+}
+
+/* The same quiet wash the panel's close button uses, so the two controls of this
+   panel answer a pointer the same way. */
+.nearbyLink:hover {
+  background: var(--accent-quiet);
+}
+
+/**
+ * The caption's wish-list sentence: its own line, before the count.
+ *
+ * A block inside the `<figcaption>` rather than a second element beside it —
+ * a `<figcaption>` is the figure's accessible name, and splitting it in two would
+ * split the name.
+ */
+.captionWished {
+  display: block;
+  color: var(--text-accent);
+}
+
+/* -----------------------------------------------------------------------------
+   The wish list's notes — HTML over the drawing, exactly like a marker
+   -------------------------------------------------------------------------- */
+
+/**
+ * The notes layer. The same box and the same arithmetic as `.marks`: the SVG stays
+ * inert, and anything a reader can hover is HTML laid over it.
+ *
+ * `pointer-events: none` on the list and back on for the note itself, so the layer
+ * covers the map without swallowing a click meant for a marker underneath it.
+ */
+.notes {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+
+/**
+ * One note, placed on the anchor `@/map` computed — the same
+ * `(value - frame) / size` the markers use, so the two layers move together when
+ * the reader zooms.
+ *
+ * Below the markers in the stacking order (`z-index: 1` against their `--mark-order`
+ * of one upwards): a trip is a destination and a wish is a caption, and where the
+ * two overlap the link must win the pointer.
+ */
+.note {
+  position: absolute;
+  left: calc((var(--mark-x) - var(--frame-x)) / var(--frame-w) * 100%);
+  top: calc((var(--mark-y) - var(--frame-y)) / var(--frame-h) * 100%);
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  pointer-events: auto;
+}
+
+/**
+ * **THE HOVER ZONE, AND IT DRAWS NOTHING.** The owner asked for the marks on the
+ * wished countries to go: *« dans les pays à venir enlève les balises »*.
+ *
+ * A hollow ring used to be painted here, so the pointer had something to aim at.
+ * It was also a mark of the marker family standing on a country that holds no
+ * trip, which is the confusion the request is about — and the hatched tint is
+ * already what makes the country findable by eye.
+ *
+ * What is left is the target itself: a square of nothing, centred on the anchor,
+ * that reveals the label when a pointer crosses it. 1.25 rem rather than the
+ * 0.75 rem the ring measured, because an invisible target has to be *found*; and
+ * not larger, because this layer sits over the markers and an invisible box that
+ * swallowed a marker's click would be a far worse defect than the one it fixes.
+ * `tests/e2e/wished.populated.spec.ts` measures both halves.
+ */
+.noteDot {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  flex: none;
+}
+
+/**
+ * The label — **in the document at all times, painted only on hover**.
+ *
+ * At rest it is the project's visually-hidden recipe, so every note is read by a
+ * screen reader in the localised order the geometry façade sorted them into. The
+ * reveal is a painting and never a rendering, which is what makes the hover a
+ * convenience rather than the only way to the information.
+ *
+ * WCAG 1.4.13: *hoverable*, because the label is inside the box being hovered;
+ * *persistent*, because nothing but leaving removes it; and *dismissible* by
+ * exemption — it is laid beside its dot, over the sea, and obscures no content of
+ * the drawing. `tests/e2e/wished.populated.spec.ts` measures that rather than
+ * taking this sentence's word for it.
+ */
+.noteLabel {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.note:hover .noteLabel,
+.note:focus-within .noteLabel {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  margin: 0;
+  padding: 0.125rem var(--space-2);
+  overflow: visible;
+  clip-path: none;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--elevation-1);
+  color: var(--text-accent);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  /* The label must not be clipped by the figure at the map's edge, and it must
+     never cover the dot it belongs to — hence the row layout above. */
+  white-space: nowrap;
+}
+
+/**
+ * Windows high-contrast mode drops `background` and author colours on fills, so
+ * the hatch is what survives — and the dot needs a border that the forced palette
+ * keeps. Both are already strokes and borders rather than fills, which is why this
+ * block has one rule and not five.
+ */
+@media (forced-colors: active) {
+  .noteDot {
+    border-color: CanvasText;
+  }
+}
+
+/**
+ * **On a phone the drawing carries no markers, and that is the honest reading of
+ * a measurement rather than a retreat.**
+ *
+ * Measured on the served page at 390 × 844: the figure is 170 px tall and the
+ * thirteen markers — 44 px targets, WCAG 2.5.8's minimum — all fall inside
+ * 130 × 98 px. Thirteen targets in an area barely three targets wide is not a map
+ * a finger can use; it is a smudge that *looks* like one. At 360 × 780 it is
+ * worse, and the country pins that were the first idea do not fix it either:
+ * Belgium's and Switzerland's own centres are 16 px apart at that width.
+ *
+ * So below 768 px the drawing goes back to being exactly what
+ * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` already says it is — an
+ * inert, `aria-hidden` illustration — and the navigation moves *under* it, into
+ * the list of countries the home page renders there. A country's name set at a
+ * comfortable target beats five pins on a 170 px drawing, and it needs no
+ * collision arithmetic at all.
+ *
+ * `display: none` and not `visibility` or an opacity: the markers must leave the
+ * accessibility tree and the tab order too. A link a screen reader announces and
+ * a finger cannot hit is worse than no link, and the list below carries the same
+ * destinations in words.
+ *
+ * **The one edge this leaves**, written down rather than discovered later: a
+ * shared `/fr?voyage=<slug>` address opened on a phone still restores that trip's
+ * panel, because `applyUrl` finds the marker in the DOM whether or not it is
+ * painted. The panel itself works — it is the trip's description — but Escape
+ * then hands the focus back to a marker that is not rendered, so it lands on the
+ * body. The alternative is teaching the client component about a media query,
+ * which is a worse trade than a narrow path with a known end.
+ */
+@media (max-width: 48rem) {
+  .marks {
+    display: none;
+  }
 }
