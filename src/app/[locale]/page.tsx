@@ -11,7 +11,7 @@ import { ProjectPurpose } from "@/components/site/project-purpose";
 import { PAGE_MARK } from "@/components/site/site-nav";
 import { LatestTrips } from "@/components/trips/latest-trips";
 import { TripCard } from "@/components/trips/trip-card";
-import { listTripSummaries } from "@/content/trips";
+import { listTripSummaries, listWishedCountries } from "@/content/trips";
 import { freshestTrip } from "@/domain/freshness";
 import { hasStory } from "@/domain/trip";
 import { buildWorldGeometry, projectPoint } from "@/map";
@@ -90,6 +90,20 @@ export default async function HomePage({ params }: HomePageProps) {
     // Duplicates are the normal case — several trips share a country — and
     // `buildWorldGeometry` de-duplicates on its side. Flattening is all this owes.
     visitedCountryCodes: trips.flatMap((trip) => [...trip.countryCodes]),
+    /*
+      **The wish list** (TIW-39), read here because this is the page that holds
+      both façades — the content one for the codes, the geometry one for the
+      shapes. `buildWorldGeometry` is what refuses a code the basemap cannot draw
+      or a country a trip has already reached; the read itself is four lines of
+      YAML and is not memoised, which its own note in `src/content/loader.ts`
+      prices.
+
+      Awaited on its own rather than in a `Promise.all` with the trips above: the
+      two are independent, but the trips are already awaited by the line that
+      needs them for `visitedCountryCodes`, so pairing them would suggest a
+      waterfall that is not there.
+    */
+    wishedCountryCodes: await listWishedCountries(),
     locale,
   });
 
@@ -296,6 +310,15 @@ export default async function HomePage({ params }: HomePageProps) {
           countries={world.countries}
           visited={toldCountries}
           untold={untoldCountries}
+          /*
+            The wish list (TIW-39). Handed straight through: `buildWorldGeometry`
+            already read `content/wishlist.yaml`, refused any code the basemap
+            cannot draw or a trip has already reached, sorted the survivors by
+            localised name and computed each one's anchor. This page's only job is
+            the one it does for every other bucket — carrying geometry across the
+            boundary `docs/adr/0003` draws, so the map layer imports no façade.
+          */
+          wished={world.wished}
           marks={marks}
           world={{ width: world.width, height: world.height }}
           tripCards={tripCards}

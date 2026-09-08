@@ -400,6 +400,86 @@ quel que soit leur recouvrement, ce qui fait du pointeur le seul mode dégradé.
 > degré. Ce qui a changé, c'est que **le pointeur n'est plus le mode dégradé** :
 > le panneau lui rend ce que la tabulation avait déjà.
 
+> **Note (2026-09-07, correction du premier mécanisme).** La note ci-dessus se
+> réjouit d'un décalage « qui grandit à l'écran à mesure que le lecteur zoome ».
+> C'était le défaut, pas la fonctionnalité, et le propriétaire du carnet l'a vu
+> avant nous : *« Les Sables d'Olonne, La Rochelle, Annecy, Rouen ne sont pas bien
+> placés en France. Genève non plus. »*
+>
+> Un décalage converti en unités monde n'est pas une distance à l'écran : c'est
+> une distance **sur la Terre**. Mesuré sur le contenu réel du carnet, en
+> comparant la page servie à la projection des mêmes coordonnées :
+>
+> | Balise | Écart au point projeté |
+> |---|---|
+> | Annecy | 4,6 unités monde vers le nord, ~150 km |
+> | Genève | 4,6 unités vers le sud, ~150 km |
+> | La Rochelle, Les Sables-d'Olonne, Noirmoutier | un triangle du même rayon, deux des trois en mer |
+>
+> Les coordonnées de `content/trips/**` étaient justes ; c'est le rendu qui
+> mentait, et il mentait d'autant plus fort que le lecteur zoomait — l'inverse
+> exact de ce qu'on attend d'un zoom.
+>
+> **Ce qui change.** `spreadCoincident` ne touche plus aux pourcentages. Il pose un
+> `nudge` en `rem` à côté de la position, que `.mark` ajoute à son `translate` :
+> `translate(calc(-50% + var(--mark-nudge-x, 0rem)), …)`. La séparation vaut donc
+> le même nombre de pixels à tous les niveaux de zoom — ce qui est la seule chose
+> qu'une cible de 44 px ait jamais demandée, et précisément ce que la section
+> ci-dessus déclarait impossible « en pourcentage ». Elle avait raison sur le
+> pourcentage et tort sur la conclusion : l'unité qui manquait était le `rem`.
+>
+> Le regroupement, lui, ne bouge pas : la cellule de 1,6 % de la largeur du cadre
+> répond à la question « le build les pose-t-il sur le même pixel », et un
+> pourcentage est la bonne unité pour celle-là. Deux unités, deux questions.
+> `tests/components/map/spread.test.ts` refuse désormais tout déplacement de
+> position, preuve par échec délibéré à l'appui.
+>
+> Ce qui reste ouvert est inchangé : le recouvrement à l'échelle du monde attend
+> toujours un vrai regroupement.
+
+> **Note (TIW-39, 2026-09-08). Le premier survol sur un pays, et la décision a
+> tenu.** Le propriétaire a demandé une quatrième teinte pour les pays qu'il
+> souhaite visiter, *« avec un hover de texte qui dit "nom du pays : à venir" »*.
+> C'est la première fois depuis cette décision qu'on veut survoler autre chose
+> qu'un voyage, et la section « le SVG est inerte » y répond frontalement : rien
+> qui ne soit pas un voyage ne peut être survolé, focalisé ni cliqué.
+>
+> **Le SVG n'a pas bougé d'un attribut.** La note est du HTML posé sur le dessin,
+> sur un point que `src/map/anchor.ts` calcule à l'intérieur de la forme —
+> exactement ce qu'est une balise. Les mêmes deux propriétés personnalisées, la
+> même arithmétique de cadre, donc les notes et les balises zooment ensemble.
+> Ce que la décision de 2026 avait prévu sans le nommer : « tout ce qui est
+> interactif est du HTML par-dessus » couvre aussi ce qui est seulement survolable.
+>
+> **Trois choses ont été tranchées au passage, et aucune n'est évidente.**
+>
+> 1. **L'étiquette est dans le document en permanence**, masquée visuellement, et
+>    le survol ne fait que la peindre. Un lecteur d'écran lit les quatre notes au
+>    repos, dans l'ordre localisé que la façade a trié. C'est ce qui autorise
+>    l'absence de `tabindex` : un arrêt de tabulation dont le seul effet serait de
+>    révéler un texte qu'une synthèse vocale possède déjà est un arrêt qui
+>    n'existe pour personne — et il y en aurait un par pays devant chaque balise.
+> 2. **Une phrase visible dans la légende**, parce qu'il restait un lecteur que ni
+>    le survol ni les notes ne servaient : celui qui voit, et qui n'a pas de
+>    survol — un clavier, un écran tactile. Elle est `aria-hidden`, et ce n'est pas
+>    un détail : une `<figcaption>` est le **nom accessible** de la figure, et la
+>    phrase dans ce nom a fait rougir trois cas d'un coup — exactement le défaut
+>    que la section « la légende compte, les balises nomment » consigne déjà.
+> 3. **La teinte ne porte pas l'état toute seule.** Un pays souhaité est le seul
+>    état de cette carte qui ne soit pas un fait du passé ; il est tireté, donc la
+>    différence survit au niveau de gris et aux deux thèmes. Même règle que le
+>    fanion creux d'un récit à venir.
+>
+> WCAG 1.4.13 est tenu et mesuré plutôt qu'affirmé : *survolable* (l'étiquette est
+> dans la boîte survolée), *persistant*, et *rejetable* par exemption — elle ne
+> recouvre aucun contenu, ce que `tests/e2e/wished.populated.spec.ts` vérifie
+> balise par balise au lieu de le promettre en commentaire.
+>
+> **Ce qui invaliderait ça.** Une note qu'il faudrait *actionner* — un lien vers
+> une page « à venir », par exemple. Elle deviendrait une cible de 44 px, un arrêt
+> de tabulation par pays, et il faudrait alors trancher son rang dans le parcours
+> avant les balises. Ce jour-là c'est une balise, pas une note.
+
 **Ce qui invaliderait cette décision.**
 
 1. Un besoin de zoom ou de panoramique **continu**, qui demanderait de recalculer

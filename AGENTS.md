@@ -42,6 +42,30 @@ README le résume — l'essentiel étant que tout ce qui n'est pas de l'interact
 `children` rendus par le serveur plutôt qu'en props sérialisées. Le compte est donc à
 **trois** ; tout `'use client'` supplémentaire se justifie en revue.
 
+**La recherche est un champ ouvert en permanence dans la barre, et sa divulgation est du
+CSS** — `:focus-within`, pas de `<details>`, pas de script pour ouvrir. Trois choses à savoir
+avant d'y toucher. Le panneau s'ouvrant au focus, les lignes **doivent** sortir de l'ordre de
+tabulation, et c'est le client qui les en sort au montage : rendu par le serveur, le
+`tabindex` casserait le lecteur sans script, pour qui ce panneau est l'index du site — le
+garde est `tests/e2e/map-equivalent.populated.spec.ts`, qui n'atteignait plus les balises de
+la carte. La région qui défile porte l'unique `tabindex="0"` du contrôle, son nom accessible
+et son `overflow` sur le même élément, sinon axe la déclare inatteignable. Et la complétion en
+ligne se décide dans le gestionnaire de frappe et jamais dans un effet, sinon Retour arrière
+remet ce qu'il vient d'enlever.
+
+**Et il est resté à trois quand les filtres sont arrivés**, ce qui est la seule chose à
+retenir avant de toucher aux deux listings. `/fr/voyages` et `/fr/villes` filtrent avec un
+groupe de boutons radio et une **feuille de style générée** — une règle par choix, imprimée
+dans le document — donc zéro octet de JavaScript et un fonctionnement complet sans script.
+L'argument tient dans l'en-tête de `src/components/filters/facets.ts` ; les deux points qui
+décident du reste sont qu'un **seul choix est actif à la fois** (ce qui garde chaque nombre
+affiché exactement vrai et rend le résultat vide inatteignable) et qu'un axe à une seule
+valeur est **supprimé** par `buildFacetIndex` plutôt qu'écrit en dur, donc un axe réapparaît
+quand le contenu le mérite. Le garde est un navigateur et rien d'autre :
+`tests/e2e/filters.populated.spec.ts` filtre sur un build réel, puis refait le même parcours
+avec JavaScript désactivé — c'est ce cas-là qui rougit si quelqu'un remplace la sélection par
+de l'état.
+
 `src/domain/**` reste du TypeScript pur — ni React, ni Next, ni `fs`, ni `d3`, ni `sharp`.
 
 `src/map/**` s'atteint par sa façade `@/map`, **seul** module du dossier à porter

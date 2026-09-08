@@ -5,12 +5,14 @@ import { auditPage, describeViolations } from "./support/axe";
 /**
  * The header's search, in a real browser and on a real build.
  *
- * **What only a browser can answer here.** `<details>` does not toggle on a click
- * of its summary in jsdom, the panel has no position and no scroll, the focus
- * ring is not painted, and "readable with JavaScript unavailable" cannot be told
- * from a hydrated page by any assertion made in a hydrated one. The unit suite
- * (`tests/components/search/`) owns the filter's arithmetic; this file owns the
- * gestures.
+ * **What only a browser can answer here, and it is now the whole architecture.**
+ * The panel opens on `:focus-within` — a stylesheet rule, no script — and jsdom
+ * evaluates no pseudo-class, so the unit suite cannot see the disclosure *at all*:
+ * `tests/components/search/site-search.test.tsx` says so at the top and confines
+ * itself to the panel's content. Everything below the field is therefore this
+ * file's: that it opens on focus, that it opens with JavaScript switched off, that
+ * Escape closes it without throwing the reader out of the field, and that the
+ * inline completion selects what it added.
  *
  * The populated fixture rather than the repository's own content, for the reason
  * `playwright.content.config.ts` gives: the empty journal has nothing to find.
@@ -18,15 +20,27 @@ import { auditPage, describeViolations } from "./support/axe";
 
 const S = frMessages.search;
 
-const openSearch = async (page: import("@playwright/test").Page) => {
-  await page.getByRole("group").filter({ hasText: S.open }).locator("summary").click();
-  await expect(page.getByLabel(S.field)).toBeVisible();
-};
-
+/** The panel is open when its rows are painted. There is no other state to read. */
 const visibleRows = (page: import("@playwright/test").Page) =>
   page.locator("[data-haystack]:not([hidden])");
 
-test("the panel opens onto the whole index, and closes on Escape", async ({ page }) => {
+const openSearch = async (page: import("@playwright/test").Page) => {
+  await page.getByLabel(S.field).click();
+  await expect(visibleRows(page).first()).toBeVisible();
+};
+
+/**
+ * **The field is there before anything is done to it**, which is the whole of the
+ * direction the owner chose: the search stopped being a thing to find.
+ */
+test("the field is in the bar at rest, and the panel is not", async ({ page }) => {
+  await page.goto("/fr");
+
+  await expect(page.getByLabel(S.field)).toBeVisible();
+  await expect(visibleRows(page).first()).toBeHidden();
+});
+
+test("focusing the field opens the whole index, and Escape closes it", async ({ page }) => {
   await page.goto("/fr");
 
   await openSearch(page);
@@ -38,9 +52,14 @@ test("the panel opens onto the whole index, and closes on Escape", async ({ page
 
   await page.keyboard.press("Escape");
 
-  await expect(page.getByLabel(S.field)).toBeHidden();
-  // 2.4.3: the focus goes back to what opened the panel, never to the document.
-  await expect(page.locator("summary:focus")).toHaveCount(1);
+  await expect(visibleRows(page).first()).toBeHidden();
+  /*
+    **And the caret stays put.** Escape dismisses the suggestions; it does not
+    throw the reader out of the field they are typing in — which is what the old
+    `<details>` did, because closing a disclosure has to return focus to its
+    summary. There is no summary any more, so there is nothing to return to.
+  */
+  await expect(page.getByLabel(S.field)).toBeFocused();
 });
 
 test("typing narrows the list, names the count, and hides the empty groups", async ({ page }) => {
@@ -66,10 +85,66 @@ test("typing narrows the list, names the count, and hides the empty groups", asy
 });
 
 /**
- * **The accent fold, end to end.** The carnet spells "Pérou et Bolivie" and a
- * reader types "perou". The unit suite proves the two foldings agree as strings;
- * this proves the string that reaches the DOM is the folded one — the attribute is
- * written by the server and read by the client, and only a build exercises both.
+ * **The inline completion**, and it is asserted on the *selection* because that is
+ * what makes it usable: the tail the field added has to be selected, so the next
+ * keystroke replaces it instead of appending to it.
+ *
+ * `pressSequentially` and not `fill`: `fill` sets the value in one go and
+ * dispatches a single event with no `inputType`, which is precisely the shape the
+ * component refuses to complete on. Only a real keystroke carries "insertText".
+ */
+test("the field completes the first suggestion and selects what it added", async ({ page }) => {
+  await page.goto("/fr");
+  await openSearch(page);
+
+  // "isl" and not a prettier prefix: the fixture's trips are Islande, Japon,
+  // Maroc and Pérou, and a completion case has to name one of them.
+  await page.getByLabel(S.field).pressSequentially("isl");
+
+  const state = await page
+    .getByLabel(S.field)
+    .evaluate((node: HTMLInputElement) => ({
+      value: node.value,
+      start: node.selectionStart,
+      end: node.selectionEnd,
+    }));
+
+  expect(state.value.toLowerCase().startsWith("isl")).toBe(true);
+  expect(state.value.length).toBeGreaterThan(3);
+  // The three characters typed are left alone; everything past them is selected.
+  expect(state.start).toBe(3);
+  expect(state.end).toBe(state.value.length);
+});
+
+/**
+ * And the other half of that behaviour, which is what keeps the field usable:
+ * Backspace must not put back what it just removed.
+ */
+test("the completion does not fight the backspace key", async ({ page }) => {
+  await page.goto("/fr");
+  await openSearch(page);
+
+  await page.getByLabel(S.field).pressSequentially("isl");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+
+  /*
+    `"Is"` and not `"is"`: the completion canonicalises what it kept. Typing "i"
+    offered "Islande, cercle d'or" with everything past the first character
+    selected, so the "s" the reader typed next replaced a selection that began
+    after the carnet's own capital. The first Backspace then removes the selected
+    tail and the second one character — which leaves the prefix as the carnet
+    spells it. That is what a native inline completion does, and asserting the
+    reader's own lower case here would be asserting a bug.
+  */
+  await expect(page.getByLabel(S.field)).toHaveValue("Is");
+});
+
+/**
+ * **The accent fold, end to end.** The carnet spells "Genève" and a reader types
+ * "geneve". The unit suite proves the two foldings agree as strings; this proves
+ * the string that reaches the DOM is the folded one — the attribute is written by
+ * the server and read by the client, and only a build exercises both.
  */
 test("an unaccented query finds an accented name", async ({ page }) => {
   await page.goto("/fr");
@@ -100,6 +175,20 @@ test("the arrows walk the list and Enter follows the row", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });
 
+/**
+ * Enter **in the field** follows the first suggestion, which is the promise the
+ * completion makes: the field has just written a trip's name into itself.
+ */
+test("Enter in the field goes to the suggestion it is showing", async ({ page }) => {
+  await page.goto("/fr");
+  await openSearch(page);
+
+  await page.getByLabel(S.field).fill("islande");
+  await page.keyboard.press("Enter");
+
+  await expect(page).toHaveURL(/\/fr\/voyages\/islande-2022$/);
+});
+
 test("an untold trip's row leads to its entry, never to a page that was never built", async ({
   page,
 }) => {
@@ -118,11 +207,43 @@ test("an untold trip's row leads to its entry, never to a page that was never bu
 });
 
 /**
- * **THE SCRIPT-LESS HALF, and it is not a consolation prize.** With no JavaScript
- * the disclosure is native, the panel is the complete index, and every row is a
- * real link a reader can Tab to and follow. The field is inert — it filters
- * nothing — and that is the one thing to be honest about: it is a field beside a
- * list rather than a control that pretends to work.
+ * The illustrated rows the owner chose — a vignette and a pennant on a trip, and
+ * on nothing else.
+ *
+ * Asserted in a browser and not in jsdom for one reason: both drawings are
+ * `<use>` references into a `<symbol>` defined once per document, and whether a
+ * reference resolves to a painted shape is a rendering question. A `<use>` at the
+ * wrong id renders nothing at all, silently, and the markup is identical.
+ */
+test("a trip's row flies the map's pennant, and a place's row does not", async ({ page }) => {
+  await page.goto("/fr");
+  await openSearch(page);
+
+  await page.getByLabel(S.field).fill("reykjavik");
+
+  /*
+    Addressed by the id prefix `entries.ts` builds — `q-t-` for a trip, `q-l-` for
+    a place — and not by position. Every place is in its own trip's haystack, so a
+    query that finds a place finds that trip too, and the trip's row comes first.
+  */
+  const tile = page.locator('[id^="q-t-"]:not([hidden]) svg').first();
+
+  await expect(tile).toBeVisible();
+  // Not merely present: a `<use>` that resolves to nothing has a zero box.
+  const box = await tile.boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThan(20);
+
+  await expect(page.locator('[id^="q-l-"]:not([hidden])')).not.toHaveCount(0);
+  await expect(page.locator('[id^="q-l-"]:not([hidden]) svg')).toHaveCount(0);
+});
+
+/**
+ * **THE SCRIPT-LESS HALF, AND IT GOT BETTER RATHER THAN WORSE.** The disclosure
+ * used to be a `<details>` a reader had to click; it is now `:focus-within` in the
+ * stylesheet, so tabbing into the field opens the complete index — every trip,
+ * place, country and page, as real links — with no script running at all. The
+ * field itself is inert, which is the one thing to be honest about: it filters
+ * nothing, it is a field beside a list rather than a control that pretends to work.
  *
  * PROVEN BY DELIBERATE FAILURE, which is this repository's standard for a guard.
  * The ARIA 1.2 combobox pattern would have put `tabindex="-1"` on these rows;
@@ -132,7 +253,7 @@ test("an untold trip's row leads to its entry, never to a page that was never bu
  *   -<a className={styles.searchLink} href={entry.href}>
  *   +<a className={styles.searchLink} href={entry.href} tabIndex={-1}>
  *
- *   npm run test:e2e:content -> 1 failed | 6 passed
+ *   npm run test:e2e:content -> 1 failed | 10 passed
  *                               "Expected: 0   Received: 21"
  *
  * Twenty-one rows out of the tab order for the reader who has no script — which
@@ -144,9 +265,13 @@ test("the whole index is usable with JavaScript disabled", async ({ browser, bas
 
   try {
     await page.goto("/fr");
-    await page.locator("details").filter({ hasText: S.open }).locator("summary").click();
+
+    // No click on a summary: there is none. The field takes focus and the
+    // stylesheet does the rest.
+    await page.getByLabel(S.field).focus();
 
     const links = page.locator("[data-haystack] a");
+    await expect(links.first()).toBeVisible();
     expect(await links.count()).toBeGreaterThan(4);
 
     // Not a `tabindex` in sight: the client component moves focus with the arrows
@@ -158,7 +283,7 @@ test("the whole index is usable with JavaScript disabled", async ({ browser, bas
     const href = await first.getAttribute("href");
     await first.click();
 
-    await expect(page).toHaveURL(new RegExp(`${href}$`.replace("#", "#")));
+    await expect(page).toHaveURL(new RegExp(`${href}$`));
   } finally {
     await context.close();
   }
@@ -173,9 +298,10 @@ test("the open panel has no WCAG 2.2 AA violation, in either theme", async ({ pa
 
     const report = await auditPage(page);
 
-    expect(report.violations, `search panel (${colorScheme}): ${describeViolations(report)}`).toEqual(
-      []
-    );
+    expect(
+      report.violations,
+      `search panel (${colorScheme}): ${describeViolations(report)}`
+    ).toEqual([]);
     expect(report.passes).toBeGreaterThan(10);
   }
 });

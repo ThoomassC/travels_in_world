@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { tallyVisitedPlaces } from "@/components/places/places";
+import { FacetFilter } from "@/components/filters/facet-filter";
+import { buildFacetIndex, byLabel } from "@/components/filters/facets";
+import { placeIdentity, tallyVisitedPlaces } from "@/components/places/places";
 import { PAGE_MARK } from "@/components/site/site-nav";
 import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { loadTrips } from "@/content/trips";
@@ -30,6 +32,14 @@ type LocaleParams = { locale: string };
  * The owner named the entry, and Corse and Noirmoutier are not cities. Rather
  * than rename what he named, the heading keeps his word and the introduction
  * carries the nuance, so the count above the list is true of the list under it.
+ *
+ * **The filter above the list is a group of radio buttons and a generated
+ * stylesheet**, with no client boundary — the argument is in
+ * `src/components/filters/facets.ts`. One axis here and two on `/voyages`,
+ * because a place carries one fact this journal can filter on: its country. The
+ * number of stays would be the other candidate and every place holds exactly one
+ * today, so `buildFacetIndex` would drop it; offering it would be the "filtre
+ * dont toutes les valeurs sauf une sont vides" a listing must not have.
  *
  * **Rendered by the server, readable with JavaScript disabled**, like the
  * catalogue it sits beside: no `'use client'` anywhere in this tree, no
@@ -126,6 +136,28 @@ export default async function PlacesPage({ params }: { params: Promise<LocalePar
     compare: collatorFor(locale).compare,
   });
 
+  /**
+   * The choices above the list, keyed on the same identity the rows are keyed on
+   * — `placeIdentity`, so a row and its tokens cannot come apart. The country's
+   * name is the one the tally has already resolved, which is why nothing is
+   * looked up twice and why a country reads the same on a pill and on the row
+   * under it.
+   */
+  const facets = buildFacetIndex(
+    places.map((place) => ({
+      key: placeIdentity(place),
+      facets: [{ group: "country", value: place.countryCode, label: place.countryName }],
+    })),
+    [{ key: "country", legend: t("filterCountry"), compare: byLabel(collatorFor(locale).compare) }]
+  );
+
+  /**
+   * Absent rather than empty when there is nothing to choose: with one country in
+   * the journal `FacetFilter` renders no control, and a `data-facets` attribute no
+   * rule reads would be markup that says a filter exists.
+   */
+  const facetTokens = facets.groups.length === 0 ? undefined : facets.tokens;
+
   return (
     /*
       The landing point of the layout's skip link — the same `id` and the same
@@ -165,9 +197,18 @@ export default async function PlacesPage({ params }: { params: Promise<LocalePar
           </a>
         </section>
       ) : (
-        <ul
-          className={styles.list}
-          /*
+        <FacetFilter
+          id="filtre-lieux"
+          name="filtre-lieux"
+          legend={t("filterLegend")}
+          allLabel={t("filterAll")}
+          index={facets}
+          countLabel={(count) => t("filterCount", { count })}
+          statusLabel={(count) => t("filterShowing", { count })}
+        >
+          <ul
+            className={styles.list}
+            /*
             `role="list"` is redundant markup that is not redundant in practice:
             `list-style: none` strips the list role in Safari with VoiceOver, and
             a list that has lost its role has also lost its item count — the one
@@ -175,46 +216,47 @@ export default async function PlacesPage({ params }: { params: Promise<LocalePar
             role either way, so no unit test can see this. The same note is on the
             map's marker list and on the catalogue's grids.
           */
-          role="list"
-        >
-          {places.map((place) => {
-            /**
-             * **Where a row leads, and why it is a fragment here when the
-             * map's country list refused one.**
-             *
-             * That list — removed in September 2026, its finding kept in the
-             * header of `tests/e2e/dead-links.populated.spec.ts` — measured
-             * `/fr/voyages#pays-xx` dangling, because the catalogue emits a
-             * country section only for a country a trip *arrives* in. `#voyage-<slug>` is a different promise: the
-             * catalogue puts that id on **every** entry it renders, and it
-             * renders every published trip — untold ones included. So the
-             * fragment cannot dangle for the same reason the other one could.
-             *
-             * It is also why there is no `hasStory` branch on this page. Pointing
-             * at `tripPath(slug)` would have needed one — an untold trip has no
-             * page — and the entry in the catalogue is the better target anyway:
-             * it is where that trip's dates, countries and « Récit à venir » are
-             * actually written.
-             *
-             * A place holding several trips points at the listing whole. The
-             * pre-existing rule the country rows already pay for: a row
-             * announcing "3 séjours" must not silently name one of them (2.4.4).
-             */
-            const [onlyTrip] = place.tripSlugs;
-            const href =
-              place.tripSlugs.length === 1 && onlyTrip !== undefined
-                ? `${tripsPath()}#voyage-${onlyTrip}`
-                : tripsPath();
+            role="list"
+          >
+            {places.map((place) => {
+              /**
+               * **Where a row leads, and why it is a fragment here when the
+               * map's country list refused one.**
+               *
+               * That list — removed in September 2026, its finding kept in the
+               * header of `tests/e2e/dead-links.populated.spec.ts` — measured
+               * `/fr/voyages#pays-xx` dangling, because the catalogue emits a
+               * country section only for a country a trip *arrives* in. `#voyage-<slug>` is a different promise: the
+               * catalogue puts that id on **every** entry it renders, and it
+               * renders every published trip — untold ones included. So the
+               * fragment cannot dangle for the same reason the other one could.
+               *
+               * It is also why there is no `hasStory` branch on this page. Pointing
+               * at `tripPath(slug)` would have needed one — an untold trip has no
+               * page — and the entry in the catalogue is the better target anyway:
+               * it is where that trip's dates, countries and « Récit à venir » are
+               * actually written.
+               *
+               * A place holding several trips points at the listing whole. The
+               * pre-existing rule the country rows already pay for: a row
+               * announcing "3 séjours" must not silently name one of them (2.4.4).
+               */
+              const identity = placeIdentity(place);
+              const [onlyTrip] = place.tripSlugs;
+              const href =
+                place.tripSlugs.length === 1 && onlyTrip !== undefined
+                  ? `${tripsPath()}#voyage-${onlyTrip}`
+                  : tripsPath();
 
-            return (
-              /*
+              return (
+                /*
                 The key is the row's identity and not the place's name: two
                 places may share a name in two countries, and `tallyVisitedPlaces`
                 keeps them apart for a reason its `identityOf` records. A key on
                 the name alone would be a duplicate key React resolves silently.
               */
-              <li key={`${place.countryCode} ${place.name}`}>
-                {/*
+                <li key={identity} data-facets={facetTokens?.get(identity)}>
+                  {/*
                   One link per row holding all three facts, and not a link around
                   the name with the country and the count beside it. A screen
                   reader announces the link and not its neighbours, so anything
@@ -228,17 +270,18 @@ export default async function PlacesPage({ params }: { params: Promise<LocalePar
                   node between two flex items is not laid out as an anonymous flex
                   item, so `gap` still owns the visual spacing.
                 */}
-                <a className={styles.link} href={localePathname({ href, locale })}>
-                  <span className={styles.name}>{place.name}</span>{" "}
-                  <span className={styles.country}>{place.countryName}</span>{" "}
-                  <span className={styles.trips}>
-                    {t("placeTrips", { count: place.tripSlugs.length })}
-                  </span>
-                </a>
-              </li>
-            );
-          })}
-        </ul>
+                  <a className={styles.link} href={localePathname({ href, locale })}>
+                    <span className={styles.name}>{place.name}</span>{" "}
+                    <span className={styles.country}>{place.countryName}</span>{" "}
+                    <span className={styles.trips}>
+                      {t("placeTrips", { count: place.tripSlugs.length })}
+                    </span>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </FacetFilter>
       )}
     </main>
   );

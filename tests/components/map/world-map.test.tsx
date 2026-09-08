@@ -813,3 +813,106 @@ describe("WorldMap — the untold country layer", () => {
     expect(screen.getByText(frMessages.map.unavailable)).toBeInTheDocument();
   });
 });
+
+/**
+ * **The fourth tint and its notes** (TIW-39): the countries the carnet wants to
+ * reach, at the owner's request.
+ *
+ * The decision under test is the one `docs/adr/0003-carte-svg-inerte-et-balises-html.md`
+ * governs: a hover on a country did **not** make the drawing interactive. The
+ * notes are HTML laid over the SVG, on the anchor `@/map` computed, exactly as a
+ * marker is — so the shapes stay `aria-hidden` and free of pointer events, and
+ * everything below is asserted on the overlay rather than on a `<path>`.
+ */
+describe("the countries still to come", () => {
+  const WISHED = [
+    { code: "HR", name: "Croatie", path: "M0,0L5,0L5,5Z", anchor: { x: 500, y: 200 } },
+    { code: "IT", name: "Italie", path: "M6,0L9,0L9,5Z", anchor: { x: 480, y: 220 } },
+  ];
+
+  it("draws no layer and no note when the carnet wishes for nothing", () => {
+    const { container } = renderMap({ marks: [CENTRED_MARK] });
+
+    expect(container.querySelectorAll("[class*='wished']")).toHaveLength(0);
+    expect(screen.queryByRole("list", { name: frMessages.map.wishedListLabel })).toBeNull();
+  });
+
+  it("names every wished country, whether or not anything is hovered", () => {
+    renderMap({ marks: [CENTRED_MARK], wished: WISHED });
+
+    /*
+      The whole point of the label being visually hidden rather than absent: a
+      screen reader reads all of them at rest. A test that only checked the hover
+      would be testing the paint and calling it the information.
+    */
+    const list = screen.getByRole("list", { name: frMessages.map.wishedListLabel });
+
+    expect(list.textContent).toContain("Croatie : à venir");
+    expect(list.textContent).toContain("Italie : à venir");
+  });
+
+  /**
+   * The note hangs on the anchor, in world units, through the same two custom
+   * properties the markers use — so the notes and the markers move together when
+   * the reader zooms, rather than drifting apart at every frame.
+   */
+  it("hangs each note on the anchor the geometry façade computed", () => {
+    renderMap({ marks: [CENTRED_MARK], wished: WISHED });
+
+    /*
+      Addressed through the list's accessible name rather than by class: the CSS
+      module hashes its class names, and `[class*='note']` also matches `.notes`,
+      the list itself — which carries no position at all.
+    */
+    const note = screen
+      .getByRole("list", { name: frMessages.map.wishedListLabel })
+      .querySelector<HTMLElement>("li");
+
+    expect(note?.style.getPropertyValue("--mark-x")).toBe("500");
+    expect(note?.style.getPropertyValue("--mark-y")).toBe("200");
+  });
+
+  /**
+   * **The sentence in the caption, and it is not decoration.** Without it a
+   * sighted reader with no hover — a keyboard, a touch screen — sees four hatched
+   * countries carrying a dot and no name. The notes cover the screen-reader case
+   * whatever happens; this covers the other one.
+   */
+  it("names them in the caption too, in visible text kept out of the figure's name", () => {
+    const { container } = renderMap({ marks: [CENTRED_MARK], wished: WISHED });
+
+    const caption = container.querySelector("figcaption");
+    const sentence = caption?.querySelector("[aria-hidden='true']");
+
+    expect(sentence?.textContent).toBe("À venir : Croatie, Italie.");
+    /*
+      **And it is `aria-hidden`, which is the half that matters.** A
+      `<figcaption>` is the figure's accessible name; this sentence inside it
+      turned "Carte du monde : 5 voyages, 5 pays" into "À venir : … Carte du
+      monde…" and took three end-to-end cases with it. Every word of it is in the
+      accessibility tree already, once per country, in the notes over the map —
+      so hiding this copy loses nobody anything.
+    */
+    expect(caption?.textContent).toContain("Carte du monde");
+  });
+
+  it("says nothing in the caption when there is nothing to come", () => {
+    const { container } = renderMap({ marks: [CENTRED_MARK] });
+
+    expect(container.querySelector("figcaption")?.textContent).not.toContain("À venir");
+  });
+
+  /**
+   * The drawing stays inert, which is the invariant this feature was most likely
+   * to break: the note is HTML over the map and never a `<path>` that answers a
+   * pointer.
+   */
+  it("adds nothing focusable or hoverable inside the drawing", () => {
+    const { container } = renderMap({ marks: [CENTRED_MARK], wished: WISHED });
+
+    const svg = container.querySelector("figure svg:not(li svg)");
+
+    expect(svg?.getAttribute("aria-hidden")).toBe("true");
+    expect(svg?.querySelectorAll("a, button, [tabindex]")).toHaveLength(0);
+  });
+});

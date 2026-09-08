@@ -331,7 +331,26 @@ describe.each(DOCUMENT_ROUTES)("the %s payload stays within budget", (route) => 
  */
 const SEARCH_INDEX_BUDGET_BYTES = 24 * KB;
 
+/**
+ * **WHICH BUILD THIS READS, and it is not always the one you think.**
+ *
+ * This suite reads whatever `.next` holds, and `npm run test:e2e` leaves the
+ * *empty* journal there: `playwright.config.ts` builds
+ * `tests/fixtures/content/no-trips/trips`, and it runs second. So a case here that
+ * assumed thirteen trips passed after `npm run build` and failed after the
+ * end-to-end suite — measured, and it is why the assertions below hold on either
+ * build and the content-dependent figures are in this comment rather than in an
+ * `expect`.
+ */
 describe("the search index stays small enough to live in the document", () => {
+  /**
+   * The panel's own two ids bracket the measurement — `site-search-field` opens it
+   * and `site-search-count` closes it — because the shell they used to be inside
+   * is no longer a `<details>` at all: the disclosure became `:focus-within` in the
+   * stylesheet when the field moved into the bar. A selector naming the element
+   * would have to be rewritten every time the shell changes; these two ids are the
+   * component's contract with the stylesheet and with itself.
+   */
   it("is present, and no larger than its budget", () => {
     /**
      * `/fr/a-propos` rather than `/fr`: the home page's HTML is dominated by the
@@ -340,12 +359,13 @@ describe("the search index stays small enough to live in the document", () => {
      * which is the number worth watching.
      */
     const html = documentHtml("/fr/a-propos");
-    const start = html.indexOf('<details class="site-search');
-    const end = html.indexOf("</details>", start);
+    const start = html.indexOf('id="site-search-field"');
+    const end = html.indexOf('id="site-search-count"', start);
 
     // Guards the guard: a selector that stopped matching would measure 0 bytes
     // and pass for ever.
     expect(start, "the search is not in the document at all").toBeGreaterThan(-1);
+    expect(end, "the panel has no count, so this measured nothing").toBeGreaterThan(start);
     expect(html.slice(start, end).match(/data-haystack=/g) ?? []).not.toHaveLength(0);
 
     expect(end - start).toBeLessThan(SEARCH_INDEX_BUDGET_BYTES);
@@ -358,7 +378,36 @@ describe("the search index stays small enough to live in the document", () => {
     // `aria`-less rows would still render; what must hold is that the ids the
     // panel keys on are unique, since a duplicate id makes one row unreachable.
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.length).toBeGreaterThan(4);
+    /*
+      Four is the empty journal: the site's own pages, which exist whatever the
+      content. On the repository's thirteen trips it is thirty-six — the figure
+      the budget above was sized on, and one this suite cannot assert because the
+      end-to-end run leaves the other build behind.
+    */
+    expect(ids.length).toBeGreaterThanOrEqual(4);
+  });
+
+  /**
+   * **The vignettes are defined once per country and referenced per trip**, which
+   * is what keeps nine French trips from carrying nine copies of France. Asserted
+   * on the built document because it is the only place the deduplication is
+   * observable: the layout does it, and a component test would be asserting its
+   * own fixture.
+   *
+   * Skipped rather than failed on the empty journal, where there is no country to
+   * draw and no `<use>` to count — see the note on this block.
+   */
+  it("defines each country's outline once, however many trips reach it", () => {
+    const html = documentHtml("/fr/a-propos");
+    const symbols = [...html.matchAll(/<symbol id="tiw-tile-([a-z]{2})"/g)].map(
+      (match) => match[1]
+    );
+    const uses = [...html.matchAll(/href="#tiw-tile-([a-z]{2})"/g)].map((match) => match[1]);
+
+    expect(new Set(symbols).size, "a country's outline is defined twice").toBe(symbols.length);
+    for (const code of new Set(uses)) {
+      expect(symbols, `no outline defined for ${String(code)}`).toContain(code);
+    }
   });
 });
 

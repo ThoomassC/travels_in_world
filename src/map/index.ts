@@ -47,5 +47,14 @@ import "server-only";
 
 export { projectPoint, WORLD_VIEW_BOX } from "./projection";
 export type { ProjectedPoint } from "./projection";
+/**
+ * The suggestion vignette's geometry (TIW-38, the owner's third pass on the
+ * search). One country fitted to its own 40-unit box, simplified for a 40 px
+ * rendering — `./country-tile.ts` carries the measurements. Behind the façade
+ * like everything else here: it reads the 50m TopoJSON, so it must never reach a
+ * browser.
+ */
+export { countryTile, TILE_BOX } from "./country-tile";
+export type { CountryTile, TilePoint } from "./country-tile";
 export { buildWorldGeometry } from "./world";
-export type { CountryShape, WorldGeometry } from "./world";
+export type { CountryShape, WishedCountry, WorldGeometry } from "./world";

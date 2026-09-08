@@ -69,15 +69,23 @@ describe("worldPointOf", () => {
     expect(worldPointOf(at(placed, 0), frame).y).toBeCloseTo(210.25, 1);
   });
 
-  it("carries the coincidence spread into world units, which is what lets zoom separate it", () => {
+  it("gives two trips from the same city the same world point, spread or not", () => {
     /**
-     * The property this function exists for. Two trips leaving the same city are
-     * nudged apart by `spreadCoincident` in *percent of the frame*; expressed
-     * back in world units, that nudge becomes a fixed distance on the map, so
-     * zooming in grows it on screen and the two markers genuinely separate.
-     * Had the component kept the percentages, the pair would have stayed exactly
-     * as overlapped at every zoom level — the defect
-     * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` assigns to this ticket.
+     * **This case asserts the opposite of what it used to**, and the reversal is
+     * the correction of a real defect rather than a change of taste.
+     *
+     * It read: the coincidence nudge is a percentage of the frame, so converting
+     * it here turns it into a fixed distance in *world units*, which grows on
+     * screen as the reader zooms and separates the pair. That is true, and it is
+     * the bug — a world distance is a distance on the Earth. Annecy and Genève,
+     * 0.9 world units apart, were drawn 4.6 apart: one marker 150 km north of the
+     * lake, the other 150 km south. Reported by the journal's owner, on a map
+     * whose coordinates were correct.
+     *
+     * The nudge now travels beside the position as `PlacedMark.nudge`, in rem, and
+     * the stylesheet applies it. So this function — the one that decides where the
+     * marker is *on the Earth* — must return the projected point untouched, for a
+     * spread marker exactly as for a lone one.
      */
     const same = { x: 500, y: 250 };
     const placed = place([
@@ -88,11 +96,13 @@ describe("worldPointOf", () => {
     const first = worldPointOf(at(placed, 0), WHOLE);
     const second = worldPointOf(at(placed, 1), WHOLE);
 
-    expect(first).not.toEqual(second);
-    // Both still name the same city: the nudge is small in world units.
+    expect(first).toEqual(second);
     for (const point of [first, second]) {
-      expect(Math.hypot(point.x - same.x, point.y - same.y)).toBeLessThan(20);
+      expect(point.x).toBeCloseTo(same.x, 1);
+      expect(point.y).toBeCloseTo(same.y, 1);
     }
+    // And the separation the reader will see is there, in screen units.
+    expect(at(placed, 0).nudge).not.toEqual(at(placed, 1).nudge);
   });
 });
 

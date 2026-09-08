@@ -13,7 +13,9 @@ import {
   loadWorldDataset,
   RICHER_DATASET_MODULE,
 } from "./dataset";
+import { labelAnchorOf } from "./anchor";
 import { WORLD_VIEW_BOX } from "./projection";
+import type { ProjectedPoint } from "./projection";
 
 /**
  * The join: the world's shapes on one side, the countries the content declares
@@ -44,6 +46,32 @@ export type WorldGeometry = {
    * and point at it with `<use href>` instead of repeating 30 KB of geometry.
    */
   readonly visited: readonly CountryShape[];
+  /**
+   * The countries the journal *wants* to reach — TIW-39's third tint, « à venir ».
+   *
+   * Sorted by localised name like `visited`, disjoint from it by construction
+   * (the build throws on an overlap), and **richer than a `CountryShape`**: it
+   * carries an anchor. That is the one thing this bucket needs and the other two
+   * do not — a wished country has no trip, so nothing else on the map says where
+   * it is, and the note that names it has to hang on a point.
+   *
+   * The shapes are therefore *copies* rather than the shared objects `visited`
+   * returns. Nothing here is drawn twice from two places, so there is no `<use>`
+   * to share an identity with; and a handful of extra objects for a handful of
+   * countries is not the 30 KB the visited layer's sharing is about.
+   */
+  readonly wished: readonly WishedCountry[];
+};
+
+/** A country in the « à venir » state, and where its note hangs. */
+export type WishedCountry = CountryShape & {
+  /**
+   * A point in the projected world, **inside the shape**, where the map hangs
+   * this country's note. `src/map/anchor.ts` says why it is not the centroid: the
+   * centroid of Croatia is in Bosnia and the centroid of Portugal is in the
+   * Atlantic.
+   */
+  readonly anchor: ProjectedPoint;
 };
 
 /**
@@ -105,6 +133,15 @@ export function buildWorldGeometry(options: {
    * a `string`.
    */
   readonly visitedCountryCodes: ReadonlyArray<CountryCode> | ReadonlySet<CountryCode>;
+  /**
+   * The countries the journal wants to reach — TIW-39, `content/wishlist.yaml`.
+   *
+   * Same container rule as above, and same reason. Optional, because a journal
+   * with no wishlist is the ordinary case and every fixture in this repository is
+   * one; an absent list must produce an empty bucket and **no empty `<g>`** in the
+   * document, which is what the component's own guard is for.
+   */
+  readonly wishedCountryCodes?: ReadonlyArray<CountryCode> | ReadonlySet<CountryCode>;
   readonly locale: string;
 }): WorldGeometry {
   const { countries, byCode } = localisedWorld(options.locale);
@@ -115,35 +152,31 @@ export function buildWorldGeometry(options: {
    * single-pass iterators, and this makes the module independent of that
    * promise: whatever arrives is read exactly once, here.
    */
-  const declared = [...options.visitedCountryCodes];
-  const problems: string[] = [];
-  const selected: CountryShape[] = [];
-  const seen = new Set<string>();
+  const declaredVisited = resolveCodes([...options.visitedCountryCodes], byCode, {
+    unknown: unknownCodeProblem,
+    undrawable: (code, numeric) => undrawableCodeProblem(code, numeric, options.locale),
+  });
+  const declaredWished = resolveCodes([...(options.wishedCountryCodes ?? [])], byCode, {
+    unknown: wishedUnknownCodeProblem,
+    undrawable: (code, numeric) => wishedUndrawableCodeProblem(code, numeric, options.locale),
+  });
 
-  for (const code of declared) {
-    // Several places of one trip share a country, and several trips share one
-    // too: duplicates are the normal case, not a content error.
-    if (seen.has(code)) {
-      continue;
-    }
-    seen.add(code);
-
-    const numeric = NUMERIC_BY_ALPHA2.get(code);
-
-    if (numeric === undefined) {
-      problems.push(unknownCodeProblem(code));
-      continue;
-    }
-
-    const shape = byCode.get(code);
-
-    if (shape === undefined) {
-      problems.push(undrawableCodeProblem(code, numeric, options.locale));
-      continue;
-    }
-
-    selected.push(shape);
-  }
+  const problems = [
+    ...declaredVisited.problems,
+    ...declaredWished.problems,
+    /**
+     * **The two lists must not name the same country**, and this refuses rather
+     * than resolves.
+     *
+     * The three tinted layers are painted one over the other and are handed to the
+     * renderer disjoint (see `WorldMapProps`): a country in two of them is drawn
+     * twice, the later paint hiding the earlier, so the drawing would silently show
+     * one state while the content declared two. "Visited wins" and "wished wins" are
+     * both defensible, which is precisely why this is not the layer that gets to
+     * choose — the person who wrote the two files is.
+     */
+    ...overlapProblems(declaredVisited.shapes, declaredWished.shapes),
+  ];
 
   /**
    * Criterion 3: this breaks the build. Every offending code is reported, not
@@ -154,6 +187,8 @@ export function buildWorldGeometry(options: {
   if (problems.length > 0) {
     throw new Error(problems.join("\n"));
   }
+
+  const selected = declaredVisited.shapes;
 
   /**
    * `Intl.Collator`, never `<`. In French `"É" < "E"` is `true` under raw string
@@ -170,6 +205,24 @@ export function buildWorldGeometry(options: {
   const visited = [...selected].sort((left, right) => collator.compare(left.name, right.name));
 
   /**
+   * The wished bucket, sorted the same way and for the same reason, then given
+   * the one thing a `CountryShape` does not carry: the point its note hangs on.
+   *
+   * `flatMap` and not `map`: `labelAnchorOf` answers `null` for a path with no
+   * area, which no shipped geometry produces — `loadWorldDataset` already refuses
+   * an empty path — but which a future vintage could. A country dropped from the
+   * bucket loses its tint and its note together, which is coherent; a country kept
+   * with an anchor of `(0, 0)` would be labelled in the north Atlantic.
+   */
+  const wished = [...declaredWished.shapes]
+    .sort((left, right) => collator.compare(left.name, right.name))
+    .flatMap((shape) => {
+      const anchor = labelAnchorOf(shape.path);
+
+      return anchor === null ? [] : [Object.freeze({ ...shape, anchor })];
+    });
+
+  /**
    * Frozen, shallowly, because the comments above promise immutability and an
    * unfrozen return makes that a lie: `world.viewBox = "HACKED"` used to succeed.
    * Shallow is enough — `countries` and `visited` are already frozen arrays of
@@ -181,8 +234,91 @@ export function buildWorldGeometry(options: {
     height: WORLD_VIEW_BOX.height,
     countries,
     visited: Object.freeze(visited),
+    wished: Object.freeze(wished),
   });
 }
+
+/**
+ * One declared list, resolved against the geometry — the loop `visited` used to
+ * hold inline, extracted when TIW-39 gave it a second caller.
+ *
+ * It reports *every* problem instead of throwing on the first, because the caller
+ * merges the two lists' problems into one message: an author with a bad trip code
+ * and a bad wishlist code should see both, not the first and then the other after
+ * a second build.
+ *
+ * The wording is a parameter and not a flag. Both lists refuse the same two
+ * things, and a message that named neither the file nor the fix would send its
+ * reader grepping thirteen `trip.yaml` files for a code written in
+ * `wishlist.yaml` — the shape of dead end TIW-29 spent a ticket removing.
+ */
+function resolveCodes(
+  declared: readonly CountryCode[],
+  byCode: ReadonlyMap<string, CountryShape>,
+  wording: {
+    readonly unknown: (code: string) => string;
+    readonly undrawable: (code: string, numeric: string) => string;
+  }
+): { readonly shapes: readonly CountryShape[]; readonly problems: readonly string[] } {
+  const problems: string[] = [];
+  const shapes: CountryShape[] = [];
+  const seen = new Set<string>();
+
+  for (const code of declared) {
+    // Several places of one trip share a country, and several trips share one
+    // too: duplicates are the normal case, not a content error. The wishlist has
+    // its own reason — a file edited by hand over months.
+    if (seen.has(code)) {
+      continue;
+    }
+    seen.add(code);
+
+    const numeric = NUMERIC_BY_ALPHA2.get(code);
+
+    if (numeric === undefined) {
+      problems.push(wording.unknown(code));
+      continue;
+    }
+
+    const shape = byCode.get(code);
+
+    if (shape === undefined) {
+      problems.push(wording.undrawable(code, numeric));
+      continue;
+    }
+
+    shapes.push(shape);
+  }
+
+  return { shapes, problems };
+}
+
+/** Countries claimed by both lists at once, named one per line. */
+function overlapProblems(
+  visited: readonly CountryShape[],
+  wished: readonly CountryShape[]
+): readonly string[] {
+  const visitedCodes = new Set(visited.flatMap((shape) => (shape.code === null ? [] : [shape.code])));
+
+  return wished.flatMap((shape) =>
+    shape.code === null || !visitedCodes.has(shape.code)
+      ? []
+      : [
+          `${quoteCode(shape.name)} (code ${quoteCode(shape.code)}) est à la fois un pays visité — un voyage de content/trips/ y passe — ` +
+            `et un pays souhaité, déclaré dans ${quoteCode(WISHLIST_DISPLAY_PATH)}. ` +
+            `La carte peint une forme une fois : les deux teintes se recouvriraient et une seule serait visible, ` +
+            `sans que rien ne dise laquelle. Retire ce pays de ${quoteCode(WISHLIST_DISPLAY_PATH)} — il est déjà visité. ${bypassNote()}`,
+        ]
+  );
+}
+
+/**
+ * The file the wishlist's messages name. A literal and not an import from
+ * `src/content/**`: `src/map` must not depend on the content layer (the same
+ * reason `quoteCode` below is four lines here rather than an import), and the
+ * path is what the *reader* has to open, not a value anything resolves.
+ */
+const WISHLIST_DISPLAY_PATH = "content/wishlist.yaml";
 
 function localisedWorld(locale: string): LocalisedWorld {
   const cached = localisedWorlds.get(locale);
@@ -445,6 +581,60 @@ function undrawableCodeProblem(code: string, numeric: string, locale: string): s
     `mais le fond de carte ${quoteCode(DATASET_MODULE)} en résolution ${DATASET_RESOLUTION} ne le contient pas : ` +
     `aucun micro-État n'y figure — ni Singapour, ni Monaco, ni Malte, ni Saint-Marin. ` +
     `${wayOut} ${bypassNote()}`
+  );
+}
+
+/* --- The same two failures, for a code that came from the wishlist (TIW-39). --
+
+   Two wordings and not one parametrised sentence, and the duplication is the
+   decision rather than the accident. `src/content/loader.ts` states the principle
+   this follows — «where the wording is user-visible it is copied verbatim rather
+   than rephrased: the same rule seen twice must not read as two different rules» —
+   and the rule *is* the same here: a code no country bears, and a code no shape
+   exists for. What differs is everything the reader has to do about it. A trip's
+   code is one field of one place among many, and the fixes are "correct the
+   field", "detach the place", "change vintage"; a wishlist's code is a whole line
+   whose only content is that code, and the only fix is to correct or delete it.
+   Folding both into one sentence produced "rattache le lieu à un pays" for a file
+   that has no lieux, which is worse than either. -------------------------------- */
+
+/** A wished code ISO 3166-1 assigns to nobody: a typo, or a retired code. */
+function wishedUnknownCodeProblem(code: string): string {
+  const upperCased = code.toUpperCase();
+
+  if (upperCased !== code && NUMERIC_BY_ALPHA2.has(upperCased)) {
+    return (
+      `le code pays ${quoteCode(code)} de ${quoteCode(WISHLIST_DISPLAY_PATH)} n'est pas reconnu parce qu'il n'est pas ` +
+      `en majuscules : écris-le ${quoteCode(upperCased)}. La norme ISO 3166-1 alpha-2 est en capitales, et les codes ` +
+      `sont comparés caractère pour caractère. ${bypassNote()}`
+    );
+  }
+
+  return (
+    `le code pays ${quoteCode(code)}, déclaré dans ${quoteCode(WISHLIST_DISPLAY_PATH)}, n'est attribué à aucun pays ` +
+    `par l'ISO 3166-1 alpha-2 : la carte n'a donc aucune forme à teinter. ` +
+    `Écris les deux lettres majuscules que la norme attribue au pays (${quoteCode("HR")} pour la Croatie), ` +
+    `ou retire la ligne. ${bypassNote()}`
+  );
+}
+
+/** A real country the shipped vintage draws no shape for, wished rather than visited. */
+function wishedUndrawableCodeProblem(code: string, numeric: string, locale: string): string {
+  const label = regionNamesFor(locale).of(code) ?? code;
+
+  const wayOut = FINER_VINTAGE_COUNTRY_CODES.has(code)
+    ? `Deux issues : retire ce pays de ${quoteCode(WISHLIST_DISPLAY_PATH)}, ou fais passer src/map/dataset.ts sur ` +
+      `${quoteCode(RICHER_DATASET_MODULE)}, déjà livré par le paquet et qui contient ce pays. Cette dernière option porte ` +
+      `les tracés de 182,6 à 512,6 Kio brotli (mesuré, voir le commentaire de src/map/dataset.ts) : c'est une décision ` +
+      `de budget, et le plafond du test de poids la refusera tant qu'il n'est pas relevé sciemment.`
+    : `Changer de millésime n'y ferait rien : aucun de ceux que world-atlas livre ` +
+      `(${DATASET_RESOLUTION}, ${FINER_BASEMAP_VINTAGES.join(", ")}) ne porte de forme pour ce code. ` +
+      `Une seule issue : retire ce pays de ${quoteCode(WISHLIST_DISPLAY_PATH)}.`;
+
+  return (
+    `le pays ${quoteCode(label)} (code ${quoteCode(code)}, ISO 3166-1 numérique ${numeric}), souhaité dans ` +
+    `${quoteCode(WISHLIST_DISPLAY_PATH)}, existe — mais le fond de carte ${quoteCode(DATASET_MODULE)} en résolution ` +
+    `${DATASET_RESOLUTION} n'en porte aucune forme : il n'y a rien à teinter. ${wayOut} ${bypassNote()}`
   );
 }
 

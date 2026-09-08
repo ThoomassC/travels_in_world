@@ -229,6 +229,65 @@ describe("a country the ISO assigns but the shipped basemap cannot draw", () => 
   });
 });
 
+/**
+ * **`content/wishlist.yaml`, judged beside the trips** (TIW-39).
+ *
+ * The wishlist's own rules — a malformed code, an undrawable country, a repeated
+ * line — belong to `tests/content/wishlist.test.ts`, where they need no trip at
+ * all. What is asserted here is the one judgement that cannot be made there,
+ * because it needs both files: a country the wishlist wants and a trip has
+ * already reached.
+ *
+ * Its home is the validator rather than the map for the reason TIW-29 spent a
+ * ticket on. `buildWorldGeometry` refuses the pair too — it has to, it is the last
+ * gate before a drawing that would paint one shape twice — but meeting that
+ * refusal mid-prerender, from a build whose own message points back at
+ * `npm run validate:content`, is exactly the circle that command exists to close.
+ */
+describe("a country that is both visited and on the wish list", () => {
+  function withWishlist(countries: string): ContentValidation {
+    temporary = temporaryContent({ "japon-2024": tripYaml() });
+    writeFileSync(path.join(temporary.root, "wishlist.yaml"), countries, "utf8");
+
+    return validateContent(temporary);
+  }
+
+  it("is refused, against the wishlist's own line", () => {
+    const finding = single(withWishlist("countries:\n  - HR\n  - JP\n"));
+
+    expect(finding.file).toBe("wishlist.yaml");
+    expect(describeField(finding.field)).toBe("countries[1]");
+    expect(finding.location?.line).toBe(3);
+    expect(finding.problem).toMatch(/JP/);
+    // The trip is the fact and the wish is what it overtook: the line goes.
+    expect(finding.action).toMatch(/retire/);
+  });
+
+  it("counts as a problem outside any trip, so the trip is still valid", () => {
+    expect(withWishlist("countries:\n  - JP\n")).toMatchObject({
+      tripCount: 1,
+      validCount: 1,
+      failedCount: 0,
+      structuralCount: 1,
+    });
+  });
+
+  it("says nothing about a wish the trips have not reached", () => {
+    expect(withWishlist("countries:\n  - HR\n  - PT\n").findings).toEqual([]);
+  });
+
+  /**
+   * The fail-open case, pinned here as well as in the wishlist's own suite: every
+   * committed fixture of this repository has no `wishlist.yaml`, so a reading that
+   * treated its absence as a finding would turn twenty green cases red at once.
+   */
+  it("says nothing at all when there is no wishlist", () => {
+    temporary = temporaryContent({ "japon-2024": tripYaml() });
+
+    expect(validateContent(temporary).findings).toEqual([]);
+  });
+});
+
 describe("an endDate before the startDate (acceptance criterion 4)", () => {
   const validation = validateContent(fixtureRoots("end-date-before-start-date"));
   const finding = single(validation);

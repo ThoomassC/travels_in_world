@@ -5,7 +5,7 @@ import { aboutPath, placesPath, tripsPath } from "@/i18n/paths";
 import { locales } from "@/i18n/routing";
 import type { Locale } from "@/i18n/routing";
 import type { SearchEntry } from "@/components/search/entries";
-import { SearchIndex } from "@/components/search/search-index";
+import { SearchIndex, type CountryOutline } from "@/components/search/search-index";
 import { SiteSearch } from "@/components/search/site-search";
 import { SiteBrand } from "./site-brand";
 import styles from "./site-nav.module.css";
@@ -172,9 +172,15 @@ export type SiteNavProps = {
    * place that awaits it.
    */
   readonly searchEntries: readonly SearchEntry[];
+  /**
+   * One country outline per country the suggestions draw, deduplicated by the
+   * layout. Separate from the entries because the geometry comes from `@/map`,
+   * which a pure index builder cannot reach.
+   */
+  readonly searchCountries: readonly CountryOutline[];
 };
 
-export function SiteNav({ locale, searchEntries }: SiteNavProps): ReactElement {
+export function SiteNav({ locale, searchEntries, searchCountries }: SiteNavProps): ReactElement {
   const t = useTranslations("trips");
   const s = useTranslations("search");
 
@@ -330,21 +336,43 @@ export function SiteNav({ locale, searchEntries }: SiteNavProps): ReactElement {
           substitutes `{count}` in the third and does no plural arithmetic of its
           own: plural rules belong to the language, and next-intl already owns
           them here. Same move as the map's `zoomValue`.
+
+          **`s.raw` on the third, and it is the whole point of the design above.**
+          `resultsMany` is `"{count} résultats."` — an ICU pattern that is meant to
+          reach the browser *unformatted*, because the number is only known once a
+          reader has typed. `s(...)` formats it, so next-intl asks for a `count`
+          nobody has, raises FORMATTING_ERROR and hands back its fallback: the
+          literal string `search.resultsMany`, which is then what a screen reader
+          announces. `s.raw(...)` returns the pattern and does not format.
+
+          **It was invisible in production, and that is the part worth keeping.**
+          next-intl only validates arguments under the `development` export
+          condition; a `next build` resolves the other one, `s("resultsMany")`
+          returns the pattern by accident, and the whole end-to-end suite goes
+          green over a broken dev server. Measured, same catalogue, same call:
+
+            node --conditions=development  ->  "search.resultsMany"
+            node                           ->  "{count} résultats."
+
+          `tests/i18n/message-arguments.test.ts` is what refuses the class now: it
+          reads every `t("key")` in `src/**` against every catalogue and fails on
+          any whose message carries a placeholder and was not read raw. A runtime
+          test could not — under Vitest, next-intl resolves the forgiving half too.
         */}
         <SiteSearch
           labels={{
-            open: s("open"),
             field: s("field"),
             placeholder: s("placeholder"),
+            listLabel: s("listLabel"),
             resultsNone: s("resultsNone"),
             resultsOne: s("resultsOne"),
-            resultsMany: s("resultsMany"),
+            resultsMany: s.raw("resultsMany"),
           }}
         >
           <SearchIndex
             entries={searchEntries}
+            countries={searchCountries}
             labels={{
-              listLabel: s("listLabel"),
               groups: {
                 trips: s("groupTrips"),
                 places: s("groupPlaces"),

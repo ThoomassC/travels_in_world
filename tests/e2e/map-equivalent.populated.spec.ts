@@ -333,7 +333,17 @@ test("the caption tells the truth about what the drawing shows", async ({ page }
   const width = Number(viewBox?.split(" ")[2]);
 
   expect(width).toBeLessThan(960);
-  await expect(page.locator("figcaption")).toHaveText(
+  /*
+    `toContainText` and no longer `toHaveText`: the caption gained a second line
+    with TIW-39, naming the countries still to come — `aria-hidden`, because a
+    `<figcaption>` is the figure's accessible name and this sentence in that name
+    is what broke this very case. What the figure is *called* is asserted below;
+    the text content now legitimately holds more than the name.
+  */
+  await expect(page.locator("figcaption")).toContainText(
+    "Carte du monde, recadrée sur les voyages publiés : 5 voyages, 5 pays"
+  );
+  await expect(page.getByRole("figure")).toHaveAccessibleName(
     "Carte du monde, recadrée sur les voyages publiés : 5 voyages, 5 pays"
   );
 });

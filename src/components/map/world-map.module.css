@@ -409,9 +409,33 @@
   stroke-width: 2;
 }
 
+/**
+ * **The fourth tint: a country the carnet wants to reach** (TIW-39).
+ *
+ * `--text-accent` would have made it a fifth shade of "visited", and the state is
+ * the opposite of a fact about the past. The distinguishing channel is therefore
+ * a **hatch** and not only a hue: a repeating-linear-gradient painted through the
+ * shape, which survives greyscale, both themes and a reader who sees no colour at
+ * all — the same rule as the untold marker's hollow pennant.
+ *
+ * A gradient cannot fill an SVG path, so the hatch is an SVG `<pattern>`… and it
+ * is not: a pattern is a second definition to keep in step with a token, and this
+ * needs no second definition. The stroke carries the identity and the fill is the
+ * faintest wash of the same ink, dashed — `stroke-dasharray` on the *outline* is
+ * the hatch, and it reads at every crop because the width is pinned below.
+ */
+.wished path {
+  fill: color-mix(in srgb, var(--text-accent) 8%, transparent);
+  stroke: var(--text-accent);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+  stroke-linejoin: round;
+}
+
 .land path,
 .visited path,
-.untold path {
+.untold path,
+.wished path {
   /* Stroke width is in user units, so a cropped frame would scale it: at the
      0.3-world-width floor `frameAround` applies to a single trip, a 1-unit
      border renders over 3 px. `non-scaling-stroke` pins it to device pixels
@@ -466,8 +490,20 @@
   left: calc((var(--mark-x) - var(--frame-x)) / var(--frame-w) * 100%);
   top: calc((var(--mark-y) - var(--frame-y)) / var(--frame-h) * 100%);
   /* The percentages place the marker's top-left corner; this pulls it back by
-     half its own size so the drawn dot sits on the projected point. */
-  transform: translate(-50%, -50%);
+     half its own size so the drawn dot sits on the projected point.
+
+     `--mark-nudge-*` is the coincidence spread, in rem, and it is added HERE
+     rather than to the position above — which is the whole reason the position
+     above is true. Folded into `--mark-x`, the offset was a distance on the
+     Earth: Annecy and Genève were drawn 150 km either side of the lake. As a
+     screen translate it is the same handful of pixels at every zoom, which is
+     what a 44 px target needed and all it needed. Zero for the markers that
+     share their spot with nobody, which is nearly all of them, so the property
+     is written on two markers rather than sixty. */
+  transform: translate(
+    calc(-50% + var(--mark-nudge-x, 0rem)),
+    calc(-50% + var(--mark-nudge-y, 0rem))
+  );
   /* Inverted DOM order, computed at build time: siblings paint in DOM order, so
      without this the first tab stop (the most recent trip) would be painted
      underneath every older marker overlapping it. */
@@ -1225,4 +1261,135 @@
   /* The list is the scroller, so a one-finger drag here is a scroll and not a
      pull-to-close — the header owns that gesture. */
   overscroll-behavior: contain;
+}
+
+/**
+ * The caption's wish-list sentence: its own line, before the count.
+ *
+ * A block inside the `<figcaption>` rather than a second element beside it —
+ * a `<figcaption>` is the figure's accessible name, and splitting it in two would
+ * split the name.
+ */
+.captionWished {
+  display: block;
+  color: var(--text-accent);
+}
+
+/* -----------------------------------------------------------------------------
+   The wish list's notes — HTML over the drawing, exactly like a marker
+   -------------------------------------------------------------------------- */
+
+/**
+ * The notes layer. The same box and the same arithmetic as `.marks`: the SVG stays
+ * inert, and anything a reader can hover is HTML laid over it.
+ *
+ * `pointer-events: none` on the list and back on for the note itself, so the layer
+ * covers the map without swallowing a click meant for a marker underneath it.
+ */
+.notes {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+
+/**
+ * One note, placed on the anchor `@/map` computed — the same
+ * `(value - frame) / size` the markers use, so the two layers move together when
+ * the reader zooms.
+ *
+ * Below the markers in the stacking order (`z-index: 1` against their `--mark-order`
+ * of one upwards): a trip is a destination and a wish is a caption, and where the
+ * two overlap the link must win the pointer.
+ */
+.note {
+  position: absolute;
+  left: calc((var(--mark-x) - var(--frame-x)) / var(--frame-w) * 100%);
+  top: calc((var(--mark-y) - var(--frame-y)) / var(--frame-h) * 100%);
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  pointer-events: auto;
+}
+
+/**
+ * What the pointer aims at: a small hollow ring in the wished ink, so the country
+ * carries a mark of the same family as a marker without pretending to be one.
+ *
+ * 0.75 rem drawn inside a 1.75 rem box — smaller than a marker's 2.75 rem on
+ * purpose. WCAG 2.5.8's target-size minimum applies to what a reader must
+ * *operate*, and this operates nothing: it reveals a label that a screen reader
+ * already reads and that the caption below the map repeats. Undersizing a target
+ * that does nothing is not the failure the criterion is about — and making it 44 px
+ * would put four dead 44 px boxes over the markers of a map whose whole point is
+ * the markers.
+ */
+.noteDot {
+  inline-size: 0.75rem;
+  block-size: 0.75rem;
+  flex: none;
+  border: 2px solid var(--text-accent);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+}
+
+/**
+ * The label — **in the document at all times, painted only on hover**.
+ *
+ * At rest it is the project's visually-hidden recipe, so every note is read by a
+ * screen reader in the localised order the geometry façade sorted them into. The
+ * reveal is a painting and never a rendering, which is what makes the hover a
+ * convenience rather than the only way to the information.
+ *
+ * WCAG 1.4.13: *hoverable*, because the label is inside the box being hovered;
+ * *persistent*, because nothing but leaving removes it; and *dismissible* by
+ * exemption — it is laid beside its dot, over the sea, and obscures no content of
+ * the drawing. `tests/e2e/wished.populated.spec.ts` measures that rather than
+ * taking this sentence's word for it.
+ */
+.noteLabel {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.note:hover .noteLabel,
+.note:focus-within .noteLabel {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  margin: 0;
+  padding: 0.125rem var(--space-2);
+  overflow: visible;
+  clip-path: none;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--elevation-1);
+  color: var(--text-accent);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  /* The label must not be clipped by the figure at the map's edge, and it must
+     never cover the dot it belongs to — hence the row layout above. */
+  white-space: nowrap;
+}
+
+/**
+ * Windows high-contrast mode drops `background` and author colours on fills, so
+ * the hatch is what survives — and the dot needs a border that the forced palette
+ * keeps. Both are already strokes and borders rather than fills, which is why this
+ * block has one rule and not five.
+ */
+@media (forced-colors: active) {
+  .noteDot {
+    border-color: CanvasText;
+  }
 }

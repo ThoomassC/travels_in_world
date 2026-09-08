@@ -60,9 +60,28 @@ export type TripCatalogueProps = {
    * reader is promised.
    */
   readonly freshSlug?: string;
+  /**
+   * Each trip's filter tokens, keyed on its slug — `all country-FR year-2024`.
+   *
+   * **The catalogue does no filtering.** It marks its entries and its two levels
+   * of grouping; `src/components/filters/facet-stylesheet.ts` writes the rules
+   * that read those marks, and `FacetFilter` is the control that switches between
+   * them. The split is what keeps a filter out of a component whose job is to
+   * file a trip under its first arrival — and what lets `/villes` wear the same
+   * filter over a list that shares nothing with this one.
+   *
+   * Optional, because a listing with nothing to choose between renders no
+   * control: the marks are then absent rather than empty.
+   */
+  readonly facetTokens?: ReadonlyMap<string, string>;
 };
 
-export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps): ReactElement {
+export function TripCatalogue({
+  trips,
+  locale,
+  freshSlug,
+  facetTokens,
+}: TripCatalogueProps): ReactElement {
   const t = useTranslations("trips");
   const collator = collatorFor(locale);
 
@@ -102,7 +121,17 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
   return (
     <div className={styles.catalogue}>
       {groups.map((group) => (
-        <section key={group.continent ?? "unplaced"} className={styles.continent}>
+        <section
+          key={group.continent ?? "unplaced"}
+          className={styles.continent}
+          /*
+            `continent` and `country` below are the level, not the axis: what the
+            generated rule needs is "this box is a group, hide it when it holds no
+            matching entry", and the value is there so a reader of the markup can
+            tell the two boxes apart.
+          */
+          data-facet-group={facetTokens === undefined ? undefined : "continent"}
+        >
           {singleGroup ? null : (
             <div className={styles.continentHeader}>
               <h2 className={styles.continentHeading}>{group.continentName}</h2>
@@ -112,7 +141,19 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
                 heading hears "Asie 12 voyages" twelve times over instead of the
                 chapter titles they are scanning for.
               */}
-              <p className={styles.count}>{t("continentCount", { count: group.tripCount })}</p>
+              {/*
+                `data-facet-total`: this number counts the whole chapter, which
+                stops being true the moment a choice hides half of it. The filter's
+                Module drops it for as long as one is active, and the count line
+                under the control — the number the reader has just changed —
+                answers instead.
+              */}
+              <p
+                className={styles.count}
+                data-facet-total={facetTokens === undefined ? undefined : ""}
+              >
+                {t("continentCount", { count: group.tripCount })}
+              </p>
             </div>
           )}
 
@@ -145,6 +186,7 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
                 key={country.countryCode}
                 id={`pays-${country.countryCode}`}
                 className={styles.country}
+                data-facet-group={facetTokens === undefined ? undefined : "country"}
               >
                 {singleGroup ? (
                   <h2 className={`${styles.countryHeading} ${styles.countryHeadingTop}`}>
@@ -189,7 +231,11 @@ export function TripCatalogue({ trips, locale, freshSlug }: TripCatalogueProps):
                       primary key, and `buildCatalogue` files each trip exactly
                       once.
                     */
-                    <li key={trip.slug} id={`voyage-${trip.slug}`}>
+                    <li
+                      key={trip.slug}
+                      id={`voyage-${trip.slug}`}
+                      data-facets={facetTokens?.get(trip.slug)}
+                    >
                       <TripCard
                         trip={trip}
                         locale={locale}

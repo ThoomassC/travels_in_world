@@ -1,0 +1,22 @@
+# Les pays « à venir » du carnet de démonstration (TIW-39).
+#
+# DEUX, ET LEUR CHOIX EST ARITHMÉTIQUE, pas décoratif. Les deux contraintes que
+# la suite end-to-end fait porter à ce fichier :
+#
+#   - ils tombent STRICTEMENT à l'intérieur de l'emprise des cinq balises
+#     (Cusco à l'ouest et au sud, Tokyo à l'est, Reykjavik au nord), donc le
+#     cadre reste « viewBox="177.3 0 764.4 398.2" » et aucun test qui affirme ce
+#     cadre n'a eu à bouger pour une raison qui n'est pas la sienne. C'est la
+#     même règle que Marrakech, pour la même raison ;
+#   - ils sont à plus de 44 px de toute balise et l'un de l'autre au rendu de la
+#     suite (1280 px de large). Une note et une balise qui se recouvrent font
+#     tomber la règle « target-size » d'axe, et l'audit de
+#     « map-equivalent.populated.spec.ts » exige zéro violation.
+#
+# Le Portugal — le vrai souhait du propriétaire — est écarté ici pour la seconde
+# raison : il est à la même longitude que Marrakech, à 8° de latitude, soit 37 px
+# au rendu de la suite. Ce serait un défaut de fixture, pas un défaut du site.
+
+countries:
+  - HR # Croatie — 16,5° E / 45,8° N, loin de tout point du carnet
+  - VN # Viêt Nam — 105° E / 22° N, à 27° de Tokyo et d'Osaka

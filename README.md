@@ -560,15 +560,50 @@ chose de ce dépôt qui ait dépassé le budget de deux. L'argument est dans l'e
    serveur — le même geste que `MapViewport` avec ses balises et ses cartes. L'index existe
    donc **une seule fois**, en HTML, et n'est jamais aussi sérialisé dans la charge utile.
 
-**Sans JavaScript, ce n'est pas un lot de consolation.** La coquille est un `<details>` natif :
-on l'ouvre et le panneau montre l'index complet — chaque voyage, chaque lieu, chaque pays,
-chaque page — en liens réels, groupés, tous atteignables au Tab. Aucun `tabindex` n'est rendu
-par le serveur, et c'est délibéré : le motif combobox d'ARIA 1.2 en poserait un à `-1` sur
-chaque ligne, ce qui les sortirait de l'ordre de tabulation précisément pour le lecteur qui
-n'a pas de script. Les flèches déplacent donc le **vrai focus** sur le **vrai lien** — Entrée,
-clic du milieu et Cmd-clic marchent parce que ce sont des liens, et rien n'a à être tenu en
-phase. Prouvé par échec volontaire : ajouter `tabIndex={-1}` sort 21 lignes de l'ordre de
-tabulation et fait rougir `tests/e2e/search.populated.spec.ts`.
+**LE CHAMP EST OUVERT EN PERMANENCE ET LA DIVULGATION EST DU CSS**, depuis que le
+propriétaire a choisi cette direction sur une planche de cinq. Il n'y a plus de `<summary>` :
+un champ de 20 rem vit dans la barre, et ce qui ouvre le panneau est `:focus-within` dans la
+feuille de style. Le lecteur sans JavaScript tabule dans le champ et **l'index complet du site
+apparaît** — chaque voyage, chaque lieu, chaque pays, chaque page, en liens réels — sans un
+clic. C'est strictement mieux que la divulgation que ça remplace. Le script n'a qu'un mot à
+dire : `data-dismissed`, écrit sur Échap, effacé à la frappe suivante. Le cadre du champ est
+un `<label>` et non un `<div>`, ce qui rend toute la pastille cliquable sans une ligne de
+script — et c'est ce qui la sauve sur une barre étroite, où l'entrée fait zéro pixel de large.
+
+**Les lignes sortent de l'ordre de tabulation, et c'est le CLIENT qui les en sort** — le seul
+endroit du dessin où les deux lecteurs reçoivent un DOM différent. Le panneau s'ouvrant au
+focus, la tabulation suivante entrait dedans : mesuré, `map-equivalent.populated.spec.ts`
+n'atteignait plus les balises de la carte en trente pressions, vingt et une suggestions
+s'étant intercalées entre l'en-tête et la page — sur chaque document du site. Un
+`tabIndex={-1}` rendu par le serveur réparerait ça et casserait l'autre lecteur, celui pour
+qui ce panneau **est** l'index et Tab la seule façon d'y circuler. L'attribut est donc écrit
+au montage : avec script, le marché du combobox — les flèches pour entrer, Entrée pour suivre,
+Tab pour passer outre ; sans script, une liste entièrement tabulable. Les flèches déplacent le
+**vrai focus** sur le **vrai lien**, donc Entrée, clic du milieu et Cmd-clic marchent parce que
+ce *sont* des liens.
+
+**Les suggestions d'un voyage sont illustrées** — la seconde moitié du choix du propriétaire.
+Une vignette, une seconde ligne « pays · N étapes · année », et le **fanion du planisphère**,
+plein en accent pour un récit écrit, creux et cerné de secondaire pour un récit à venir : la
+même paire que les balises de la carte, choisie là-bas parce qu'elle survit au niveau de gris.
+La vignette est un rectangle en plate carrée avec un graticule et **aucune côte** : la maquette
+en dessinait une, différente par ligne, sous un point posé à la vraie longitude — un dessin qui
+trompe précisément le lecteur qui le regarde de près. Le point est la seule chose qui informe.
+Les deux dessins sont des `<symbol>` définis **une fois par document** et référencés par
+`<use>` : soixante bytes la ligne au lieu de la donnée de tracé répétée. Le fanion est une
+copie du chemin de `src/components/map/mark-art.ts` — la règle ESLint qui garde `src/map`
+derrière sa façade refuse tout spécificateur ayant un segment après `map`, et le seul autorisé
+est un baril qui tirerait `WorldMap` dans le graphe de chaque document pour lire deux chaînes ;
+`tests/components/search/search-art.test.ts` compare les deux orthographes et refuse la dérive.
+
+**La complétion en ligne** est native et non un fantôme posé à côté du champ : l'entrée porte
+le libellé entier et la part au-delà de ce qui a été tapé est **sélectionnée**, donc la frappe
+suivante la remplace. Une seconde boîte devrait être alignée à la main sur une fonte
+proportionnelle ; une sélection l'est par construction. Jamais sur une suppression — sinon
+Retour arrière remet le texte qu'on l'a pressé pour retirer. Et la décision se prend dans le
+gestionnaire de frappe, pas dans un effet : mesuré, l'effet rendait une fois avec la nouvelle
+requête et l'ancienne complétion, si bien que deux Retour arrière sur « Islande, cercle d'or »
+laissaient « i » au lieu de « Is ».
 
 **Ce que ça coûte, mesuré.** L'index est dans le HTML de **chaque** document, parce que le
 chrome l'est. Sur le contenu réel — 13 voyages, 36 lignes — c'est **11,7 Kio de balisage**,
@@ -588,13 +623,79 @@ repliés dans la botte de foin du voyage. Le jour où un champ de corps existe, 
 dit en toutes lettres, pour que l'absence soit une décision consignée et non un manque que
 quelqu'un redécouvrira.
 
-Deux défauts que seul le navigateur a vus, notés parce qu'ils se reproduiraient :
-**les intitulés de groupe étaient des `<h2>`** et, l'en-tête précédant `<main>`, ils faisaient
+Quatre défauts que seul le navigateur a vus, notés parce qu'ils se reproduiraient.
+**Les intitulés de groupe étaient des `<h2>`** et, l'en-tête précédant `<main>`, ils faisaient
 commencer le plan de titres de chaque page au niveau 2 — cinq cas de
 `heading-order.populated.spec.ts` d'un coup ; ce sont des `<p>` reliés par `aria-labelledby`.
-Et **le panneau s'ouvrait sous le logo** : `.inner` est une grille à trois colonnes dont celle
+**Le panneau s'ouvrait sous le logo** : `.inner` est une grille à trois colonnes dont celle
 du milieu centre la navigation, un quatrième enfant a pris la première cellule, vide par
 construction. La recherche et le menu de langue partagent maintenant une même zone à droite.
+**Vingt et une suggestions s'étaient glissées dans le parcours clavier** de chaque page, dit
+plus haut. Et **la région défilante n'était plus atteignable au clavier** une fois les lignes
+sorties de la tabulation — `scrollable-region-focusable`, sérieux, dans les deux thèmes : le
+défilement, le nom accessible et un unique `tabindex="0"` sont maintenant sur le même élément,
+un arrêt juste après le champ qui annonce les suggestions et passe la main aux flèches.
+
+**Les filtres des deux listings n'ont PAS pris de quatrième `'use client'`**, et c'est la
+décision à connaître avant d'en toucher un. `/fr/voyages` et `/fr/villes` portent un groupe
+de boutons radio au-dessus de leur liste ; ce qui masque les entrées est une **feuille de
+style générée au build**, une règle par choix, imprimée dans le document. Le budget reste
+donc à **trois**.
+
+1. **Pourquoi pas d'état.** Toutes les routes sont prérendues, donc une page `?pays=FR` se
+   rendrait à la demande — l'invariant 1. Et un filtre est une _sélection_, pas une
+   interaction : un groupe de radios se souvient tout seul de ce qui est coché, les flèches
+   y déplacent le choix, un `<label>` élargit la cible. `:has()` lit l'état depuis le CSS.
+   Rien de tout cela n'a à être réécrit.
+2. **Un seul choix actif, tous axes confondus**, et ce n'est pas une limitation subie :
+   toutes les radios d'une page partagent un `name`, donc choisir une année efface un pays.
+   Deux propriétés en découlent. Le nombre écrit sur chaque pastille est **exactement** ce
+   qui reste — croisé avec un second axe, il faudrait un nombre par combinaison, ce que le
+   CSS ne sait pas calculer — et **un résultat vide devient inatteignable** plutôt
+   qu'arbitré, puisqu'un choix n'existe que pour une valeur que la collection porte. C'est
+   le même geste que les deux bandeaux mutuellement exclusifs de l'accueil.
+3. **Les axes sont choisis sur le contenu réel, pas sur l'habitude.** `/voyages` filtre par
+   **pays traversé** et par **année de départ** ; `/villes` par **pays**. Continent, état du
+   récit et tags ont été écartés parce qu'ils n'ont qu'une valeur aujourd'hui — et c'est
+   `buildFacetIndex` qui les écarte, pas un `if` : un groupe à une seule valeur est
+   supprimé, donc l'axe réapparaîtra tout seul le jour où le carnet sortira d'Europe.
+   Le pays est celui de **toutes** les étapes et non celui du classement : `buildCatalogue`
+   range un voyage sous sa première arrivée et notait le prix de ce compromis — « le jour
+   où ça devient le mauvais arbitrage est le jour où les filtres arrivent ».
+
+**Ce que ça coûte, et ce qui le prouve.** La feuille générée est linéaire dans le nombre de
+choix — deux règles par valeur — et vaut aujourd'hui une poignée de lignes sur `/fr/voyages`.
+Zéro octet de JavaScript : il n'y a rien à hydrater. Le seul garde possible est un navigateur,
+parce qu'aucune assertion Node ne distingue une feuille appliquée d'une feuille absente :
+`tests/e2e/filters.populated.spec.ts` coche un filtre sur un build réel, compte ce qui reste,
+passe axe, et **refait la même chose avec JavaScript désactivé** — ce dernier cas est le garde
+du budget de frontières, pas une politesse.
+
+**La quatrième teinte de la carte — les pays « à venir »** (Croatie, Italie, Portugal,
+Monténégro) — tient dans `content/wishlist.yaml`, quatre lignes de codes ISO que
+`npm run validate:content` juge avant chaque build : un code que le fond de carte 50m ne
+sait pas dessiner est nommé un par un, et un pays déjà visité est refusé parce que la carte
+peint une forme une fois et que les deux teintes se recouvriraient.
+
+**Le survol n'a pas rendu le dessin interactif**, ce qui était l'écueil : le SVG reste
+`aria-hidden` et sans `pointer-events`, et la note est du HTML posé dessus, sur un point
+que `src/map/anchor.ts` calcule à l'intérieur de la forme — la même mécanique qu'une
+balise, donc les deux zooment ensemble. `docs/adr/0003` porte l'arbitrage complet ; les
+trois points qui décident du reste :
+
+- **l'étiquette est dans le document en permanence**, masquée visuellement, et le survol ne
+  fait que la peindre. Une synthèse vocale lit les quatre notes au repos — c'est ce qui
+  autorise l'absence de `tabindex`, car un arrêt de tabulation dont le seul effet serait de
+  révéler un texte déjà lu est un arrêt qui n'existe pour personne ;
+- **une phrase visible dans la légende** pour le lecteur que ni le survol ni les notes ne
+  servent : celui qui voit et n'a pas de survol. Elle est `aria-hidden`, parce qu'une
+  `<figcaption>` est le nom accessible de la figure et que la phrase dans ce nom a fait
+  rougir trois cas d'un coup ;
+- **la teinte ne porte pas l'état seule** : le contour est tireté, donc la différence
+  survit au niveau de gris et aux deux thèmes.
+
+WCAG 1.4.13 est mesuré et non affirmé : `tests/e2e/wished.populated.spec.ts` révèle une
+note et vérifie balise par balise qu'elle n'en recouvre aucune.
 
 **Dépendances écartées** (délibérément, ne pas les rajouter sans ticket) : bibliothèque de
 carte côté client (Leaflet, MapLibre), gestionnaire d'état (Redux, Zustand), client HTTP ou

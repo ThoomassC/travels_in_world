@@ -4,6 +4,7 @@ import {
   matchesQuery,
   normaliseForSearch,
   type SearchGroup,
+  type SearchIndexInput,
   type SearchLabels,
   type SearchableTrip,
 } from "@/components/search/entries";
@@ -24,22 +25,55 @@ import {
  * Everything that is not interaction lives here, on the server side of the line.
  */
 
-/** Labels that do not localise: a country's name is its code. */
+/**
+ * Labels that do not localise: a country's name is its code, and the plural is
+ * spelt out rather than resolved. That is the point of the callbacks — the module
+ * under test knows no language, so the fixture can be arithmetic.
+ */
 const CODE_LABELS: SearchLabels = {
   countryName: (code) => code,
   compare: (left, right) => left.localeCompare(right, "fr"),
+  stepCount: (count) => `${count} étapes`,
+  unwritten: "récit à venir",
 };
+
+/** Greenwich on the equator — the middle of the vignette, so an offset shows. */
+const NOWHERE = { lat: 0, lon: 0 };
+
+/**
+ * A stand-in for `@/map`'s `countryTile(...).place`, and a deliberately dumb one:
+ * this module's job is to *pair* a place with its country's projection, never to
+ * project. A real Mercator here would test d3 — `tests/map/country-tile.test.ts`
+ * does that, on real coastlines.
+ *
+ * `ZZ` answers `undefined`, which is how a country the dataset cannot draw
+ * behaves: the row keeps its words and loses its vignette.
+ */
+const TILE_POINT_OF: SearchIndexInput["tilePointOf"] = ({ countryCode, coordinates }) =>
+  countryCode === "ZZ" ? undefined : { x: coordinates.lon, y: coordinates.lat };
+
+const place = (name: string, countryCode: string, coordinates = NOWHERE) => ({
+  name,
+  countryCode,
+  coordinates,
+});
 
 const trip = (
   slug: string,
   title: string,
-  places: readonly { name: string; countryCode: string }[],
+  places: readonly {
+    name: string;
+    countryCode: string;
+    coordinates: { lat: number; lon: number };
+  }[],
   extra: Partial<SearchableTrip> = {}
 ): SearchableTrip => ({
   slug,
   title,
   startDate: "2024-01-01",
+  endDate: "2024-01-08",
   story: "written",
+  steps: [{}, {}],
   places,
   photos: [],
   tags: [],
@@ -52,11 +86,8 @@ const trip = (
  * crosses a border.
  */
 const TRIPS: readonly SearchableTrip[] = [
-  trip("corse-2024", "Corse", [
-    { name: "Corte", countryCode: "FR" },
-    { name: "Bonifacio", countryCode: "FR" },
-  ]),
-  trip("roses-2024", "Roses", [{ name: "Roses", countryCode: "ES" }]),
+  trip("corse-2024", "Corse", [place("Corte", "FR"), place("Bonifacio", "FR")]),
+  trip("roses-2024", "Roses", [place("Roses", "ES")]),
 ];
 
 const entries = (trips = TRIPS) =>
@@ -68,6 +99,7 @@ const entries = (trips = TRIPS) =>
     countriesHref: "/fr/voyages",
     placesHref: "/fr/villes",
     pages: [],
+    tilePointOf: TILE_POINT_OF,
   });
 
 describe("normaliseForSearch", () => {
@@ -188,7 +220,7 @@ describe("buildSearchEntries", () => {
    */
   it("sends an untold trip to its entry in the listing, never to a page that does not exist", () => {
     const built = entries([
-      trip("crete-2025", "Crète", [{ name: "Héraklion", countryCode: "GR" }], {
+      trip("crete-2025", "Crète", [place("Héraklion", "GR")], {
         story: "unwritten",
       }),
     ]);
@@ -212,10 +244,10 @@ describe("buildSearchEntries", () => {
   it("counts one row per name-and-country pair, not per mention", () => {
     const built = entries([
       trip("a", "A", [
-        { name: "Valence", countryCode: "FR" },
-        { name: "Valence", countryCode: "ES" },
+        place("Valence", "FR"),
+        place("Valence", "ES"),
       ]),
-      trip("b", "B", [{ name: "Valence", countryCode: "FR" }]),
+      trip("b", "B", [place("Valence", "FR")]),
     ]);
 
     expect(built.filter((entry) => entry.label === "Valence")).toHaveLength(2);
@@ -229,7 +261,7 @@ describe("buildSearchEntries", () => {
    */
   it("makes a trip findable by its places, its countries, its tags and its photo captions", () => {
     const built = entries([
-      trip("japon-2024", "Japon, printemps 2024", [{ name: "Tokyo", countryCode: "JP" }], {
+      trip("japon-2024", "Japon, printemps 2024", [place("Tokyo", "JP")], {
         tags: ["train", "randonnee"],
         photos: [{ alt: "Une ruelle de Shinjuku sous la pluie" }],
       }),
@@ -256,7 +288,7 @@ describe("buildSearchEntries", () => {
    */
   it("indexes the only free text a récit owns: captions and tags", () => {
     const built = entries([
-      trip("t", "Titre", [{ name: "Lieu", countryCode: "FR" }], {
+      trip("t", "Titre", [place("Lieu", "FR")], {
         photos: [{ alt: "Le chemin des philosophes au petit matin" }, { alt: "" }],
         tags: ["velo"],
       }),
@@ -277,8 +309,8 @@ describe("buildSearchEntries", () => {
   it("keeps a multi-word place name whole, name and country both", () => {
     const built = entries([
       trip("v", "Vendée", [
-        { name: "Les Sables-d'Olonne", countryCode: "FR" },
-        { name: "Noirmoutier-en-l'Île", countryCode: "FR" },
+        place("Les Sables-d'Olonne", "FR"),
+        place("Noirmoutier-en-l'Île", "FR"),
       ]),
     ]);
     const places = built.filter((entry) => entry.group === "places");
@@ -316,7 +348,8 @@ describe("buildSearchEntries", () => {
         { label: "Carte", href: "/fr" },
         { label: "À propos", href: "/fr/a-propos" },
       ],
-    });
+    tilePointOf: TILE_POINT_OF,
+  });
 
     expect(built.slice(-2).map((entry) => entry.label)).toEqual(["Carte", "À propos"]);
     expect(built.slice(-2).every((entry) => entry.group === "pages")).toBe(true);
@@ -337,5 +370,133 @@ describe("buildSearchEntries", () => {
 
     expect(firstOf("trips")).toBeLessThan(firstOf("places"));
     expect(firstOf("places")).toBeLessThan(firstOf("countries"));
+  });
+});
+
+/**
+ * The illustrated row the owner chose from a sheet of five — direction 3's field
+ * with direction 5's suggestions. Two things reach the markup from here: a second
+ * line of three fields, and three numbers for the vignette.
+ */
+describe("what an illustrated trip row carries", () => {
+  const rowFor = (trips: readonly SearchableTrip[]) =>
+    entries(trips).find((entry) => entry.group === "trips");
+
+  it("says where, how long and when, in that order", () => {
+    const row = rowFor([
+      trip("corse-2024", "Corse", [place("Corte", "FR"), place("Bonifacio", "FR")], {
+        steps: [{}, {}, {}, {}, {}, {}],
+      }),
+    ]);
+
+    expect(row?.detail).toBe("FR · 6 étapes · 2024");
+  });
+
+  /** A trip that crosses a border names both countries, in the order it met them. */
+  it("names every country a trip crossed, once each", () => {
+    const row = rowFor([
+      trip("perou-2023", "Pérou et Bolivie", [
+        place("Cusco", "PE"),
+        place("La Paz", "BO"),
+        place("Puno", "PE"),
+      ]),
+    ]);
+
+    expect(row?.detail.startsWith("PE, BO · ")).toBe(true);
+  });
+
+  /** A trip that crosses a new year says so rather than picking one of the two. */
+  it("gives both years when the trip crosses one", () => {
+    const row = rowFor([
+      trip("reveillon", "Réveillon", [place("Gand", "BE")], {
+        startDate: "2023-12-28",
+        endDate: "2024-01-03",
+      }),
+    ]);
+
+    expect(row?.detail.endsWith(" · 2023–2024")).toBe(true);
+  });
+
+  /**
+   * **An untold trip says so in words, where its date would be.** That is the
+   * second channel the pennant's colour needs: `docs/adr/0003` and every marker
+   * on the map hold the same rule — a state carried by colour alone is a state
+   * some readers do not have.
+   */
+  it("puts the words where the date would be, on a trip with no récit", () => {
+    const row = rowFor([
+      trip("maroc-2023", "Maroc", [place("Marrakech", "MA")], { story: "unwritten" }),
+    ]);
+
+    expect(row?.detail.endsWith(" · récit à venir")).toBe(true);
+    expect(row?.detail).not.toContain("2024");
+  });
+
+  /**
+   * The vignette names a country and a point inside it, and both come from the
+   * trip's **first** place — the same point the world map anchors its marker on,
+   * so a row and a marker never disagree about where a trip left from.
+   *
+   * The projection itself is not here: it is `@/map`'s, behind a server-only
+   * façade, and this module receives it as a callback. What is asserted is the
+   * *pairing* — that the country and the coordinates handed to it are the first
+   * place's and not another's.
+   */
+  it("names the first place's country and places the dot there", () => {
+    const row = rowFor([
+      trip("crete-2025", "Crète", [
+        place("Héraklion", "GR", { lat: 35.32787, lon: 25.14341 }),
+        // The second place must not move the dot, nor name the tile.
+        place("La Canée", "GR", { lat: 35.51, lon: 24.02 }),
+      ]),
+    ]);
+
+    // `TILE_POINT_OF` is the identity on longitude and latitude — see its note.
+    expect(row?.art).toEqual({ country: "GR", x: 25.14341, y: 35.32787, told: true });
+  });
+
+  /**
+   * **A country the dataset cannot draw costs the row its ornament and nothing
+   * else.** The failure mode is stated here because it is the one the reader meets:
+   * a row with no vignette still says where the trip went, in words.
+   */
+  it("gives no art when the country has no tile", () => {
+    const row = rowFor([
+      trip("nulle-part", "Nulle part", [place("Ailleurs", "ZZ", { lat: 1, lon: 1 })]),
+    ]);
+
+    expect(row?.art).toBeUndefined();
+    expect(row?.detail).toContain("ZZ");
+  });
+
+  it("marks an untold trip's art, which is what draws a hollow pennant", () => {
+    const row = rowFor([
+      trip("maroc-2023", "Maroc", [place("Marrakech", "MA")], { story: "unwritten" }),
+    ]);
+
+    expect(row?.art?.told).toBe(false);
+  });
+
+  /**
+   * **Only trips.** A place, a country and a page get a plain row — the shape the
+   * mock-up drew, and the shape the panel's byte budget can afford: the index is
+   * in the HTML of every document on the site.
+   */
+  it("gives no art to a place, a country or a page", () => {
+    const rows = buildSearchEntries({
+      trips: TRIPS,
+      labels: CODE_LABELS,
+      tripHref: (slug) => `/fr/voyages/${slug}`,
+      tripEntryHref: (slug) => `/fr/voyages#voyage-${slug}`,
+      countriesHref: "/fr/voyages",
+      placesHref: "/fr/villes",
+      pages: [{ label: "À propos", href: "/fr/a-propos" }],
+      tilePointOf: TILE_POINT_OF,
+    });
+
+    for (const row of rows.filter((entry) => entry.group !== "trips")) {
+      expect(row.art).toBeUndefined();
+    }
+    expect(rows.filter((entry) => entry.art !== undefined)).toHaveLength(TRIPS.length);
   });
 });

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { buildSearchEntries } from "@/components/search/entries";
+import { countryTile } from "@/map";
 import { collatorFor, countryNameOf } from "@/components/trips/format";
 import { JournalNotice } from "@/components/site/journal-notice";
 import { PaperGrain } from "@/components/site/paper-grain";
@@ -127,6 +128,13 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
    */
   const noRecitYet = holdsNoStory(await listTripSummaries());
 
+  /*
+    The search's own catalogue. A second namespace rather than reaching into
+    `t` above: `trips` and `search` are two vocabularies, and a row that read a
+    card's wording would drift the day the card's changed.
+  */
+  const search = await getTranslations({ locale, namespace: "search" });
+
   /**
    * **The search index, built once per document and rendered as markup.**
    *
@@ -155,6 +163,14 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
     labels: {
       countryName: (code) => countryNameOf(locale, code),
       compare: collatorFor(locale).compare,
+      /*
+        The plural is resolved here and never in `entries.ts`: plural rules are a
+        property of the language, next-intl owns them, and a pure module that
+        picked a form would be a second implementation of French and Spanish.
+        One call per trip, at build time.
+      */
+      stepCount: (count) => search("stepCount", { count }),
+      unwritten: search("unwritten"),
     },
     tripHref: (slug) => localePathname({ href: tripPath(slug), locale }),
     /*
@@ -165,6 +181,13 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
     */
     tripEntryHref: (slug) =>
       localePathname({ href: `${tripsPath()}#voyage-${slug}`, locale }),
+    /*
+      **The vignette's geometry, and the only place it can be computed.**
+      `@/map` is server-only and `entries.ts` is pure, so the projection is handed
+      over as a callback exactly as the country's name is. `countryTile` memoises
+      per code, so thirteen trips over five countries build five projections.
+    */
+    tilePointOf: (place) => countryTile(place.countryCode)?.place(place.coordinates),
     countriesHref: localePathname({ href: tripsPath(), locale }),
     placesHref: localePathname({ href: placesPath(), locale }),
     pages: [
@@ -174,6 +197,28 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
       { label: t("navAbout"), href: localePathname({ href: aboutPath(), locale }) },
     ],
   });
+
+  /**
+   * **One outline per country the suggestions reach, deduplicated here.**
+   *
+   * Nine of this carnet's thirteen trips are French, and the panel is in the HTML
+   * of every document on the site: as one `<symbol>` referenced nine times that
+   * country costs 658 bytes rather than six thousand. Derived from the entries
+   * rather than from the trips, so a trip whose country the dataset cannot draw
+   * simply has no `art` and contributes no outline — the row keeps its words.
+   *
+   * `Map` and not a `Set` of codes plus a second lookup: the order is the order
+   * the trips arrive in, which is the content façade's sort, which is what keeps
+   * the prerendered markup byte-identical between two builds.
+   */
+  const searchCountries = [
+    ...new Map(
+      searchEntries
+        .map((entry) => entry.art?.country)
+        .filter((code): code is string => code !== undefined)
+        .map((code) => [code, countryTile(code)])
+    ),
+  ].flatMap(([code, tile]) => (tile === undefined ? [] : [{ code, path: tile.path }]));
 
   return (
     <html lang={locale}>
@@ -231,7 +276,11 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
             subtree as the pages means one place decides what "the current locale"
             is.
           */}
-          <SiteNav locale={locale} searchEntries={searchEntries} />
+          <SiteNav
+            locale={locale}
+            searchEntries={searchEntries}
+            searchCountries={searchCountries}
+          />
           {/*
             The journal-state notice (TIW-35), and its three positions in this file
             are each a decision.

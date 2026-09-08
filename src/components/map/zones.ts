@@ -76,13 +76,15 @@ const round = (value: number): number => Number(value.toFixed(2));
  * sixty markers without React re-rendering one of them, and without the 177
  * `<path>` elements ever reaching the client bundle.
  *
- * **It is deliberately applied after `spreadCoincident`.** The nudge that pulls
- * two trips off a shared city is a percentage of the frame; converted here it
- * becomes a fixed distance in world units, so it grows on screen as the reader
- * zooms and the pair genuinely separates. Keeping the percentages would have
- * pinned them exactly as overlapped at every zoom level — the defect
- * `docs/adr/0003-carte-svg-inerte-et-balises-html.md` records as this ticket's to
- * fix.
+ * **What it converts is the marker's true position, and that is a correction.**
+ * `spreadCoincident` used to fold its overlap nudge into the percentages before
+ * this ran, on the reasoning that the conversion would then turn the nudge into a
+ * world distance that "grows on screen as the reader zooms". It does grow — into
+ * a marker 150 km from the town it names, which is what a reader of the journal
+ * reported seeing on Annecy, Genève, Rouen, La Rochelle and Les Sables-d'Olonne.
+ * The nudge is now a screen offset carried beside the position (`PlacedMark.nudge`,
+ * in rem) and applied by the stylesheet, so nothing this function reads has ever
+ * been moved off its coordinates.
  */
 export function worldPointOf(placed: PlacedMark, frame: Frame): Point {
   return {

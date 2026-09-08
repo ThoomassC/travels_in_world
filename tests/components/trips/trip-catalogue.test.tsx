@@ -90,3 +90,67 @@ describe("TripCatalogue — every entry is an anchor target", () => {
     expect(container.querySelector("#voyage-japon-2024")).toBeNull();
   });
 });
+
+/**
+ * **What the filter needs from the listing, and nothing more.**
+ *
+ * The catalogue does no filtering: it marks its entries and its groups, and
+ * `src/components/filters/facet-stylesheet.ts` writes the rules that read those
+ * marks. The split is what keeps the filter out of this component's job — a trip
+ * is filed under its first arrival here whether or not a page filters it — and it
+ * is what lets `/villes` wear the same filter over a completely different list.
+ */
+describe("TripCatalogue — the marks the filter reads", () => {
+  const tokens = new Map([
+    ["voyage-jp-0", "all country-JP year-2024"],
+    ["voyage-fr-1", "all country-FR year-2023"],
+  ]);
+
+  const twoContinents = () =>
+    catalogue({ trips: [tripIn("JP", 0), tripIn("FR", 1)], facetTokens: tokens });
+
+  it("puts each entry's tokens on the element that carries its id", () => {
+    const { container } = twoContinents();
+
+    expect(container.querySelector("#voyage-voyage-jp-0")).toHaveAttribute(
+      "data-facets",
+      "all country-JP year-2024"
+    );
+  });
+
+  /**
+   * A country section holding no matching card, and the continent chapter above
+   * it, must go with the cards — a heading standing over nothing is the empty
+   * block the acceptance criteria refuse. The mark says "this box is a group";
+   * the generated rule is what decides it is empty.
+   */
+  it("marks both levels of grouping, so neither is left standing over nothing", () => {
+    const { container } = twoContinents();
+
+    const groups = [...container.querySelectorAll("[data-facet-group]")];
+
+    // Two continents and two countries, one trip each.
+    expect(groups).toHaveLength(4);
+    expect(container.querySelector("#pays-JP")).toHaveAttribute("data-facet-group", "country");
+  });
+
+  /**
+   * The count beside a continent chapter counts the whole chapter, which stops
+   * being true the moment a choice hides half of it. It is marked so the filter's
+   * own sheet can drop it, and the count line under the control — the number the
+   * reader has just changed — is what answers instead.
+   */
+  it("marks the count that a filter would make untrue", () => {
+    const { container } = twoContinents();
+
+    expect(container.querySelectorAll("[data-facet-total]")).toHaveLength(2);
+  });
+
+  /** Unfiltered pages exist: the marks are absent rather than empty. */
+  it("marks nothing when no tokens are supplied", () => {
+    const { container } = catalogue({ trips: [tripIn("JP", 0), tripIn("FR", 1)] });
+
+    expect(container.querySelector("[data-facets]")).toBeNull();
+    expect(container.querySelector("[data-facet-group]")).toBeNull();
+  });
+});

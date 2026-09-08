@@ -38,14 +38,28 @@ export type SearchGroup = "trips" | "places" | "countries" | "pages";
 export type SearchableTrip = {
   readonly slug: string;
   readonly title: string;
-  /** Read only to order the rows: the façade already sorts, this keeps its order. */
+  /** Read to order the rows and to date them: `YYYY-MM-DD`. */
   readonly startDate: string;
+  /** The other end of the period. Equal to `startDate` on a single-day trip. */
+  readonly endDate: string;
   /** Decides where the row leads. An untold trip has no page — see below. */
   readonly story: "written" | "unwritten";
+  /**
+   * Only the **count** is read, and that is why the element type says so little:
+   * a row shows "6 étapes", so widening this to the real `Step` union would
+   * couple the search's input to a discriminated union it never inspects.
+   */
+  readonly steps: readonly unknown[];
   readonly places: readonly {
     readonly name: string;
     /** ISO 3166-1 alpha-2, uppercase by schema. */
     readonly countryCode: string;
+    /**
+     * Read for **one** thing: where the dot goes in the row's vignette. Only the
+     * first place of a trip is used, which is the same point the map anchors its
+     * marker on.
+     */
+    readonly coordinates: { readonly lat: number; readonly lon: number };
   }[];
   /**
    * Only the alt text is read. It is the closest thing a récit has to prose, and
@@ -65,6 +79,40 @@ export type SearchableTrip = {
 export type SearchLabels = {
   readonly countryName: (code: string) => string;
   readonly compare: (left: string, right: string) => number;
+  /**
+   * "6 étapes" — a **plural**, so it is resolved by the caller and never here.
+   * A pure module cannot pick a plural form: the rules belong to the language,
+   * next-intl owns them, and French and Spanish do not agree with English on
+   * zero. The caller passes the count through its own catalogue.
+   */
+  readonly stepCount: (count: number) => string;
+  /** What stands where a date would, on a trip whose récit is not written yet. */
+  readonly unwritten: string;
+};
+
+/**
+ * What a trip's vignette needs: a country to draw and a point inside it.
+ *
+ * **THE VIGNETTE IS A REAL MAP OF A REAL COUNTRY**, at the 50m vintage, fitted to
+ * its own 40-unit frame — the owner asked for exactly that. It replaced a
+ * graticule with a dot on it, which was honest but said very little, and it
+ * replaced the mock-up's hand-drawn coastline, which said a great deal and none
+ * of it true.
+ *
+ * The geometry is **not** here and cannot be: it comes from `@/map`, a server-only
+ * façade, and this module is pure so that its hundred cases cost nothing. What
+ * crosses is three numbers and a country code — `x` and `y` already placed inside
+ * that country's tile by the caller, which is the only layer that knows the
+ * projection. `src/map/country-tile.ts` is the other half.
+ */
+export type SearchArt = {
+  /** ISO 3166-1 alpha-2. Names the `<symbol>` the row's `<use>` points at. */
+  readonly country: string;
+  /** Where the trip's first place lands in that country's tile, in tile units. */
+  readonly x: number;
+  readonly y: number;
+  /** Whether the récit is written — the dot reads it, and so does the second line. */
+  readonly told: boolean;
 };
 
 /** One row of the panel. */
@@ -81,6 +129,16 @@ export type SearchEntry = {
   /** The second line: a year, a country, a count. May be empty. */
   readonly detail: string;
   readonly href: string;
+  /**
+   * What the row's vignette draws — **trips only**, absent everywhere else.
+   *
+   * A place, a country and a page get a plain row, exactly as the mock-up the
+   * owner chose showed them. That is not only a design decision: the vignette is
+   * the most expensive thing in the panel, and the panel is in the HTML of every
+   * document on the site. Fourteen trips carry it; the twenty-odd other rows do
+   * not.
+   */
+  readonly art?: SearchArt;
   /**
    * What {@link matchesQuery} is run against — already normalised, so the filter
    * does no work per keystroke beyond `includes`.
@@ -106,6 +164,19 @@ export type SearchIndexInput = {
   readonly placesHref: string;
   /** The site's own pages, in the order they should appear. */
   readonly pages: readonly { readonly label: string; readonly href: string }[];
+  /**
+   * Where a place lands inside its own country's vignette, in tile units — or
+   * `undefined` when that country has no tile, in which case the row simply has
+   * no drawing.
+   *
+   * A callback for the same reason `countryName` is one: the projection lives
+   * behind `@/map`, which is server-only, and a pure module that imported it
+   * could not be unit-tested at all.
+   */
+  readonly tilePointOf: (place: {
+    readonly countryCode: string;
+    readonly coordinates: { readonly lat: number; readonly lon: number };
+  }) => { readonly x: number; readonly y: number } | undefined;
 };
 
 /**
@@ -195,6 +266,79 @@ function idFragment(text: string): string {
  * absence is a decision somebody recorded rather than a gap somebody will
  * rediscover.
  */
+/**
+ * The three-part second line of a trip's row: where, how long, when.
+ *
+ * `·` between the parts and not a comma, because two of the three already hold
+ * commas of their own once a trip crosses two countries.
+ *
+ * **The period is a year and not the months the mock-up drew.** `formatDayRange`
+ * in `src/components/timeline/dates.ts` returns two *full days* — "12 avril",
+ * "20 avril 2024" — which is right for a trip page and twice too long for a row
+ * 26 rem wide. A compact month range is a new locale-aware formatter with its own
+ * behaviour to pin (abbreviations, the year elided or not, a range that crosses a
+ * new year), and it was not opened here. What is here is honest: the year, or
+ * both years when the trip crosses one.
+ *
+ * An untold trip says so **in words** where its date would be. That is the second
+ * channel the pennant's colour needs: `docs/adr/0003` and every marker on the map
+ * hold the same rule, a state carried by colour alone is a state some readers do
+ * not have.
+ */
+function tripDetail(
+  trip: SearchableTrip,
+  countries: readonly string[],
+  labels: SearchLabels
+): string {
+  const startYear = trip.startDate.slice(0, 4);
+  const endYear = trip.endDate.slice(0, 4);
+  const period =
+    hasStory(trip) === false
+      ? labels.unwritten
+      : startYear === endYear
+        ? startYear
+        : `${startYear}–${endYear}`;
+
+  return [
+    countries.map((code) => labels.countryName(code)).join(", "),
+    labels.stepCount(trip.steps.length),
+    period,
+  ].join(" · ");
+}
+
+/**
+ * The vignette: the country of the trip's **first place**, with the dot on that
+ * place.
+ *
+ * The first place and not the trip's "main" country, because it is the same point
+ * the world map anchors its marker on — so a row and a marker never disagree about
+ * where a trip left from. A trip crossing a border shows the country it started
+ * in; its second line names them all.
+ *
+ * Two ways there is no vignette, and both are silent by design: a trip with no
+ * place (which the schema forbids, but this module takes its input from a caller
+ * and not from the parser), and a country the dataset cannot draw. Either way the
+ * row keeps its words and loses an ornament.
+ */
+function tripArt(trip: SearchableTrip, tilePointOf: SearchIndexInput["tilePointOf"]): SearchArt | undefined {
+  const first = trip.places[0];
+  if (first === undefined) {
+    return undefined;
+  }
+
+  const point = tilePointOf(first);
+  if (point === undefined) {
+    return undefined;
+  }
+
+  return {
+    country: first.countryCode,
+    x: point.x,
+    y: point.y,
+    told: hasStory(trip),
+  };
+}
+
 export function buildSearchEntries({
   trips,
   labels,
@@ -203,6 +347,7 @@ export function buildSearchEntries({
   countriesHref,
   placesHref,
   pages,
+  tilePointOf,
 }: SearchIndexInput): readonly SearchEntry[] {
   const tripRows: SearchEntry[] = trips.map((trip) => {
     const countries = [...new Set(trip.places.map((place) => place.countryCode))];
@@ -211,7 +356,8 @@ export function buildSearchEntries({
       id: `q-t-${idFragment(trip.slug)}`,
       group: "trips",
       label: trip.title,
-      detail: trip.startDate.slice(0, 4),
+      detail: tripDetail(trip, countries, labels),
+      art: tripArt(trip, tilePointOf),
       // The same branch the map's markers take, and for the same reason: an
       // untold trip has no page, so a row pointing at one would put a 404 in the
       // suggestions of every document on the site.
