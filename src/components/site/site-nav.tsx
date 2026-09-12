@@ -7,18 +7,19 @@ import type { Locale } from "@/i18n/routing";
 import type { SearchEntry } from "@/components/search/entries";
 import { SearchIndex, type CountryOutline } from "@/components/search/search-index";
 import { SiteSearch } from "@/components/search/site-search";
+import { NavBubble } from "./nav-bubble";
 import { SiteBrand } from "./site-brand";
 import styles from "./site-nav.module.css";
 
 /**
- * The vocabulary the current-page underline is built on.
+ * The vocabulary the current-page bubble is built on.
  *
  * Each page writes its own mark onto its `<main>` — `data-page="carte"` and so on
  * — and `./site-nav.module.css` reads it backwards through `:has()`. The constant
  * exists so that the four pages and the four `data-nav` attributes below cannot
  * disagree; the stylesheet holds a third copy, which no constant can reach, and
  * the note on that rule says what happens if it drifts (nothing but a missing
- * underline — it fails open).
+ * bubble — it fails open).
  *
  * The keys are the nav's own words for its four destinations; the values are the
  * URL-ish slugs a reader would recognise in the address bar. They are the same
@@ -127,11 +128,11 @@ const FLAG: Readonly<Record<Locale, ReactElement>> = {
  * The site's header: the brand lock-up against the window's left edge, the four
  * main destinations centred, and the language menu on the right.
  *
- * **No `'use client'`, and no JavaScript at all.** Seven `<a href>`, a `<nav>` and
- * a native `<details>` are the whole component; the milestone's two client
- * boundaries belong to the map's interaction (TIW-14) and to the photo viewer
- * (TIW-17), and neither is this. The language menu in particular is a disclosure
- * the browser opens itself — see the note on it below.
+ * **The shell stays server-rendered, with one small client boundary.** The
+ * anchors, `<nav>` and native `<details>` remain in this component; `NavBubble`
+ * only owns the navigation list so a client-side click can animate the shared
+ * surface before the route changes. The language menu in particular remains a
+ * disclosure the browser opens itself — see the note on it below.
  *
  * **Plain anchors, and the hrefs come from `localePathname`.** Not `Link` from
  * `@/i18n/navigation`: every export of that module is built inside one
@@ -152,20 +153,19 @@ const FLAG: Readonly<Record<Locale, ReactElement>> = {
  * locale is.
  *
  * **What is deliberately absent, and it is STILL `aria-current="page"`.** The
- * current entry is now underlined, and it would be easy to read that as the
- * marker finally arriving. It is not. The underline is painted by CSS, from a
- * `data-page` attribute each page puts on its own `<main>` and which
- * `./site-nav.module.css` reads backwards with `:has()` — and CSS can paint an
- * attribute, never set one. So a screen reader gets exactly what it got before:
- * three links, none of them marked, on a page whose `<h1>` names it.
+ * current entry now gets a shared liquid surface, and it would be easy to read
+ * that as the marker finally arriving. It is not. The visual state is painted by
+ * CSS and the small `NavBubble` client boundary; neither changes the accessibility
+ * tree. So a screen reader gets exactly what it got before: four links, none of
+ * them marked, on a page whose `<h1>` names it.
  *
  * > **What that trick changed, and what it did not.** The previous version of this
  * > note said there were exactly two ways to know the current page — a client
  * > component or a request read — and that a third road existed only for a nav
  * > rendered by a *page* rather than by the layout. That was wrong: a page can
  * > hand the information to the layout's subtree through the DOM, and CSS can read
- * > it upward. The underline costs zero byte of JavaScript, de-statifies nothing,
- * > and needs no prop threaded through every route. What it does not do is reach
+ * > it upward. The server-rendered links remain plain and the client boundary is
+ * > limited to movement during an in-app navigation. What it does not do is reach
  * > the accessibility tree, which is what `aria-current` is for and why this
  * > paragraph is still here rather than deleted.
  */
@@ -239,11 +239,11 @@ export function SiteNav({ locale, searchEntries, searchCountries }: SiteNavProps
             marker list in `src/components/map/world-map.module.css`; jsdom keeps
             the role either way, so no unit test can see this.
           */}
-          <ul className={styles.list} role="list">
+          <NavBubble>
             {/*
-              `data-nav` is what the current-page rule selects on. It is a
-              stylesheet hook and nothing else — no script reads it, and it carries
-              no state to assistive technology; see the header's last paragraph.
+              `data-nav` identifies the destination for both the stylesheet and
+              `NavBubble`'s click delegation. It carries no state to assistive
+              technology; see the header's last paragraph.
             */}
             <li>
               <a
@@ -320,7 +320,7 @@ export function SiteNav({ locale, searchEntries, searchCountries }: SiteNavProps
                 {t("navAbout")}
               </a>
             </li>
-          </ul>
+          </NavBubble>
         </nav>
 
         {/*
@@ -374,28 +374,28 @@ export function SiteNav({ locale, searchEntries, searchCountries }: SiteNavProps
           any whose message carries a placeholder and was not read raw. A runtime
           test could not — under Vitest, next-intl resolves the forgiving half too.
         */}
-        <SiteSearch
-          labels={{
-            field: s("field"),
-            placeholder: s("placeholder"),
-            listLabel: s("listLabel"),
-            resultsNone: s("resultsNone"),
-            resultsOne: s("resultsOne"),
-            resultsMany: s.raw("resultsMany"),
-          }}
-        >
-          <SearchIndex
-            entries={searchEntries}
-            countries={searchCountries}
+          <SiteSearch
             labels={{
-              groups: {
-                trips: s("groupTrips"),
-                places: s("groupPlaces"),
-                countries: s("groupCountries"),
-                pages: s("groupPages"),
-              },
+              field: s("field"),
+              placeholder: s("placeholder"),
+              listLabel: s("listLabel"),
+              resultsNone: s("resultsNone"),
+              resultsOne: s("resultsOne"),
+              resultsMany: s.raw("resultsMany"),
             }}
-          />
+          >
+            <SearchIndex
+              entries={searchEntries}
+              countries={searchCountries}
+              labels={{
+                groups: {
+                  trips: s("groupTrips"),
+                  places: s("groupPlaces"),
+                  countries: s("groupCountries"),
+                  pages: s("groupPages"),
+                },
+              }}
+            />
           </SiteSearch>
 
           {/*
@@ -429,33 +429,38 @@ export function SiteNav({ locale, searchEntries, searchCountries }: SiteNavProps
           `/es` and has to navigate back. The way out, the day it is worth it, is a
           prop threaded from each page — not a boundary here.
         */}
-        <details className={styles.language}>
-          <summary>
-            {FLAG[locale]}
-            {/*
+          <details className={styles.language}>
+            <summary>
+              {FLAG[locale]}
+              {/*
               The summary's accessible name. Real text rather than an
               `aria-label`, the same argument `SiteBrand` makes for its own hidden
               span: a name that is really in the accessibility tree is one a
               voice-control user can say out loud.
             */}
-            <span className={styles.visuallyHidden}>{t("languageMenu")}</span>
-            {/* The disclosure's affordance, since the native triangle is hidden.
+              <span className={styles.visuallyHidden}>{t("languageMenu")}</span>
+              {/* The disclosure's affordance, since the native triangle is hidden.
                 `currentColor`, so it dims and brightens with the label it belongs
                 to instead of being a second colour decision. */}
-            <svg className={styles.chevron} viewBox="0 0 12 8" aria-hidden="true" focusable="false">
-              <path
-                d="M1,1.5 L6,6.5 L11,1.5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </summary>
-          <div className={styles.languagePanel}>
-            <p className={styles.languageTitle}>{t("languageLabel")}</p>
-            {/*
+              <svg
+                className={styles.chevron}
+                viewBox="0 0 12 8"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path
+                  d="M1,1.5 L6,6.5 L11,1.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </summary>
+            <div className={styles.languagePanel}>
+              <p className={styles.languageTitle}>{t("languageLabel")}</p>
+              {/*
               Anchors in a plain box and NOT an `<li>` list, which is the one place
               this markup gives something up. A list would let a screen reader
               announce "3 éléments" before the choices. It is not one because the
@@ -471,42 +476,42 @@ export function SiteNav({ locale, searchEntries, searchCountries }: SiteNavProps
               renders it — while `LANGUAGE_NAME_KEY` and `FLAG` above fail the
               typecheck until it has a name and a drawing.
             */}
-            {locales.map((code) => (
-              <a
-                key={code}
-                className={styles.languageLink}
-                href={localePathname({ href: "/", locale: code })}
-                /*
+              {locales.map((code) => (
+                <a
+                  key={code}
+                  className={styles.languageLink}
+                  href={localePathname({ href: "/", locale: code })}
+                  /*
                   `lang` and `hrefLang` on each entry, and they say two different
                   things. `lang` declares that the label "Español" IS Spanish, so a
                   French screen reader switches voice for those two words instead
                   of reading them with French phonemes. `hrefLang` declares what is
                   at the other end of the link, which is what a crawler reads.
                 */
-                lang={code}
-                hrefLang={code}
-                /*
+                  lang={code}
+                  hrefLang={code}
+                  /*
                   This one DOES reach the accessibility tree, unlike the nav's
                   underline: the component knows its own locale, so the state is
                   set in the markup and the stylesheet only paints it.
                   `aria-current="true"` and not `"page"` — the entry is the current
                   *language*, and `/fr` is not the page being read.
                 */
-                aria-current={code === locale ? "true" : undefined}
-              >
-                {FLAG[code]}
-                <span>{t(LANGUAGE_NAME_KEY[code])}</span>
-              </a>
-            ))}
-            {/*
+                  aria-current={code === locale ? "true" : undefined}
+                >
+                  {FLAG[code]}
+                  <span>{t(LANGUAGE_NAME_KEY[code])}</span>
+                </a>
+              ))}
+              {/*
               What the reader needs BEFORE clicking: the chrome is translated and
               the récits are not. `src/i18n/routing.ts` records that decision; this
               is the one place a visitor is told about it, and telling them after
               the click would be telling them too late.
             */}
-            <p className={styles.languageNote}>{t("languageNote")}</p>
-          </div>
-        </details>
+              <p className={styles.languageNote}>{t("languageNote")}</p>
+            </div>
+          </details>
         </div>
       </div>
     </header>

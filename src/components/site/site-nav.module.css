@@ -1,6 +1,7 @@
 /* =============================================================================
    Site header — a full-bleed accent bar carrying the brand medallion, three nav
-   entries and the language menu. No JavaScript, no colour of its own.
+   entries and the language menu. The shell has no colour of its own; the small
+   navigation bubble client boundary is defined in `./nav-bubble.tsx`.
 
    Only tokens from `src/styles/tokens.css` are used, which is what keeps the
    dark theme working without this file knowing that it exists. The one exception
@@ -680,6 +681,136 @@
   .list {
     justify-content: center;
   }
+}
+
+/* =============================================================================
+   Liquid navigation bubble
+
+   The track remains one control with four equal destinations. The active surface
+   is a single element that travels between them; this keeps the movement legible
+   and avoids the double-pill effect of painting an active link as well.
+   ============================================================================ */
+
+.list {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--text-on-accent) 16%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-on-accent) 7%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-on-accent) 12%, transparent);
+}
+
+.list > li {
+  min-inline-size: 0;
+}
+
+.movingBubble {
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-start: 3px;
+  inline-size: calc((100% - 30px) / 4);
+  --liquid-bubble-fill: var(--accent-active);
+  --liquid-bubble-ink: var(--text-on-accent);
+  --liquid-bubble-edge: color-mix(in srgb, var(--text-on-accent) 58%, transparent);
+  --liquid-bubble-highlight: var(--text-on-accent);
+  transform-origin: center;
+  pointer-events: none;
+  opacity: 1;
+  z-index: 0;
+  transition: inset-inline-start 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:global(body:has(main[data-page="pays"])) .list:not([data-active]) .movingBubble {
+  inset-inline-start: calc(3px + (100% - 30px) / 4 + 8px);
+}
+
+:global(body:has(main[data-page="villes"])) .list:not([data-active]) .movingBubble {
+  inset-inline-start: calc(3px + ((100% - 30px) / 4 + 8px) * 2);
+}
+
+:global(body:has(main[data-page="a-propos"])) .list:not([data-active]) .movingBubble {
+  inset-inline-start: calc(3px + ((100% - 30px) / 4 + 8px) * 3);
+}
+
+.list[data-active="pays"] .movingBubble {
+  inset-inline-start: calc(3px + (100% - 30px) / 4 + 8px);
+}
+
+.list[data-active="villes"] .movingBubble {
+  inset-inline-start: calc(3px + ((100% - 30px) / 4 + 8px) * 2);
+}
+
+.list[data-active="a-propos"] .movingBubble {
+  inset-inline-start: calc(3px + ((100% - 30px) / 4 + 8px) * 3);
+}
+
+@keyframes navBubbleFlow {
+  0%,
+  100% {
+    transform: scaleX(1) scaleY(1);
+  }
+
+  28% {
+    transform: scaleX(1.08) scaleY(0.96);
+  }
+
+  56% {
+    transform: scaleX(1.14) scaleY(0.94);
+  }
+
+  82% {
+    transform: scaleX(0.98) scaleY(1.02);
+  }
+}
+
+.list[data-moving="true"] .movingBubble {
+  animation: navBubbleFlow 620ms var(--motion-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .movingBubble,
+  .list[data-moving="true"] .movingBubble {
+    animation: none;
+    transition: none;
+  }
+}
+
+.list .link {
+  position: relative;
+  z-index: 1;
+  justify-content: center;
+  inline-size: 100%;
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  transition:
+    color var(--motion-color) var(--motion-ease),
+    background-color var(--motion-color) var(--motion-ease),
+    border-color var(--motion-color) var(--motion-ease),
+    box-shadow var(--motion-color) var(--motion-ease),
+    transform var(--motion-move) var(--motion-ease);
+}
+
+.list .link:hover,
+.list .link:focus-visible {
+  border-color: transparent;
+  background: transparent;
+}
+
+:global(body:has(main[data-page="carte"])) .list .link[data-nav="carte"],
+:global(body:has(main[data-page="pays"])) .list .link[data-nav="pays"],
+:global(body:has(main[data-page="voyages"])) .list .link[data-nav="voyages"],
+:global(body:has(main[data-page="villes"])) .list .link[data-nav="villes"],
+:global(body:has(main[data-page="a-propos"])) .list .link[data-nav="a-propos"],
+.list[data-active="carte"] .link[data-nav="carte"],
+.list[data-active="pays"] .link[data-nav="pays"],
+.list[data-active="villes"] .link[data-nav="villes"],
+.list[data-active="a-propos"] .link[data-nav="a-propos"] {
+  color: var(--text-on-accent);
+  text-decoration: none;
 }
 
 /**
